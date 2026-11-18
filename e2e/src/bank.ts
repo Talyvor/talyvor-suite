@@ -2096,7 +2096,7 @@ export function walletHome(seed: number): Scenario {
 /**
  * B41.6 — Home's morning briefing is Lens's (B41.106). An agent pays another twice under its approval amount and a third
  * payment over it waits for a person: Home's "This morning" card lists that approval with its amount, as Lens's briefing
- * words it, opening its card on Approvals. The held payment is read from the ledger too: no posting of it on the payer's
+ * words it, opening its approval sheet over Home (B57.15). The held payment is read from the ledger too: no posting of it on the payer's
  * statement. (Yesterday's payments need a day to pass; the Lens-side nightly daily-briefing proves them with ?at=.)
  */
 export function homeDailyBriefing(seed: number): Scenario {
@@ -2136,7 +2136,8 @@ export function homeDailyBriefing(seed: number): Scenario {
         try {
           const card = page.getByTestId('home-briefing')
           await card.locator('summary').click({ timeout: ACTION_TIMEOUT_MS })
-          const item = card.locator(`a[href="/approvals#approval-${approval.id}"]`)
+          // B57.15 — an agent's request opens its approval sheet over the page you are on, not a card on Approvals.
+          const item = card.locator(`a[href="/?approval=${approval.id}"]`)
           let shown: string
           try {
             shown = (await item.innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
@@ -2155,7 +2156,15 @@ export function homeDailyBriefing(seed: number): Scenario {
             await page.screenshot({ path: shot })
             ctx.evidence.push({ note: `Home's briefing at ${width}px: ${shot}` })
           }
-          return { pass: true, detail: `Home's briefing reads "${line}" and lists "${shown}" first, opening approval ${approval.id}, as Lens has it; the held payment is not on the statement` }
+          await item.click({ timeout: ACTION_TIMEOUT_MS })
+          const sheet = page.getByRole('dialog', { name: `${payer.name} wants to pay` })
+          try {
+            await sheet.waitFor({ timeout: ACTION_TIMEOUT_MS })
+          } catch {
+            return fail(`opening approval ${approval.id} from Home's briefing showed no sheet "${payer.name} wants to pay"`)
+          }
+          if (new URL(page.url()).searchParams.get('approval') !== approval.id) return fail(`opening approval ${approval.id} from Home's briefing went to ${page.url()}`)
+          return { pass: true, detail: `Home's briefing reads "${line}" and lists "${shown}" first, opening approval ${approval.id}'s sheet over Home, as Lens has it; the held payment is not on the statement` }
         } finally {
           await page.close()
         }
