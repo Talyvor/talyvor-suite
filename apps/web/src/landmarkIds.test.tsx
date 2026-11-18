@@ -129,37 +129,37 @@ async function at(address: string) {
   }
 }
 
-describe('no two things in this product answer to the same name', () => {
-  it(
-    'every address renders unique ids and no dangling reference',
-    // Slow by nature: it renders every address in the product in turn, so it grows with the console.
-    // B17.492 — about 50 s on a quiet CI runner, past 60 s on a busy one (18 Nov: three runs in a row): 120 s.
-    { timeout: 120_000 },
-    async () => {
-      const problems: string[] = []
-      let idsSeen = 0
-      const addresses = [
-        ...CONSOLE_ROUTES.map((r) => r.path.replace(/\/\*$/, '')),
-        ...PUBLIC_ADDRESSES,
-      ]
-      for (const address of addresses) {
-        await at(address)
-        idsSeen += document.querySelectorAll('[id]').length
-        problems.push(...idProblems(document, address))
-        document.body.replaceChildren()
-        queryClient.clear()
-      }
+/** Every address in the product: the gated console routes, then the public ones. */
+const ADDRESSES = [...CONSOLE_ROUTES.map((r) => r.path.replace(/\/\*$/, '')), ...PUBLIC_ADDRESSES]
 
-      // ⚠ THE FLOOR IS THE HALF THAT KEEPS THIS FROM GOING QUIETLY VACUOUS. A sweep that stops
-      // finding ids passes with an empty problem list, which reads exactly like a correct product.
-      // MEASURED at `5a82c89`: 44 ids across these 17 addresses.
-      expect(
-        idsSeen,
-        'the census found (almost) no ids at all — it is passing because it has no subject',
-      ).toBeGreaterThan(25)
-      expect(problems).toEqual([])
+describe('no two things in this product answer to the same name', () => {
+  // B66.1 — ONE TEST PER ADDRESS. The sweep used to render every address inside one test, so the
+  // whole product shared one time limit (50 s of 60 on a quiet runner, past it on a busy one) and
+  // a red named no address. Each address now has its own limit and its own name.
+  const idsSeen = new Map<string, number>()
+
+  it.each(ADDRESSES)(
+    '%s renders unique ids and no dangling reference',
+    { timeout: 30_000 },
+    async (address) => {
+      await at(address)
+      idsSeen.set(address, document.querySelectorAll('[id]').length)
+      expect(idProblems(document, address)).toEqual([])
     },
   )
+
+  // ⚠ THE FLOOR IS THE HALF THAT KEEPS THIS FROM GOING QUIETLY VACUOUS. A sweep that stops
+  // finding ids passes with an empty problem list, which reads exactly like a correct product.
+  // MEASURED at `5a82c89`: 44 ids across these 17 addresses. It runs after the addresses above,
+  // in file order, and totals what they saw.
+  it('the addresses above, together, rendered ids to check', () => {
+    expect([...idsSeen.keys()]).toEqual(ADDRESSES)
+    const total = [...idsSeen.values()].reduce((a, b) => a + b, 0)
+    expect(
+      total,
+      'the census found (almost) no ids at all — it is passing because it has no subject',
+    ).toBeGreaterThan(25)
+  })
 })
 
 describe('Region — the one id in this product that was built from a caller-supplied string', () => {
