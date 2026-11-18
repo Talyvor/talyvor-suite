@@ -97,12 +97,28 @@ describe('a payment’s proof', () => {
     expect(section.textContent).toContain('The signature does not check out against what you approved.')
   })
 
-  it('shows the agent’s task above the proof, in its own words after “The agent says:”', async () => {
+  it('shows the agent’s task under who it was paid to, in its own words after “The agent says:”', async () => {
+    // B57.190 — as the approval sheet draws what a payment is for: under its headline, before the payment's facts.
     show('ent_approved')
-    const section = await screen.findByTestId('payment-proof')
-    const says = within(section).getByTestId('agent-says')
+    const card = await screen.findByTestId('activity-payment')
+    const says = within(card).getByTestId('agent-says')
     expect(says.textContent).toBe('The agent says: “Renew the hosting for the research cluster”')
-    expect(says.compareDocumentPosition(within(section).getByRole('heading', { name: 'Proof' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(says.previousElementSibling?.textContent).toBe('to Acme Hosting')
+    expect(says.compareDocumentPosition(card.querySelector('dl')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(await screen.findByTestId('payment-proof')).queryByTestId('agent-says')).toBeNull()
+  })
+
+  it('marks whether the signature checks out', async () => {
+    // B57.190 — the verdict carries its mark, as the approval sheet's lines do: a tick when it checks out, a cross when not.
+    show('ent_approved')
+    const ok = await screen.findByTestId('proof-verdict')
+    expect(ok.textContent).toBe('The signature checks out: it is by this key, over exactly what you approved.')
+    expect(ok.querySelector('svg[data-icon="check"]')).not.toBeNull()
+    cleanup()
+    proofs.ent_approved = { ...APPROVED, verified: false }
+    show('ent_approved')
+    const bad = await screen.findByTestId('proof-verdict')
+    expect(bad.querySelector('svg[data-icon="x"]')).not.toBeNull()
   })
 
   it('draws no proof for a payment the rules never judged', async () => {
