@@ -354,7 +354,7 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(within(row('person')).getByText('Waiting for the checker')).toBeInTheDocument()
     expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
-    expect(wayIn).toHaveTextContent('We’ll finish checking your identity in the background. Live money waits for it; everything in Sandbox works now.')
+    expect(wayIn).toHaveTextContent('You can look around now. Once your identity check passes, you can move money.')
     expect(screen.queryByText('You’re confirmed. Your account is open.')).toBeNull()
   })
 
@@ -366,7 +366,7 @@ describe('step 4: confirm who you are (B61.20)', () => {
     run()
     const wayIn = await screen.findByTestId('identity-way-in')
     expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
-    expect(wayIn).toHaveTextContent('We’ll finish checking your identity in the background.')
+    expect(wayIn).toHaveTextContent('You can look around now. Once your identity check passes, you can move money.')
   })
 
   it('until the checks pass, Home says so in one sentence and leads back to the step', async () => {

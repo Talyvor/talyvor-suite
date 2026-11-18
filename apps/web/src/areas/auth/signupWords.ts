@@ -107,7 +107,7 @@ export const IDENTITY_WORDS = {
   done: 'You’re confirmed. Your account is open.',
   open: 'Open the app',
   // B61.118 — the way into the app while a check waits, or after one did not pass; never says the check passed.
-  openWaiting: 'We’ll finish checking your identity in the background. Live money waits for it; everything in Sandbox works now.',
+  openWaiting: 'You can look around now. Once your identity check passes, you can move money.',
   openNotPassed: 'You can try the check again from Settings, Verification.',
   gate: 'Your account can look around but can’t move money until you confirm who you are.',
   finish: 'Finish confirming who you are',
