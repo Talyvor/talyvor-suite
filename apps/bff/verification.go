@@ -65,7 +65,12 @@ func (a *app) handleVerificationContact(w http.ResponseWriter, r *http.Request, 
 	}
 	// UPSTREAM-BINDS-ONLY lensVerificationContactBody: address, company_number, country, date_of_birth, directors, name, people_with_significant_control
 	body, _ := json.Marshal(in)
-	a.agentBankRelay(w, r, t, http.MethodPost, "/verification/contact", body)
+	rec := &relayStatus{ResponseWriter: w}
+	a.agentBankRelay(rec, r, t, http.MethodPost, "/verification/contact", body)
+	// B61.91: an address Lens took for this check is one a move of the person's number tells (number_moves.go).
+	if sub, ok := a.subOf(t.person); ok && rec.code/100 == 2 {
+		a.rememberEmail(r.Context(), sub, in.Email)
+	}
 }
 
 // homeAddress — B61.46: the person's home address for an identity check (Lens economy.HomeAddress, B61.45), sent whole

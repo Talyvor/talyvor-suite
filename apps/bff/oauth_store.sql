@@ -104,3 +104,33 @@ CREATE TABLE IF NOT EXISTS connect_revocations_owed (
     owed_at   timestamptz NOT NULL,
     PRIMARY KEY (user_id, client_id)
 );
+
+-- B61.91: every address Lens took for a person's contact check (verification.go), so a move of their number tells each one.
+CREATE TABLE IF NOT EXISTS person_emails (
+    sub          text NOT NULL,
+    email        text NOT NULL,
+    last_seen_at timestamptz NOT NULL,
+    PRIMARY KEY (sub, email)
+);
+
+-- B61.91: each move of a person's number Lens handed over (POST /v1/auth/phone/number-moves/claim, once), and one mail per
+-- address it owes (number_moves.go). sub is '' for an identity this BFF did not make. sent_at is set before a mail goes;
+-- next_try_at is a sweep on after the sender refused it for now, failed_at when it refused it for good.
+CREATE TABLE IF NOT EXISTS number_moves (
+    id                text PRIMARY KEY,
+    person_id         text NOT NULL,
+    sub               text NOT NULL,
+    moved_by          text NOT NULL CHECK (moved_by IN ('operator', 'person')),
+    moved_at          timestamptz NOT NULL,
+    claimed_at        timestamptz NOT NULL,
+    sessions_ended_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS number_move_mails (
+    move_id text NOT NULL REFERENCES number_moves (id),
+    email   text NOT NULL,
+    sent_at     timestamptz,
+    next_try_at timestamptz NOT NULL DEFAULT now(),
+    failed_at   timestamptz,
+    PRIMARY KEY (move_id, email)
+);

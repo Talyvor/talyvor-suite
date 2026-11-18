@@ -143,6 +143,16 @@ var defaultProbes = map[string]defaultProbe{
 		return strconv.Itoa((&app{cfg: bootWithUnset(t, "HELP_QUESTIONS_PER_DAY", minimalDisabled())}).helpQuestionsPerDay())
 	}},
 	// The session TTL is parsed in oidc mode only, so this probe boots the mode that reads it.
+	"BFF_SMTP_PORT": {canon: identityCanon, observe: func(t *testing.T) string {
+		t.Setenv("BFF_SMTP_HOST", "smtp.example.com")
+		t.Setenv("BFF_EMAIL_FROM", "help@example.com")
+		t.Setenv("BFF_SMTP_PORT", "")
+		m, on, err := smtpFromEnv()
+		if err != nil || !on {
+			t.Fatalf("the SMTP sender with a host and a From: on=%t %v", on, err)
+		}
+		return strconv.Itoa(m.port)
+	}},
 	"BFF_SESSION_TTL": {canon: durationCanon, observe: func(t *testing.T) string {
 		return bootWithUnset(t, "BFF_SESSION_TTL", minimalOIDC()).sessionTTL.String()
 	}},

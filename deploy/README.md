@@ -335,6 +335,11 @@ Every variable the BFF reads, and what happens without it:
 | `HELP_LENS_KEY` | no | — (off) | B61.38 — a Lens key on Talyvor's own account: the Help chat's model calls go on it, so a Help question never spends a customer's money. Unset → Help asks no model and offers "Send to our team" for every question. Never commit its value. |
 | `HELP_QUESTIONS_PER_DAY` | no | `20` | B61.38 — how many questions one account may ask the Help chat in a UTC day. |
 | `HELP_MODEL` | no | — (the catalog's) | B61.69 — the model the Help chat asks on `HELP_LENS_KEY`. Unset → Lens's catalog's newest Anthropic model, which Lens answers only where the old gateway's area is on; a 404 there is logged once, naming `HELP_MODEL`. |
+| `BFF_SMTP_HOST` | no | — (no mail) | B61.91 — the SMTP server for the mail a moved phone number owes each address the person gave for their contact check. Needs `BFF_DATABASE_URL`. Unset (or `BFF_EMAIL_FROM` unset) → the mails are kept unsent and go once it is set; an operator's move signs the person out everywhere either way. |
+| `BFF_SMTP_PORT` | no | `465` | B61.91 — 465 is TLS from the first byte; any other port must offer STARTTLS. |
+| `BFF_SMTP_USER` | no | — | B61.91 — the SMTP sign-in name. |
+| `BFF_SMTP_PASSWORD` | no | — | B61.91 — the SMTP password. |
+| `BFF_EMAIL_FROM` | no | — | B61.91 — the From address of the BFF's mail. |
 | `PICOVOICE_ACCESS_KEY` | no | — (off) | B58.10 — "Hey Taly"'s Picovoice access key. `GET /api/voice/key` hands it to a signed-in phone at run time, so the app ships none; it is never logged. Unset → that route answers 503 "Hey Taly is off." and the phone offers no wake word. Read on each request. |
 | `BFF_VOICE_KEY_PER_SESSION_HOUR` | no | `20` | B58.10 — how often one signed-in person may ask `GET /api/voice/key` per hour; over it, 429 with `Retry-After`. |
 | `DOCS_WORKSPACE_ID` | **gone** | — | ⚠ Removed from the BFF by suite #59 (`030ea53`): every Docs route resolves the SESSION's Track workspace (`docsWorkspaceFor`). Docs is per-identity now. **Leaving it set is silently ignored** — there is no refusal for it, unlike `TRACK_WORKSPACE_ID` — so delete the line rather than trusting it to be harmless. Not the counterpart of the Docs container's `DOCS_DEFAULT_WORKSPACE`, which now only scopes background jobs. |
