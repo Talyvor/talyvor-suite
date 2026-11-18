@@ -106,12 +106,12 @@ describe('Try Penny', () => {
     const sheet = screen.getByRole('dialog', { hidden: true })
     expect(sheet).toHaveClass('on')
     expect(within(sheet).getByText('Above your $50 line')).toBeInTheDocument()
-    expect(document.documentElement.style.overflow).toBe('hidden')
+    expect(document.documentElement.style.overflowY).toBe('hidden')
 
     fireEvent.click(within(sheet).getByRole('button', { name: 'Approve with Face ID' }))
     act(() => void vi.runAllTimers())
     expect(sheet).not.toHaveClass('on')
-    expect(document.documentElement.style.overflow).toBe('')
+    expect(document.documentElement.style.overflowY).toBe('')
     expect(within(tryIt).getByText('You approved')).toBeInTheDocument()
     expect(within(tryIt).getByText('$186.00')).toBeInTheDocument()
 
@@ -119,6 +119,60 @@ describe('Try Penny', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(sheet).not.toHaveClass('on')
     expect(within(tryIt).getByText('You declined')).toBeInTheDocument()
+  })
+})
+
+describe('Smooth, and kept that way (B64.7)', () => {
+  it('locks page scroll under the approval sheet and gives back the page’s own no-sideways-scroll rule when it closes', () => {
+    const { container } = render(<Landing />)
+    const html = document.documentElement
+    expect(html.style.overflowX).toBe('clip')
+    fireEvent.click(within(container.querySelector<HTMLElement>('#try')!).getByRole('button', { name: /Brightline Leads/ }))
+    expect(html.style.overflowY).toBe('hidden')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { hidden: true })).not.toHaveClass('on')
+    expect(html.style.overflowY).toBe('')
+    expect(html.style.overflowX).toBe('clip')
+  })
+
+  it('stops every film the moment reduced motion is switched on, back on its first frame, and runs the loops again when it is off', async () => {
+    let reduce = false
+    const listeners = new Set<() => void>()
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      get matches() {
+        return q.includes('reduced-motion') ? reduce : false
+      },
+      media: q,
+      addEventListener: (_: string, f: () => void) => q.includes('reduced-motion') && listeners.add(f),
+      removeEventListener: (_: string, f: () => void) => listeners.delete(f),
+    }))
+    const playing = new Set<HTMLMediaElement>()
+    vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(4)
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+      playing.add(this)
+      return Promise.resolve()
+    })
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) {
+      playing.delete(this)
+    })
+    const { container } = render(<Landing />)
+    const loops = [...container.querySelectorAll('video[data-loop]')]
+    expect(loops).toHaveLength(3)
+    await act(async () => {})
+    expect(loops.filter((v) => playing.has(v as HTMLMediaElement))).toHaveLength(3)
+
+    const how = container.querySelector<HTMLVideoElement>('#howvid')!
+    playing.add(how)
+    loops.forEach((v) => ((v as HTMLMediaElement).currentTime = 2))
+    reduce = true
+    act(() => listeners.forEach((f) => f()))
+    expect(playing.size).toBe(0)
+    expect(loops.map((v) => (v as HTMLMediaElement).currentTime)).toEqual([0, 0, 0])
+
+    reduce = false
+    act(() => listeners.forEach((f) => f()))
+    expect(loops.filter((v) => playing.has(v as HTMLMediaElement))).toHaveLength(3)
+    vi.unstubAllGlobals()
   })
 })
 
