@@ -287,6 +287,20 @@ const preset = {
       // B61.72 — the motion tokens (`duration-fast`, `ease-pop`, …), the values of brand/pocket-tokens.css.
       transitionDuration: motion.duration,
       transitionTimingFunction: motion.easing,
+      // B61.75 — loading shapes shimmer over 1.1 s (`animate-shimmer` on `bg-shape bg-double`), and a payment that
+      // arrives drops into its list over the panel's 420 with a tangerine-50 tint that fades over 1.6 s (`animate-land`).
+      // theme.css's reduced-motion block ends both on their last frame at once.
+      keyframes: {
+        shimmer: { to: { backgroundPosition: '-200% 0' } },
+        'land-drop': { from: { opacity: '0', transform: 'translateY(-18px)' } },
+        'land-tint': { from: { backgroundColor: 'var(--tangerine-50)' } },
+      },
+      animation: {
+        shimmer: `shimmer ${motion.duration.shimmer} linear infinite`,
+        land: `land-drop ${motion.duration['panel-in']} ${motion.easing.out} both, land-tint 1600ms ${motion.easing.std} both`,
+      },
+      backgroundImage: { shape: 'linear-gradient(90deg, var(--cloud-2) 25%, var(--cloud) 50%, var(--cloud-2) 75%)' },
+      backgroundSize: { double: '200% 100%' },
       borderColor: { DEFAULT: 'var(--rule)' },
       // Pocket's: cards 24 and 18, inputs 14 (control), the sheet 28, pills for buttons and chips; B57.4's icon tiles 12
       // (pocket.css .kindico, .roomico) and the facts inset in a card or sheet 16 (.facts2).

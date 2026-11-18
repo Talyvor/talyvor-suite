@@ -1,5 +1,6 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { cn } from '../lib/cn'
+import { motion } from '../preset'
 
 /** The app's formatter (B55.38, B55.26). <Money> draws what these return and never formats a figure itself. */
 export interface MoneyFigures {
@@ -39,10 +40,48 @@ export type MoneyProps = ({ ulxc: number; minor?: never; currency?: never } | { 
 
 const nbsp = (s: string) => s.replace(/ /g, ' ')
 
+const ROLL_MS = parseFloat(motion.duration.roll)
+
+function reducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+/**
+ * B61.75 — Pocket Live's roll (DESIGN.md section 4, `roll`): once a figure is on the page, a new value rolls from the
+ * one drawn to the new one over 700 ms, easing out on the fourth power, in whole minor units. The first value, a change
+ * of currency and reduced motion draw at once. Returns the value to draw now; the roll ends on the value itself.
+ */
+function useRolled(amount: number, unit: string): number {
+  const [drawn, setDrawn] = useState(amount)
+  const at = useRef({ drawn: amount, unit })
+  useEffect(() => {
+    const from = at.current.drawn
+    const sameUnit = at.current.unit === unit
+    at.current.unit = unit
+    const land = (v: number) => {
+      at.current.drawn = v
+      setDrawn(v)
+    }
+    if (from === amount) return land(amount)
+    if (!sameUnit || reducedMotion() || typeof requestAnimationFrame !== 'function') return land(amount)
+    const start = performance.now()
+    let frame = 0
+    const step = () => {
+      const p = Math.min(1, (performance.now() - start) / ROLL_MS)
+      land(p >= 1 ? amount : Math.round(from + (amount - from) * (1 - Math.pow(1 - p, 4))))
+      if (p < 1) frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [amount, unit])
+  return drawn
+}
+
 /**
  * B57.7 — every money figure (pocket.css .moneyblock, .money): an account's amount (`minor` with its `currency`) in its
  * own currency. B61.14 — an amount Lens keeps in µLXC reads in the person's currency alone, and "…" while the peg is
- * unknown, never a guessed dollar and never LXC.
+ * unknown, never a guessed dollar and never LXC. B61.75 — a new value rolls in; while it rolls the figures in between
+ * are hidden from screen readers, which read the new value once.
  */
 export function Money(props: MoneyProps) {
   const ctx = useContext(MoneyContext)
@@ -50,21 +89,28 @@ export function Money(props: MoneyProps) {
   const figures = ctx.useFigures()
   const { size = 'row', signed = false, className } = props
   const amount = props.ulxc ?? props.minor
-  const sign = amount < 0 ? '−' : signed && amount > 0 ? '+' : ''
-  const figure = props.ulxc === undefined ? figures.minor(Math.abs(props.minor), props.currency) : figures.ulxc(Math.abs(props.ulxc))
-  const lead = figure === null ? '…' : nbsp(sign + figure)
+  const drawn = useRolled(amount, props.ulxc === undefined ? props.currency : 'ulxc')
+  const leadOf = (value: number) => {
+    const sign = value < 0 ? '−' : signed && value > 0 ? '+' : ''
+    const figure = props.ulxc === undefined ? figures.minor(Math.abs(value), props.currency) : figures.ulxc(Math.abs(value))
+    return figure === null ? '…' : nbsp(sign + figure)
+  }
+  const rolling = drawn !== amount
+  const lead = leadOf(drawn)
+  const said = rolling ? <span className="sr-only">{leadOf(amount)}</span> : null
 
   if (size === 'row')
     return (
       <span data-money="" className={cn('whitespace-nowrap font-figure font-semibold', className)}>
-        {lead}
+        {rolling ? <span aria-hidden="true">{lead}</span> : lead}
+        {said}
       </span>
     )
   // "$1,650.00" → "$1,650" with ".00" raised small; a unit after the figure ("USDC") small beside it.
   const [, whole, cents = '', unit = ''] = /^(.*?\d)(\.\d+)?(?: (\D+))?$/.exec(lead) ?? ['', lead]
   return (
     <span data-money="" className={cn('inline-grid justify-items-start gap-1.5 font-figure', className)}>
-      <span className={cn('whitespace-nowrap font-display tabular-nums text-ink', LARGE[size])}>
+      <span className={cn('whitespace-nowrap font-display tabular-nums text-ink', LARGE[size])} aria-hidden={rolling ? 'true' : undefined}>
         {whole}
         {cents ? (
           <span className="ml-px tracking-normal" style={{ fontSize: '.55em', verticalAlign: '.55em' }}>
@@ -73,10 +119,11 @@ export function Money(props: MoneyProps) {
         ) : null}
         {unit ? (
           <span className="tracking-normal text-ink-2" style={{ fontSize: '.4em' }}>
-            {' ' + unit}
+            {' ' + unit}
           </span>
         ) : null}
       </span>
+      {said}
     </span>
   )
 }
