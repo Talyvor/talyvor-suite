@@ -690,6 +690,13 @@ export interface AgentRules {
   /** B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. A save without it keeps what Lens holds. */
   may_instant_transfer?: boolean
   /**
+   * B61.64 — "Merchants and categories" (Lens B61.43): the merchant categories the agent may pay in by card (once it
+   * names any, a card payment in another is refused) and those it may never pay in, each a merchantCategories.ts id or a
+   * four-digit merchant category code. A save without them keeps what Lens holds.
+   */
+  allowed_merchant_categories?: string[] | null
+  blocked_merchant_categories?: string[] | null
+  /**
    * B61.87 — the currency the rules are held in, GBP, EUR, USD or USDC (Lens B61.12), and each amount limit in its minor
    * units. The µLXC limits above are what these are worth for the parked gateway; a save names these and not those.
    * Absent from a Lens older than B61.12.

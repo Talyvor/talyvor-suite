@@ -328,6 +328,27 @@ func TestAgentRulesCarryThePayeeLists(t *testing.T) {
 	}
 }
 
+// B61.64 — Merchants and categories reach Lens with the other rules, the save and its challenge alike; a save that does
+// not name them sends null, which Lens (B61.43) reads as "keep what it holds", never as "any merchant".
+func TestAgentRulesCarryTheMerchantCategories(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPut, "/api/agents/agt_1/rules", `{"allowed_merchant_categories":["software"],"blocked_merchant_categories":["gambling","5734"]}`)
+	doJSON(a, http.MethodPost, "/api/agents/agt_1/rules-challenge", `{"rules":{"allowed_merchant_categories":[]}}`)
+	doJSON(a, http.MethodPut, "/api/agents/agt_1/rules", `{"daily_limit_ulxc":5000000}`)
+	if len(f.got) != 3 {
+		t.Fatalf("Lens received %d requests, want 3: %q", len(f.got), f.got)
+	}
+	if !strings.Contains(f.got[0], `"allowed_merchant_categories":["software"]`) || !strings.Contains(f.got[0], `"blocked_merchant_categories":["gambling","5734"]`) {
+		t.Fatalf("Lens received %q, want both merchant category lists", f.got[0])
+	}
+	if !strings.Contains(f.got[1], `"allowed_merchant_categories":[]`) {
+		t.Fatalf("Lens received %q, want the challenge to carry the allowed categories cleared", f.got[1])
+	}
+	if !strings.Contains(f.got[2], `"allowed_merchant_categories":null`) || !strings.Contains(f.got[2], `"blocked_merchant_categories":null`) {
+		t.Fatalf("Lens received %q, want both merchant category lists null when the save does not name them", f.got[2])
+	}
+}
+
 // B28.28 — the per-payee daily caps reach Lens with the other rules; a save that does not name them sends null, which
 // Lens reads as "keep the caps it holds", never as "no caps".
 func TestAgentRulesCarryThePayeeDailyCaps(t *testing.T) {

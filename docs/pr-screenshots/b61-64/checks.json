@@ -1,0 +1,4 @@
+[
+  { "route": "/agents/agt_research/rules" },
+  { "route": "/agents", "steps": ["New agent", "Make your own", "More rules", "Software"], "frame": true }
+]

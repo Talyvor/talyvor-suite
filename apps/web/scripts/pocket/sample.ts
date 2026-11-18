@@ -181,7 +181,8 @@ const SAMPLE: Record<string, unknown> = {
         body: 'Sales has used 50% of its monthly limit', status: 'sent', attempts: 1, created_at: '2026-10-13T14:22:00Z', sent_at: '2026-10-13T14:22:15Z' },
     ],
   },
-  '/api/agents/agt_research/rules': RULES({ above: 2_500, perRequest: 10_000, daily: 5_000, monthly: 20_000, models: ['claude-sonnet-5', 'claude-haiku-4-5'], hours: ['08:00', '20:00'] }),
+  // B61.64 — Research pays by card only in the categories the launch pack's rules screen names (W4).
+  '/api/agents/agt_research/rules': { ...RULES({ above: 2_500, perRequest: 10_000, daily: 5_000, monthly: 20_000, models: ['claude-sonnet-5', 'claude-haiku-4-5'], hours: ['08:00', '20:00'] }), allowed_merchant_categories: ['software', 'hosting', 'freight'], blocked_merchant_categories: [] },
   '/api/agents/agt_sales/rules': RULES({ above: 500, perRequest: 1_000, daily: 2_000, monthly: 15_000, models: ['claude-haiku-4-5'] }),
   '/api/agents/agt_ops/rules': RULES({ above: 1_000, perRequest: 0, daily: 0, monthly: 10_000, models: ['claude-haiku-4-5'] }),
   // B61.19 — the most an assistant may give a new agent, in the account's dollars.

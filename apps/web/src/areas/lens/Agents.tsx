@@ -16,6 +16,7 @@ import { LimitAlertsCard } from './LimitAlertsCard'
 import { AGENT_KINDS, EVERY_PAYMENT_ASKS_MINOR, type AgentKindChoice, type SuggestedRules } from './agentKinds'
 import { CURRENCY_WORDS, parseRuleAmount, useAccountCurrency } from './rulesCurrency'
 import { PAYEES_KEY } from './Pay'
+import { MERCHANT_CATEGORIES, merchantCategoriesText } from './merchantCategories'
 import { type Agent, type AgentRulesSave, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText } from './agentBankApi'
 
 // Agents.tsx — B57.19: /agents as Pocket's w-agents. The workspace's total, split between its agents and what is free to
@@ -141,9 +142,10 @@ function minorOf(typed: Typed, currency: string): Record<RuleKey, number> | null
 
 /**
  * B61.87 — the rules New agent saves: held in the account's currency, the four amounts in its minor units and no µLXC
- * limit, and the payees More rules names. With none of the four typed, every payment waits for the owner's yes.
+ * limit, and the payees and merchant categories (B61.64) More rules names. With none of the four typed, every payment
+ * waits for the owner's yes.
  */
-export function newAgentRules(minor: Record<RuleKey, number>, currency: string, payees: string[]): AgentRulesSave {
+export function newAgentRules(minor: Record<RuleKey, number>, currency: string, payees: string[], merchants: string[] = []): AgentRulesSave {
   const rules: AgentRulesSave = {
     currency,
     max_per_payment_minor: 0,
@@ -161,6 +163,7 @@ export function newAgentRules(minor: Record<RuleKey, number>, currency: string, 
   for (const [key, , field] of RULE_FIELDS) rules[field] = minor[key]
   if (RULE_FIELDS.every(([key]) => minor[key] === 0)) rules.approval_above_minor = EVERY_PAYMENT_ASKS_MINOR
   if (payees.length > 0) rules.allowed_payees = payees
+  if (merchants.length > 0) rules.allowed_merchant_categories = merchants
   return rules
 }
 
@@ -230,6 +233,7 @@ function Details({
   const [typed, setTyped] = useState<Typed>(ours ? typedFrom(ours.rules) : NOTHING_TYPED)
   const [more, setMore] = useState(false)
   const [payees, setPayees] = useState<string[]>([])
+  const [merchants, setMerchants] = useState<string[]>([])
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const saved = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees, retry: false, enabled: more })
   const payeeChoices = [
@@ -238,7 +242,7 @@ function Details({
   ]
   const minor = minorOf(typed, currency)
   const nothingTyped = RULE_FIELDS.every(([key]) => typed[key].trim() === '')
-  const rules = minor ? newAgentRules(minor, currency, payees) : null
+  const rules = minor ? newAgentRules(minor, currency, payees, merchants) : null
   const create = useMutation({
     mutationFn: async (r: AgentRulesSave) => {
       // B61.87 — the agent's own account is opened in the account's currency, the one its rules are typed in.
@@ -393,6 +397,23 @@ function Details({
             ) : (
               <span className="text-body text-ink-3">{saved.isPending ? 'Reading your payees…' : 'No saved payees yet. Add them in Pay.'}</span>
             )}
+            <span className="mt-2 text-body font-semibold text-ink-2">Merchants and categories</span>
+            <span className="text-body text-ink-3">
+              {merchants.length > 0 ? `${merchantCategoriesText(merchants)}. Only these, by card.` : 'Any merchant. Pick some to let it pay only them by card.'}
+            </span>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Merchants and categories">
+              {MERCHANT_CATEGORIES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={pick}
+                  aria-pressed={merchants.includes(c.id)}
+                  onClick={() => setMerchants((all) => (all.includes(c.id) ? all.filter((x) => x !== c.id) : [...all, c.id]))}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>
