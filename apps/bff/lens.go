@@ -924,6 +924,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B28.454 — the chat canvas's own document, sandboxed with a policy of its own (canvas.go).
 	a.mux.HandleFunc("/canvas", serveCanvas)
 
+	// B67.4 — real files for a search engine, not the app's page (site_files.go).
+	a.mux.HandleFunc("/robots.txt", a.robotsTxt)
+	a.mux.HandleFunc("/sitemap.xml", a.sitemapXML)
+
 	// Everything else is the SPA (client-side routes resolve to index.html).
 	a.mux.Handle("/", a.spaHandler())
 	return a

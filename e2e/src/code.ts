@@ -291,7 +291,7 @@ export async function runCode(d: CodeDeps): Promise<CodeReport> {
 
 // ── The report ──────────────────────────────────────────────────────────────────────────────────────
 
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\\|]/g, '\\$&')
 const when = (iso: string): string => `${iso.slice(0, 16).replace('T', ' ')}Z`
 const result = (c: string | undefined): string => (c === undefined ? '**not read**' : c === 'success' ? 'green' : `**${c}**`)
 

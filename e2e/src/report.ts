@@ -119,8 +119,8 @@ const WAITS_FOR_A_MODEL = /^\/api\/(ai\/|docs\/ai\/|docs\/pages\/|docs\/spaces\/
 /** The feature an outcome is reported under when the run did not say (a run from before B25.5). */
 const UNPLACED = 'Chat'
 
-/** A Markdown table cell: one line, pipes escaped. */
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+/** A Markdown table cell: one line, backslashes and pipes escaped. */
+const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\\|]/g, '\\$&')
 const secs = (ms: number): string => `${(ms / 1000).toFixed(1)} s`
 const median = (xs: number[]): number | undefined => (xs.length === 0 ? undefined : [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)])
 

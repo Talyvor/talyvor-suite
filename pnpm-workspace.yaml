@@ -36,22 +36,12 @@ overrides:
 # Each ignore is an advisory with no fix to take. Drop the line when its condition stops holding.
 auditConfig:
   ignoreGhsas:
-    # braces <=3.0.3 (via tailwindcss>chokidar): no patched braces release exists (3.0.3 is the latest).
-    - GHSA-vfj7-8cjw-p6xm
-    # katex <0.18.2 (via mermaid): low; mermaid 12.1.0, the latest, requires katex ^0.16, and 0.17,
-    # 0.18 and 0.19 each make breaking changes. The app's own katex is 0.19.
+    # katex <0.18.2 (via mermaid): low; mermaid 12.1.0 requires katex ^0.16. mermaid 12.3.0 takes katex ^0.18 but moves
+    # about 40 packages of apps/web's shipped bundle, so it is its own change (B67.3). The app's own katex is 0.19.
     - GHSA-238p-pmpm-9mq7
-    # B40.25 — body-parser <2.4.0 and fast-uri <3.1.9, through e2e's @modelcontextprotocol/sdk (a dev dependency of the
-    # nightly testers): the fixed releases (body-parser 2.4.0 of 22 Oct 2026, fast-uri 3.1.9 of 19 Oct) are younger than
-    # minimumReleaseAge. Drop these lines and refresh the lockfile from 29 Oct 2026, once both are seven days old.
-    - GHSA-27r3-jxmh-p828
-    - GHSA-w74x-v6f9-j3xg
-    - GHSA-xhq7-xmqj-769h
-    - GHSA-wjr9-j795-jxcr
-    - GHSA-333x-w4r6-6crp
-    # B17.312 — minimatch <11.0.1 (via eslint, lint-time only, on the repo's own globs): eslint 9 takes minimatch ^3 and
-    # ^10, and the one fix, 11.0.1 of 27 Oct 2026, is a major above both and younger than minimumReleaseAge. Drop this
-    # line once eslint takes minimatch >=11.0.1.
+    # B17.312, B67.3 — minimatch <11.0.1 (via typescript-eslint's typescript-estree, lint-time only, on the repo's own
+    # globs): typescript-eslint 8.72 takes minimatch ^10, and 8.73.0 (16 Nov 2026), the first to take ^11.0.1, is younger
+    # than minimumReleaseAge. Drop this line and update typescript-eslint once 8.73.0 is seven days old (23 Nov 2026).
     - GHSA-g3hv-75wg-m249
     # B61.118 — picomatch <=4.0.7, ReDoS in extglob patterns (via typescript-eslint, vite, vitest's tinyglobby and fdir,
     # build and test time only, on the repo's own globs): no patched picomatch release exists (4.0.7 is the latest, 17 Nov
