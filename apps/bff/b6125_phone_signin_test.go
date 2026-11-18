@@ -22,7 +22,8 @@ import (
 // doorPerson is one person in doorLens.
 type doorPerson struct {
 	id, identity, passcode string
-	device                 string // the device id of the phone's key, "" with none
+	device                 string   // the device id of the phone's key, "" with none
+	keys                   []string // B61.105: the ids of the sign-in keys kept for the person
 }
 
 // doorLens stands in for Lens's sign-in routes. Codes are 6 digits handed back as the Sandbox sender's; a ticket is
@@ -173,12 +174,16 @@ func newDoorLens(t *testing.T, rest *strangerLens) *doorLens {
 					}
 					dev, _ := in["device"].(map[string]any)
 					p.device, _ = dev["public_key"].(string)
+					id := "pky_" + strconv.Itoa(d.n)
+					p.keys = append(p.keys, id)
 					w.WriteHeader(http.StatusCreated)
-					_ = json.NewEncoder(w).Encode(map[string]any{"id": "pky_" + strconv.Itoa(d.n), "kind": "device"})
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "kind": "device"})
 					return
 				}
 			}
 			refuse(http.StatusNotFound, "no_person")
+		case "/v1/auth/passkey/keys", "/v1/auth/passkey/keys/remove", "/v1/auth/passcode/change", "/v1/auth/phone/change-number":
+			d.settings(w, r.URL.Path, str, refuse)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
