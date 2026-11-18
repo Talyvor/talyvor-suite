@@ -34,6 +34,9 @@ afterEach(() => {
 
 describe('the wallet screens in the brand', () => {
   const SCREENS: Array<[string, string[]]> = [
+    // B17.477 — the agents' list: New agent is its one primary action, as the design's w-agents draws it; the alert
+    // channels' Add channel under the list is secondary.
+    ['/agents', ['New agent']],
     // B57.20 — the agent's page: Edit rules is its one primary action; Move LXC and Review are secondary, as w-agent-research draws them.
     ['/agents/agt_research', ['Edit rules']],
     // B57.17 — Review is Pocket's secondary button, as w-approvals draws it; Approve is the sheet's.
@@ -74,6 +77,22 @@ describe('the wallet screens in the brand', () => {
       expect(m.closest('.font-figure'), `"${m.textContent}" is not on the figure face`).not.toBeNull()
     }
     if (['/agents/agt_research', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
+  })
+
+  // B17.477 — a workspace with no currency account yet sees Statements say so on Pocket's empty card, not a bare line.
+  it('Statements with no account yet says so on a card', async () => {
+    vi.restoreAllMocks()
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    populatedBff((impl) => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(((input: unknown) =>
+        String(input) === '/api/money/accounts'
+          ? Promise.resolve(new Response(JSON.stringify({ accounts: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+          : impl(input)) as never)
+    })
+    const main = await at('/statements')
+    const card = (await within(main).findByText('No accounts yet')).closest('.rounded-card-tight')
+    expect(card, 'the empty statement is not on a card').not.toBeNull()
+    expect(cardOnItsPlane(card as Element)).toBe(true)
   })
 
   // B61.55 — the agent's credit statement, whose lines said Settled or Held, is parked.

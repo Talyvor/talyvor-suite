@@ -125,7 +125,7 @@ export function AlertChannelsCard() {
         </div>
         <p className="text-caption text-ink-3">Email needs an email integration, which is not connected yet.</p>
         <div>
-          <Button type="submit" size="sm" disabled={add.isPending || (kind !== 'push' && url.trim() === '')}>
+          <Button type="submit" variant="secondary" size="sm" disabled={add.isPending || (kind !== 'push' && url.trim() === '')}>
             {add.isPending ? 'Adding…' : 'Add channel'}
           </Button>
         </div>
