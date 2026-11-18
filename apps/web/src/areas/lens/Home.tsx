@@ -221,7 +221,16 @@ export function Home() {
             </div>
             <div className="min-w-0 wide:col-span-7 wide:col-start-1 wide:row-start-2">
               {agents.length === 0 || onboarding ? (
-                <Card tone="white" data-testid="home-onboarding" className="grid gap-4">
+                <Card tone="white" data-testid="home-onboarding" aria-labelledby="home-agents" className="grid gap-4">
+                  {/* B17.492 — with no agent yet the card still heads itself as the list does, and See all opens Agents. */}
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <h3 id="home-agents" className="font-display text-head font-bold text-ink">
+                      {shows.agents}
+                    </h3>
+                    <Link to="/agents" className={cn(inlineLink, 'text-body')}>
+                      See all
+                    </Link>
+                  </div>
                   <EmptyState icon={<Icon name="agents" />} title="No agents yet" line="Give an agent its own account, wallet and card." />
                   <FirstAgent book={book.data} onStarted={() => setOnboarding(true)} onFinished={() => setOnboarding(false)} />
                   <IfArea area="gateway">
@@ -800,7 +809,9 @@ function Cards({ account, agents }: { account: WorkspaceAccount; agents: Agent[]
         <h3 id="home-cards" className="font-display text-head font-bold text-ink">
           Cards
         </h3>
-        <Link to="/money/card" className={cn(inlineLink, 'text-body')}>
+        {/* B17.492 — See all opens the Cards tab; /money/card is the owner's physical card, and sends the person to
+            Spending while Lens's physical-card switch is off. */}
+        <Link to="/cards" className={cn(inlineLink, 'text-body')}>
           See all
         </Link>
       </div>
