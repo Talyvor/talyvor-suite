@@ -130,6 +130,10 @@ const OPEN: Record<string, string> = {
     'ADDED beside Tailwind\'s numeric durations, which screens not yet moved keep (duration-200 is the site\'s)',
   transitionTimingFunction:
     'Pocket Live\'s three easings (B61.72: out, pop, std) ADDED beside Tailwind\'s ease-in/out, which stay reachable',
+  animation: 'Pocket Live\'s loading shimmer and a payment landing (B61.75) ADDED beside Tailwind\'s animate-spin/pulse',
+  keyframes: 'the frames of those two animations (B61.75); keyframes make no class of their own',
+  backgroundImage: 'shape, the loading shapes\' grey gradient in the theme\'s cloud colours (B61.75), ADDED beside Tailwind\'s gradients',
+  backgroundSize: 'double, the 200% the shimmer slides across (B61.75), ADDED beside Tailwind\'s auto/cover/contain',
 }
 
 /**
