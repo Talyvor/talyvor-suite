@@ -27,10 +27,19 @@ function parentOf(screen: Entry, screens: readonly Entry[]): Entry | undefined {
 }
 
 /**
- * Opens `path` and reads what a person would: the heading, the catch-all's sentence, page errors and
- * the BFF's 5xx while it loads. The problems found, and how long it took to settle.
+ * B17.491 — a screen behind a switch that is off, and where the app sends a person instead, by design. /money/card goes
+ * to Spending until a live card issuer serves the card (PhysicalCard.tsx, B60.6), and physical-card checks that Spending
+ * shows no link to it. Once the switch is on, the screen names itself and is checked like any other.
  */
-async function visit(ctx: ScenarioCtx, page: Page, origin: string, path: string, screen: Entry): Promise<{ problems: string[]; ms: number }> {
+export const SWITCHED_OFF: Readonly<Record<string, { to: string; heading: string; why: string }>> = {
+  '/money/card': { to: '/money/spending', heading: 'Spending', why: 'the physical card is switched off until a live card issuer serves it (B60.6)' },
+}
+
+/**
+ * Opens `path` and reads what a person would: the heading, the catch-all's sentence, page errors and
+ * the BFF's 5xx while it loads. The problems found, how long it took to settle, and where a switched-off screen went.
+ */
+async function visit(ctx: ScenarioCtx, page: Page, origin: string, path: string, screen: Entry): Promise<{ problems: string[]; ms: number; off?: string }> {
   const errors: string[] = []
   const failed: string[] = []
   const onError = (e: Error) => errors.push(e.message.slice(0, 160))
@@ -42,14 +51,22 @@ async function visit(ctx: ScenarioCtx, page: Page, origin: string, path: string,
   page.on('response', onResponse)
   const t0 = Date.now()
   const problems: string[] = []
+  let off: string | undefined
   try {
     await page.goto(origin + path)
     // A console screen's heading is its title; a public page names itself in its own heading.
+    const named = page.getByRole('heading', { level: 1, name: screen.feature, exact: true })
+    const switched = SWITCHED_OFF[screen.path]
     const heading = screen.public === true
       ? page.getByRole('heading').first()
-      : page.getByRole('heading', { level: 1, name: screen.feature, exact: true })
-    const shown = await heading.waitFor({ state: 'visible', timeout: HEADING_TIMEOUT_MS }).then(() => true, () => false)
+      : switched === undefined ? named : named.or(page.getByRole('heading', { level: 1, name: switched.heading, exact: true }))
+    let shown = await heading.waitFor({ state: 'visible', timeout: HEADING_TIMEOUT_MS }).then(() => true, () => false)
     await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
+    if (shown && switched !== undefined && (await named.count()) === 0) {
+      // The other heading showed: right only on the screen the switch sends a person to.
+      if (new URL(page.url()).pathname === switched.to) off = `switched off, so it lands on ${switched.to} — ${switched.why}`
+      else shown = false
+    }
     if (!shown) {
       const said = (await page.getByRole('heading', { level: 1 }).first().innerText({ timeout: 1_000 }).catch(() => '')).trim()
       problems.push(screen.public === true ? 'no heading' : `no heading "${screen.feature}"${said !== '' ? ` (it says "${said}")` : ''}`)
@@ -63,7 +80,7 @@ async function visit(ctx: ScenarioCtx, page: Page, origin: string, path: string,
   }
   const ms = Date.now() - t0
   ctx.app.screenTimed(path, problems.length === 0 ? 200 : 0, ms)
-  return { problems: [...problems, ...errors.map((m) => `page error: ${m}`), ...failed], ms }
+  return { problems: [...problems, ...errors.map((m) => `page error: ${m}`), ...failed], ms, off }
 }
 
 export function everyScreen(): Scenario {
@@ -79,6 +96,7 @@ export function everyScreen(): Scenario {
       const wrong: string[] = []
       const where: string[] = []
       let count = 0
+      let offCount = 0
       try {
         for (const s of screens) {
           const why = cannotTest(s)
@@ -106,10 +124,13 @@ export function everyScreen(): Scenario {
             }
             path = link
           }
-          const { problems, ms } = await visit(ctx, page, origin, path, s)
+          const { problems, ms, off } = await visit(ctx, page, origin, path, s)
           count++
+          if (off !== undefined && problems.length === 0) offCount++
           opened.set(s.path, path)
-          ctx.evidence.push({ note: `${path} (${s.feature}) — ${(ms / 1000).toFixed(1)} s${problems.length > 0 ? `: ${problems.join('; ')}` : ''}` })
+          ctx.evidence.push({ note: off !== undefined && problems.length === 0
+            ? `${path} (${s.feature}): ${off}`
+            : `${path} (${s.feature}) — ${(ms / 1000).toFixed(1)} s${problems.length > 0 ? `: ${problems.join('; ')}` : ''}` })
           if (problems.length > 0) {
             wrong.push(`${path}: ${problems.join('; ')}`)
             where.push(path)
@@ -119,7 +140,7 @@ export function everyScreen(): Scenario {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: `${count} screens opened: each named itself, with no page error and no 5xx` }
+        ? { pass: true, detail: `${count} screens opened: each named itself${offCount > 0 ? ` or, switched off, landed where it should (${offCount})` : ''}, with no page error and no 5xx` }
         : { pass: false, detail: `${wrong.length} of ${count} screens wrong — ${wrong.join(' | ')}`, where }
     },
   }
