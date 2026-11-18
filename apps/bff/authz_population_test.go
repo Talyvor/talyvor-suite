@@ -143,6 +143,10 @@ var publicReadRoutes = map[string]string{
 		"answered 404 for a link Docs refuses — docs_share_test.go owns both",
 	"/canvas": "B28.454 — the chat canvas's empty page, which draws only the HTML the app posts it; " +
 		"it holds nothing of anyone's — security_headers_test.go asserts its policy",
+	"/robots.txt": "B67.4 — a search engine reads it signed out; fixed text naming no one's data — " +
+		"site_files_test.go asserts what it carries",
+	"/sitemap.xml": "B67.4 — a search engine reads it signed out; the public pages only — " +
+		"site_files_test.go asserts it lists no signed-in route",
 	"/": "the SPA shell. It has to load before anyone can sign in; spa_fallback_test.go owns " +
 		"what it serves and spa_cache_test.go how it is cached. 404 in tests — no bundle is built",
 }
