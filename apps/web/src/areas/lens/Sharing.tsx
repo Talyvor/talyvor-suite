@@ -13,6 +13,7 @@ import { STORED_KEY, readStored } from './StoredAnswers'
 import { setFiat, useFiat, type Fiat } from './money'
 import { usePersonal } from './agentBankApi'
 import { AccountCards } from './AccountSettings'
+import { PrivacyCard } from './FindMe'
 
 // Sharing.tsx — cross-tenant answer sharing: the explanation, and the control.
 //
@@ -261,6 +262,8 @@ export function Settings() {
           <IfArea area="gateway">
             <SharedAnswersCard />
           </IfArea>
+          {/* B61.93 — Privacy: your Talyvor name and who can find you, to pay you. */}
+          <PrivacyCard />
           <AppearanceCard />
           <ShowAmountsCard />
           {/* B27.27 — BYOK's keys: added, replaced and removed here, only their last four ever shown. */}

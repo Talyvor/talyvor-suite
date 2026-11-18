@@ -52,6 +52,8 @@ const SAMPLE: Record<string, unknown> = {
     signup_open: true,
   },
   '/api/workspace/name': { id: 'ws_nicks_team', name: 'Nick’s team' },
+  // B61.93 — Settings, Privacy: Nick's Talyvor name, found by phone number only.
+  '/api/people/finding': { name: 'nick', email: 'nick@example.com', phone: '+447700900456', by_name: false, by_phone: true, by_email: false },
   // B57.44 — Members: Nick alone, the owner, on Free's one seat; the plan gates as Lens's internal/plans sets them.
   '/api/members': [{ id: 'mem_nick', name: 'Nick', email: 'nick@example.com', role: 'owner', avatar_url: '' }],
   '/api/pricing': {
