@@ -84,6 +84,55 @@ func (a *app) handleMoneyAlertDeliveries(w http.ResponseWriter, r *http.Request,
 	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/alerts/deliveries", nil, "alert deliveries")
 }
 
+// B28.61 — a low-balance alert for an agent, on this session's own token (Lens B28.334).
+//
+//	GET    /api/money/low-balance          the thresholds, each with what its agent holds now and whether that is below
+//	PUT    /api/money/low-balance          {agent_id, currency, threshold_minor} — set the threshold for that agent's
+//	                                       balance in that currency
+//	DELETE /api/money/low-balance/{id}     remove one; its alerts are kept
+//	GET    /api/money/low-balance/alerts   each hour an agent's balance was found below its threshold, newest first
+func (a *app) handleMoneyLowBalance(w http.ResponseWriter, r *http.Request, t tenant) {
+	switch r.Method {
+	case http.MethodGet:
+		a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/low-balance", nil, "low-balance alerts")
+	case http.MethodPut:
+		var in struct {
+			AgentID        string `json:"agent_id"`
+			Currency       string `json:"currency"`
+			ThresholdMinor int64  `json:"threshold_minor"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensBalanceThresholdBody: balance_minor, below, has_account, id
+		body, _ := json.Marshal(in)
+		a.lensRelay(w, r, t.token, http.MethodPut, "/v1/money/low-balance", body, "low-balance alerts")
+	default:
+		methodNotAllowed(w, "GET, PUT")
+	}
+}
+
+func (a *app) handleMoneyLowBalanceOne(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, ok := pathID(w, "threshold id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodDelete, "/v1/money/low-balance/"+url.PathEscape(id), nil, "low-balance alert")
+}
+
+func (a *app) handleMoneyLowBalanceAlerts(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/low-balance/alerts", nil, "low-balance alerts")
+}
+
 // B41.20 — the payments that recur, on this session's own token.
 //
 //	GET /api/money/spending/subscriptions   each card payment or payment out that recurs weekly or monthly, with its next date,
