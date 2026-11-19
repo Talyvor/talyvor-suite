@@ -361,3 +361,12 @@ describe('Pricing on the page', () => {
     expect(source).not.toMatch(/\b(usd|gbp|eur)\s*:\s*\d/)
   })
 })
+
+describe('Orange boxes', () => {
+  // B64.9: the box's own line-height pushes its line down, so the g, y, p and comma above never dip under it.
+  // scripts/pillcheck.mjs measures that at 14 widths on the built page; this keeps the rule it measured.
+  it('keeps line-height 1.4 on .pill', () => {
+    const css = readFileSync(resolve(__dirname, 'site.css'), 'utf8')
+    expect(css).toMatch(/\.tv4 \.pill \{[^}]*line-height: 1\.4;/)
+  })
+})
