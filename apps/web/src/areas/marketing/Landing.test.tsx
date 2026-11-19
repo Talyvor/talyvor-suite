@@ -94,6 +94,36 @@ describe('Landing', () => {
     expect(missing).toEqual([])
   })
 
+  // B64.5: index.html in the design folder loads both faces from Google Fonts; the page sets them from the app's own
+  // files instead. What /marketing can request is index.html, the CSS main.tsx and the page pull in (site.css is read
+  // from disk: its ?raw import arrives empty under vitest), and every address the rendered page names.
+  it('sets its words in the app’s own Figtree and Bricolage Grotesque, and asks Google Fonts for nothing', () => {
+    const { container } = render(<Landing />)
+    const read = (p: string) => readFileSync(resolve(__dirname, p), 'utf8')
+    const theme = read('../../../../../packages/ui/src/theme.css')
+    const site = read('./site.css')
+    const requested = [
+      read('../../../index.html'),
+      theme,
+      read('../../styles.css'),
+      site,
+      ...[...container.querySelectorAll('*')].flatMap((el) =>
+        ['src', 'href', 'poster', 'srcset', 'data-src', 'data-small', 'style'].map((a) => el.getAttribute(a) ?? ''),
+      ),
+    ]
+    expect(requested.filter((r) => /fonts\.(googleapis|gstatic)\.com/.test(r))).toEqual([])
+
+    expect(site).toMatch(/--display: "Bricolage Grotesque", "Figtree",/)
+    expect(site).toMatch(/--ui: "Figtree",/)
+    for (const face of ['Bricolage Grotesque', 'Figtree']) {
+      const files = [...theme.matchAll(/@font-face \{[^}]*font-family: '([^']+)'[^}]*url\('\.\/([^']+)'\)/g)]
+        .filter((m) => m[1] === face)
+        .map((m) => m[2])
+      expect(files.length, face).toBeGreaterThan(0)
+      expect(files.filter((f) => !existsSync(resolve(__dirname, '../../../../../packages/ui/src', f))), face).toEqual([])
+    }
+  })
+
   // B64.4 — the BFF caches /site for a year, so a file there is never changed under its name: its name carries the
   // first eight hex of its own sha256, and a new cut of a film is a new name. index.html preloads the hero's poster.
   it('names every file in /site by its own content, and preloads the poster the hero draws', () => {
