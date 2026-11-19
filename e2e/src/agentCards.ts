@@ -10,7 +10,7 @@
 
 import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
-import type { Answered } from './lens.ts'
+import { type Answered, refusalOf } from './lens.ts'
 import { RUN_SALT } from './oracles.ts'
 import { payInvoiceByCard } from './payScreen.ts'
 import { said } from './routes.ts'
@@ -43,6 +43,16 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
         const got = await lens.act<T>(user, method, path, body)
         ctx.evidence.push({ note, answer: said(got) })
         return got
+      }
+
+      // One owner request with the Date header Lens answered it with: `at` is that instant in ms (NaN when absent).
+      const lensSaid = async <T>(method: string, path: string, body: object | undefined, note: string): Promise<Answered<T> & { date: string | null; at: number }> => {
+        const r = await lens.as(user.token, method, path, body)
+        const date = r.headers.get('Date')
+        const got: Answered<T> = r.status >= 200 && r.status < 300
+          ? { ok: true, status: r.status, value: (r.text === '' ? null : JSON.parse(r.text)) as T } : { ok: false, status: r.status, error: refusalOf(r.text) }
+        ctx.evidence.push({ note: `${note} (Lens's Date: ${date ?? 'none'})`, answer: said(got) })
+        return { ...got, date, at: Date.parse(date ?? '') }
       }
 
       const terms = await call<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
@@ -89,16 +99,18 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
         if (before !== FUND_MINOR) return fail(`the funding invoice was paid by card, but before approval the agent's GBP account holds ${before} minor, not ${FUND_MINOR}`)
 
         // 2. One approval issues all three, and holds their total once.
-        const approved = await call<Batch>('POST', `/v1/money/cards/${batch.id}/approve`, {}, 'the owner approves the three cards once')
+        // B17.512 — "closing within 24 hours" is judged on Lens's clock, which stamps expires_at at the approval, never the
+        // runner's: after the reading's Date and at most 24 hours after the approval's (whole seconds, so up to 1 s after it).
+        const approved = await lensSaid<Batch>('POST', `/v1/money/cards/${batch.id}/approve`, {}, 'the owner approves the three cards once')
         if (approved.status !== 200 || !approved.ok || approved.value.status !== 'issued') return fail(`approving the cards must answer 200 issued; Lens answered ${said(approved)}`)
-        const got = await call<Batch>('GET', `/v1/money/cards/${batch.id}`, undefined, 'the owner reads the cards')
+        const got = await lensSaid<Batch>('GET', `/v1/money/cards/${batch.id}`, undefined, 'the owner reads the cards')
         if (!got.ok) return fail(`reading the cards answered ${said(got)}`)
+        if (Number.isNaN(approved.at) || Number.isNaN(got.at)) return fail(`Lens's card answers must carry its clock in a Date header; the approval said ${approved.date}, the reading ${got.date}`)
         const wrong: string[] = []
-        const now = Date.now()
         for (const want of TRIP) {
           const c = (got.value.cards ?? []).find((x) => x.merchant === want.merchant)
           const expires = Date.parse(c?.expires_at ?? '')
-          if (c === undefined || c.status !== 'active' || c.cap_minor !== want.cap_minor || c.currency !== 'GBP' || !(expires > now && expires <= now + DAY_MS)) {
+          if (c === undefined || c.status !== 'active' || c.cap_minor !== want.cap_minor || c.currency !== 'GBP' || !(expires > got.at && expires < approved.at + 1_000 + DAY_MS)) {
             wrong.push(`the ${want.merchant} card must be active, locked to ${want.merchant}, capped at ${want.cap_minor} GBP and closing within 24 hours; Lens answered ${JSON.stringify(c)}`)
           }
         }
