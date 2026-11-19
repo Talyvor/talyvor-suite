@@ -245,8 +245,10 @@ export function Members() {
     <div className="grid min-w-0 gap-5">
       <Crumb trail={[{ label: 'Settings', href: '/settings' }, { label: 'Members' }]} />
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-3xl text-reading text-ink-2">
-          Everyone who can reach this workspace.
+        {/* B17.489 — the lede is the page's heading, drawn before the roster answers (the shell's top bar holds its one h1),
+            set in the lede's own type as the reference draws it, with the count after it on the same line. */}
+        <div data-testid="members-lede" className="max-w-3xl text-reading text-ink-2">
+          <h2 className="inline font-normal">Everyone who can reach this workspace.</h2>
           {served && roster.length > 0 ? (
             <>
               {' '}
@@ -254,7 +256,7 @@ export function Members() {
               {owners === 1 ? 'is an owner' : 'are owners'}.
             </>
           ) : null}
-        </p>
+        </div>
         {served && roster.length > 0 && !youAreNotOwner ? (
           <Button icon={<Icon name="plus" size={18} />} onClick={() => setAdding(true)}>
             Add a member

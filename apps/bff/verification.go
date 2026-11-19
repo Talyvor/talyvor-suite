@@ -24,12 +24,13 @@ import (
 // level each capability needs for live money is level_needed on GET /api/wallets/capabilities (wallet_money.go).
 //
 // B65.2 — the GET's ?return_to= and the identity check's return_to name the page the identity partner's own page
-// (Persona's) sends the person back to: "signup" for sign-up's last step, "settings" for Settings, Verification. Only
-// those names reach Lens (Lens B65.1 keeps the addresses); anything else is dropped, and Lens sends them to Settings.
+// (Persona's) sends the person back to: "signup" for sign-up's last step, "settings" for Settings, Verification, and
+// (B65.4) "phone" for the phone app's own identity step. Only those names reach Lens (Lens B65.1 keeps the addresses);
+// anything else is dropped, and Lens sends them to Settings.
 
-// checkReturnName is name when it is one of the web's own returns, else "".
+// checkReturnName is name when it is one of Lens's return names, else "".
 func checkReturnName(name string) string {
-	if name == "signup" || name == "settings" {
+	if name == "signup" || name == "settings" || name == "phone" {
 		return name
 	}
 	return ""
