@@ -1231,6 +1231,16 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/card-disputes", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensCardDisputeOpenBody",
   },
+  // B28.49 — an agent's single-use cards, asked for as one batch for one job (Lens B46.10).
+  {
+    route: "POST /v1/money/cards",
+    file: "apps/bff/money_cards.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"agent_id": in.AgentID, "purpose": in.Purpose, "currency": in.Currency, "cards": cards})',
+    upstreamFile: "internal/economy/money_cards.go",
+    upstreamAnchor: "type CardBatch struct",
+    subject: "lensMoneyCardBatchBody",
+  },
   // B59.28 — help and complaints, closing the account and the workspace's data, each a request (Lens B59.27).
   {
     route: "POST /v1/workspaces/{wsID}/requests",
