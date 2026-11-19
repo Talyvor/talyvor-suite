@@ -1651,7 +1651,7 @@ export function signinBoard(): Scenario {
             const at = `${path} ${width}px`
             if (got.card.bg !== 'rgb(255, 255, 255)') wrong.push(`${at}: the card is not white (${got.card.bg})`)
             if (got.card.page !== 'rgb(243, 244, 246)') wrong.push(`${at}: the page is not Pocket's cloud (${got.card.page})`)
-            if (!/^\/brand\/logo\/talyvor-logo-small-on-light\.svg$/.test(got.logo)) wrong.push(`${at}: logo "${got.logo}"`)
+            if (!/^\/brand\/logo\/talyvor-logo-small-on-light-240\.png$/.test(got.logo)) wrong.push(`${at}: logo "${got.logo}"`)
             else if (!got.logoInCardAboveH1) wrong.push(`${at}: the logo is not in the card above the heading`)
             if (got.primary !== 'the phone number') wrong.push(`${at}: "${action}" is not the one button under the phone number's field (${got.primary})`)
             if (!got.primaryIsInk || got.inkCount !== 1) wrong.push(`${at}: "${action}" is not the one ink action (${got.inkCount} ink)`)

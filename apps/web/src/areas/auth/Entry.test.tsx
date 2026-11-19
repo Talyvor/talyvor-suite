@@ -268,9 +268,10 @@ describe('the sign-in page is Pocket’s auth card', () => {
       expect(card).toHaveClass('shadow-pocket-lg', 'rounded-sheet')
       const logo = within(card as HTMLElement).getByRole('link', { name: 'Talyvor website' })
       expect(logo).toHaveAttribute('href', '/marketing')
-      expect(Array.from(logo.querySelectorAll('img[data-brand="logo"]')).map((i) => i.getAttribute('src'))).toEqual([
-        '/brand/logo/talyvor-logo-small-on-light.svg',
-        '/brand/logo/talyvor-logo-small-on-dark.svg',
+      // B64.11 — 144 px is under 240: the kit's small-logo PNGs, 1x and 2x, never the SVG.
+      expect(Array.from(logo.querySelectorAll('img[data-brand="logo"]')).map((i) => [i.getAttribute('srcset'), i.getAttribute('alt')])).toEqual([
+        ['/brand/logo/talyvor-logo-small-on-light-240.png 1x, /brand/logo/talyvor-logo-small-on-light-480.png 2x', 'Talyvor'],
+        ['/brand/logo/talyvor-logo-small-on-dark-240.png 1x, /brand/logo/talyvor-logo-small-on-dark-480.png 2x', 'Talyvor'],
       ])
       // No teal and no lake any more, and the page's one primary action is Pocket's ink pill.
       expect(container.querySelector('figure.tal-entry-photo, .bg-accent')).toBeNull()
