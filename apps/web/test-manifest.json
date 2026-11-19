@@ -1,7 +1,7 @@
 {
   "src/AdminRemoved.test.tsx": 5,
   "src/aiRequestBodyRegister.test.ts": 33,
-  "src/areas/auth/Door.test.tsx": 16,
+  "src/areas/auth/Door.test.tsx": 19,
   "src/areas/auth/Entry.test.tsx": 16,
   "src/areas/auth/SignUp.test.tsx": 23,
   "src/areas/auth/Welcome.test.tsx": 4,
@@ -366,7 +366,7 @@
   "src/tokenDoor.test.ts": 10,
   "src/topUpMirrorRegister.test.ts": 11,
   "src/trackWriteBodyRegister.test.ts": 18,
-  "src/typeScaleUnits.test.ts": 18,
+  "src/typeScaleUnits.test.ts": 19,
   "src/upstreamCitations.test.ts": 8,
   "src/WalletFirstNav.test.tsx": 7,
   "src/workspaceAreas.test.tsx": 18,

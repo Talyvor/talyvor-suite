@@ -99,6 +99,7 @@ const CONSOLE_STEPS: Record<string, string> = {
   'pocket-amount': 'the approval sheet’s amount, 56px, large money in the display face (B57.5)',
   'pocket-balance': 'a balance card’s amount, 44px, large money in the display face (B57.7)',
   'pocket-balance-sm': 'a balance card’s amount beside others, 40px, large money in the display face (B57.7)',
+  'pocket-question': 'a one-question page’s question, 30px in the display face (B57.184)',
 }
 
 /**
