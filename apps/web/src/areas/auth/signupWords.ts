@@ -103,7 +103,12 @@ export const IDENTITY_WORDS = {
   notPassed: 'Not passed',
   notYet: 'Not checked yet',
   documentTitle: 'Your ID document',
-  documentLine: 'When our identity partner is live, its own screen opens here to photograph your ID. In Sandbox nothing is asked for and nothing is kept.',
+  // B65.2 — the identity partner's own page takes the photo of the ID and the selfie; the consent line is for Mihai to
+  // confirm (selfie matching is biometric data).
+  documentLine: 'Persona, our identity partner, checks a photo of your ID and a selfie for us.',
+  privacy: 'Our privacy notice',
+  verify: 'Verify your ID',
+  again: 'Start again',
   done: 'You’re confirmed. Your account is open.',
   open: 'Open the app',
   // B61.118 — the way into the app while a check waits, or after one did not pass; never says the check passed.
