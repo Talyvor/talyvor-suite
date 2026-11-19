@@ -36,6 +36,8 @@
 // up to ten, one per merchant, each capped, waits for the owner's one approval, which holds the caps' total out of the agent's
 // account once (card_hold) and issues every card, active for 24 hours. Approved again it is answered as it stands. Its defect:
 //   card-hold-twice        — approving an issued batch again holds its total again
+// B17.508 — and each card pays once (Lens B28.323): the issuer's second charge on a used card is declined. Its defect:
+//   card-pays-twice        — a used card's second charge is approved and writes a second card_charge
 //   card-life-25h          — B17.512: the cards are issued closing in 25 hours, not 24
 // B17.512 — the card desk keeps its own clock, STUB_CLOCK_AHEAD_MS ahead of the runner's (Lens's database clock is not the
 // testers' Mac's), and says it in each card answer's Date header, as Lens's server does.
@@ -505,7 +507,7 @@ export class PayeeDesk {
     if (batch === undefined || card === undefined) return [404, { error: 'economy: no such card' }]
     if (!Number.isInteger(amount) || amount <= 0 || merchant.trim() === '') return [400, { error: 'body must be {"merchant", "amount_minor"} with amount_minor above zero' }]
     const d = ISSUER[merchant.trim().toLowerCase()] ?? { mcc: '5999', country: 'GB' }
-    const reason = card.status === 'used' ? 'the card has been used: it pays once' : card.status !== 'active' ? 'the card is not active'
+    const reason = card.status === 'used' && !this.broken('card-pays-twice') ? 'the card has been used: it pays once' : card.status !== 'active' && card.status !== 'used' ? 'the card is not active'
       : card.merchant.toLowerCase() !== merchant.trim().toLowerCase() ? `the card pays only ${card.merchant}`
         : amount > card.cap_minor ? "the charge is more than the card's cap" : ''
     const authorization = `iauth_synthetic_${randomBytes(8).toString('hex')}`

@@ -5,8 +5,11 @@
 // waits for one approval and nothing moves. The owner approves it once: GET /v1/money/cards/{id} shows three active cards, each
 // locked to its merchant, capped and closing within 24 hours, and the money ledger shows one card_hold of the total — the agent's
 // account down by exactly £400.00. Approved again it is answered as it stands and holds nothing twice. The money layer lists no
-// entries by kind, so the hold is read as the ledger keeps it: the agent's account balance, the sum of its postings. On the sandbox
-// no charge can be made from outside, so the charges stay covered by Lens's TestB4610 until an issuer adapter exists.
+// entries by kind, so the hold is read as the ledger keeps it: the agent's account balance, the sum of its postings.
+// B17.508 — each card pays once (Lens B28.323, B46.10): the issuer charges the airline card £180.00, as the issuer makes it (Lens
+// B53.18); it is approved, the money spent lists exactly one card_charge of £180.00 at British Airways, and the £20.00 of its cap
+// left unspent goes back to the agent's account. Charged again it is declined, "it pays once": no second card_charge, and the
+// account does not move.
 
 import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
@@ -25,6 +28,7 @@ const FUND_MINOR = 50_000
 const TRIP = [{ merchant: 'British Airways', cap_minor: 20_000 }, { merchant: 'Marriott Lisbon', cap_minor: 15_000 }, { merchant: 'Hertz', cap_minor: 5_000 }]
 const TOTAL_MINOR = TRIP.reduce((n, c) => n + c.cap_minor, 0)
 const DAY_MS = 86_400_000
+const SPEND_MINOR = 18_000
 
 export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<string | undefined> = payInvoiceByCard): Scenario {
   return {
@@ -33,9 +37,10 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
     own: true,
     agents: 1,
     feature: 'Agent Wallets',
-    items: ['B46.20'],
+    items: ['B46.20', 'B28.323'],
     title: "an agent's single-use cards: its key asks for three capped cards to book a trip; one approval issues all three, each locked to " +
-      'its merchant, capped and closing within 24 hours, with one card_hold of the total; approved again it holds nothing twice',
+      'its merchant, capped and closing within 24 hours, with one card_hold of the total; approved again it holds nothing twice; ' +
+      'a card pays once: its first charge writes one card_charge, a second is declined and moves nothing',
     run: async (ctx) => {
       const { lens } = ctx.env
       const user = ctx.app.user
@@ -124,10 +129,41 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
         const last = await held('after the second approval')
         if (last !== after) wrong.push(`approving the cards again held more: the agent's account went from ${after} to ${last} minor`)
         if (wrong.length > 0) return fail(wrong.join('; '))
+
+        // 4. A card pays once: the issuer's first charge on the airline card writes one card_charge; its second is declined.
+        const [airline] = TRIP
+        const card = (got.value.cards ?? []).find((x) => x.merchant === airline.merchant)
+        if (card === undefined) return fail(`the batch has no ${airline.merchant} card`)
+        const charge = async (note: string) => {
+          const c = await lens.chargeTestCard(user, card.id, { merchant: airline.merchant, amount_minor: SPEND_MINOR })
+          ctx.evidence.push({ note, answer: said(c) })
+          return c
+        }
+        const charges = async (note: string) => {
+          const s = await call<{ payments: { agent_id?: string; kind?: string; merchant: string; amount_minor: number }[] | null }>('GET', '/v1/money/spending', undefined, note)
+          if (!s.ok) throw new Error(`reading the money spent ${note} answered ${said(s)}`)
+          return (s.value.payments ?? []).filter((p) => p.agent_id === agent.id && p.kind === 'card_charge')
+        }
+        const first = await charge(`the issuer charges ${SPEND_MINOR} minor at ${airline.merchant}`)
+        if (!first.ok || !first.value.approved) return fail(`a ${SPEND_MINOR} minor charge at ${airline.merchant} on its card capped at ${airline.cap_minor} must be approved; Lens answered ${said(first)}`)
+        const spent = await held('after the first charge')
+        const once = await charges('after the first charge')
+        if (once.length !== 1 || once[0].merchant !== airline.merchant || once[0].amount_minor !== SPEND_MINOR) {
+          wrong.push(`the first charge must write one card_charge of ${SPEND_MINOR} minor at ${airline.merchant}; Lens lists ${JSON.stringify(once)}`)
+        }
+        if (spent !== last + airline.cap_minor - SPEND_MINOR) wrong.push(`the ${airline.cap_minor - SPEND_MINOR} minor of the card's cap left unspent must go back to the agent's account: it went from ${last} to ${spent} minor, not ${last + airline.cap_minor - SPEND_MINOR}`)
+        const second = await charge(`the issuer charges ${SPEND_MINOR} minor at ${airline.merchant} again`)
+        if (!second.ok || second.value.approved || !/pays once/.test(second.value.reason)) wrong.push(`a second charge on a single-use card must be declined "it pays once"; Lens answered ${said(second)}`)
+        const end = await held('after the second charge')
+        const twice = await charges('after the second charge')
+        if (twice.length !== 1) wrong.push(`a declined second charge must write no card_charge: Lens lists ${twice.length} for the agent`)
+        if (end !== spent) wrong.push(`a declined second charge must move nothing: the agent's account went from ${spent} to ${end} minor`)
+        if (wrong.length > 0) return fail(wrong.join('; '))
         return {
           pass: true,
           detail: `${agent.name}'s key asked for batch ${batch.id}: ${TRIP.map((c) => `${c.merchant} ${c.cap_minor}`).join(', ')} GBP minor; one approval issued all three, ` +
-            `active and closing within 24 hours, the agent's account ${FUND_MINOR} → ${after} minor (one card_hold of ${TOTAL_MINOR}); approved again it stayed at ${last}`,
+            `active and closing within 24 hours, the agent's account ${FUND_MINOR} → ${after} minor (one card_hold of ${TOTAL_MINOR}); approved again it stayed at ${last}; ` +
+            `the ${airline.merchant} card charged ${SPEND_MINOR} wrote one card_charge, the account ${last} → ${spent}; charged again it was declined and stayed at ${end}`,
         }
       } catch (e) {
         return fail((e as Error).message)
