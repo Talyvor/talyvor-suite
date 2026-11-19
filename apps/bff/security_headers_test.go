@@ -65,7 +65,8 @@ func TestCanvasIsItsOwnDocument(t *testing.T) {
 }
 
 // TestPublicSitePolicyAddsOnlyMeta — B44.2: talyvor.com's public pages may load Meta's pixel, and nothing else changes:
-// take the two Meta hosts back out and what is left is the app's policy, which every other page keeps byte for byte.
+// take the two Meta hosts back out and what is left is the app's policy, which every other page keeps byte for byte,
+// plus B64.4's media-src 'self' blob: for the marketing page's loops.
 func TestPublicSitePolicyAddsOnlyMeta(t *testing.T) {
 	const theme = "document.documentElement.setAttribute('data-theme', 'dark')"
 	dist := t.TempDir()
@@ -83,12 +84,13 @@ func TestPublicSitePolicyAddsOnlyMeta(t *testing.T) {
 	for _, path := range []string{"/marketing", "/marketing/", "/pricing", "/documentation", "/documentation/wallets", "/signup", "/privacy", "/terms"} {
 		got := getPath(t, a, path).Header().Get("Content-Security-Policy")
 		if !strings.Contains(got, "script-src 'self' https://connect.facebook.net ") ||
-			!strings.HasSuffix(got, "; connect-src 'self' https://www.facebook.com https://connect.facebook.net") {
+			!strings.Contains(got, "; connect-src 'self' https://www.facebook.com https://connect.facebook.net;") {
 			t.Errorf("GET %s: CSP %q does not allow Meta's script and events", path, got)
 		}
+		// B64.4 — and the marketing page's loops play from a blob of their own file, fetched from this origin.
 		stripped := strings.NewReplacer(" https://connect.facebook.net", "", " https://www.facebook.com", "").Replace(got)
-		if stripped != today+"; connect-src 'self'" {
-			t.Errorf("GET %s: CSP without Meta's hosts is %q, want today's %q plus connect-src 'self'", path, stripped, today)
+		if stripped != today+"; connect-src 'self'; media-src 'self' blob:" {
+			t.Errorf("GET %s: CSP without Meta's hosts is %q, want today's %q plus connect-src 'self' and media-src 'self' blob:", path, stripped, today)
 		}
 	}
 }

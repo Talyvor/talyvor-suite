@@ -189,6 +189,34 @@ func TestHashedAssetsAreNotGivenAFreshnessRuleHere(t *testing.T) {
 	}
 }
 
+// B64.4 — the marketing page's films and pictures (apps/web/public/site) are named by their own content, so the item's
+// number holds for them: a year, immutable. A file there without a hash in its name, and /assets, get no such rule.
+func TestSiteMediaNamedByContentIsCachedAYear(t *testing.T) {
+	a := newBundleApp(t)
+	dist := a.cfg.webDist
+	if err := os.MkdirAll(filepath.Join(dist, "site"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"hero-loop-1080.17564a42.mp4", "hero-loop-1080.mp4"} {
+		if err := os.WriteFile(filepath.Join(dist, "site", f), []byte("film"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, want := range map[string]string{
+		"/site/hero-loop-1080.17564a42.mp4": "public, max-age=31536000, immutable",
+		"/site/hero-loop-1080.mp4":          "",
+		"/assets/index-HASH1.js":            "",
+	} {
+		rec := get(t, a, path)
+		if rec.Code != http.StatusOK || contains(rec.Body.String(), "<title>") {
+			t.Fatalf("GET %s: %d did not serve the file", path, rec.Code)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != want {
+			t.Errorf("GET %s: Cache-Control = %q, want %q", path, cc, want)
+		}
+	}
+}
+
 // contains is strings.Contains, spelled locally so this file states its own floor without
 // reaching for an import that would make the failure message less specific.
 func contains(haystack, needle string) bool {

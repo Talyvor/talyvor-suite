@@ -211,8 +211,8 @@ const NO_SUCH_PAGE = ['/admin', '/specimen', '/nonesuch', '/keys/extra', '/billi
 
 /** Public addresses and the WHOLE title each must carry. `/marketing` is the front door. */
 const PINNED_PUBLIC: ReadonlyArray<readonly [string, string]> = [
-  ['/marketing', 'Talyvor | the financial ecosystem for the AI agent economy'],
-  ['/marketing/pricing', 'Talyvor | the financial ecosystem for the AI agent economy'],
+  ['/marketing', 'Talyvor'],
+  ['/marketing/pricing', 'Talyvor'],
   ['/privacy', 'Privacy | Talyvor'],
   ['/terms', 'Terms | Talyvor'],
   ['/signup', 'Create a workspace | Talyvor'],
@@ -220,11 +220,11 @@ const PINNED_PUBLIC: ReadonlyArray<readonly [string, string]> = [
 ]
 
 describe('the format, and the brand it ends in', () => {
-  it('is "<page> | Talyvor", and the front door is the money-and-markets line', () => {
+  it('is "<page> | Talyvor", and the front door is the brand alone (B64.8)', () => {
     // Hardcoded on both sides. A guard that builds its expectation from the constant it is
     // checking passes for every value of that constant.
     expect(documentTitle('Ledger')).toBe('Ledger | Talyvor')
-    expect(documentTitle(null)).toBe('Talyvor | the financial ecosystem for the AI agent economy')
+    expect(documentTitle(null)).toBe('Talyvor')
     expect(BRAND).toBe('Talyvor')
   })
 
@@ -237,27 +237,41 @@ describe('the format, and the brand it ends in', () => {
     expect(m?.[1]).toBe(HOME_TITLE)
   })
 
-  it('ships a description and a social preview that name the same product (B28.1)', () => {
+  it('ships website version 4\'s title, description and share image (B28.1, B64.8)', () => {
     // A crawler and a link unfurler read index.html's bytes and never run the script, so these
     // tags are the whole of what a search result or a shared link shows.
     const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
     const tag = (attr: 'name' | 'property', key: string) =>
       // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       new RegExp(`<meta\\s+${attr}="${key}"\\s+content="([^"]*)"`).exec(html)?.[1]
-    // B44.4: positioning v2's first sentence and the short form of its second, as Nicolai wrote them.
+    // B64.8: the meta description of design/website-2026-11-17-v4/index.html, word for word.
     const description =
-      'AI agents are starting to earn, spend and work for people and companies. Talyvor is where they do it safely.'
-    expect(description.length, 'a search result shows about 160 characters').toBeLessThanOrEqual(160)
+      'Give your AI agent its own account, wallet and card. Sign up, open an account, give your agent a card. It pays inside your rules and asks you before anything else.'
+    const image = 'https://app.talyvor.com/og-card.jpg'
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe('Talyvor')
     expect(tag('name', 'description')).toBe(description)
-    expect(tag('property', 'og:title')).toBe('Talyvor | the financial ecosystem for the AI agent economy')
+    expect(tag('property', 'og:title')).toBe('Talyvor')
     expect(tag('property', 'og:description')).toBe(description)
-    expect(tag('property', 'og:image')).toBe('https://app.talyvor.com/og-image.png')
+    expect(tag('property', 'og:image')).toBe(image)
+    expect(tag('property', 'og:image:type')).toBe('image/jpeg')
+    expect(tag('property', 'og:image:width')).toBe('1200')
+    expect(tag('property', 'og:image:height')).toBe('630')
     expect(tag('name', 'twitter:card')).toBe('summary_large_image')
-    expect(tag('name', 'twitter:image')).toBe('https://app.talyvor.com/og-image.png')
-    // The image the tags name is in the build: public/ is copied to the root as it is.
-    const png = readFileSync(resolve(__dirname, '../public/og-image.png'))
-    expect(png.subarray(1, 4).toString('latin1')).toBe('PNG')
-    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630])
+    expect(tag('name', 'twitter:title')).toBe('Talyvor')
+    expect(tag('name', 'twitter:description')).toBe(description)
+    expect(tag('name', 'twitter:image')).toBe(image)
+    // The image the tags name is in the build (public/ is copied to the root as it is), and it is
+    // the 1200 by 630 JPEG the tags promise: the size is read from its start-of-frame marker.
+    const jpg = readFileSync(resolve(__dirname, '../public/og-card.jpg'))
+    expect([...jpg.subarray(0, 2)]).toEqual([0xff, 0xd8])
+    let at = 2
+    let size: number[] = []
+    while (at < jpg.length && size.length === 0) {
+      const marker = jpg[at + 1]
+      if (marker >= 0xc0 && marker <= 0xc2) size = [jpg.readUInt16BE(at + 7), jpg.readUInt16BE(at + 5)]
+      at += 2 + jpg.readUInt16BE(at + 2)
+    }
+    expect(size).toEqual([1200, 630])
   })
 
   it('ships the brand icons the tab, the Home Screen and an install name (B29.1)', () => {
