@@ -5,6 +5,7 @@ import { COMPANY_CONTACT, COMPANY_LINE } from '../../company'
 import SITE_CSS from './site.css?raw'
 import { formatMinor, usePricing, type LadderPlan } from './pricingApi'
 import { smallLogoSrc } from '@talyvor/ui'
+import { StatusLabel } from '../../labels/StatusLabel'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). talyvor.com redirects here. It must render
 // with no session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so nothing here may
@@ -158,22 +159,26 @@ function useLoops(root: React.RefObject<HTMLDivElement>) {
 
 function Nav() {
   return (
-    <nav className="nav" aria-label="Main">
+    // B17.498 — the page's header is the site's one header (B51.1): home, Pricing, Your money, Documentation and the
+    // app, beside index.html's in-page links. It is the page's one <header>, so it is the banner the site-truth scenario reads.
+    <header className="nav">
       <div className="wrap">
-        <a className="logo" href="#top" aria-label="Talyvor home">
+        <a className="logo" href="/marketing" aria-label="Talyvor home">
           <img {...smallLogoSrc('dark')} alt="Talyvor" width={240} height={76} />
         </a>
-        <div className="links">
+        <nav className="links" aria-label="Main">
           <a href="#how">How it works</a>
           <a href="#try">Try it</a>
-          <a href="#everyone">For everyone</a>
-          <a href="#pricing">Pricing</a>
-        </div>
+          <a href="/pricing">Pricing</a>
+          <a href="/your-money">Your money</a>
+          <a href="/documentation">Documentation</a>
+          <a href="/">Open the app</a>
+        </nav>
         <a className="btn hot" href={SIGNUP}>
           Open an account
         </a>
       </div>
-    </nav>
+    </header>
   )
 }
 
@@ -181,7 +186,7 @@ function Hero({ onWatch }: { onWatch: () => void }) {
   // The chip is a claim about access, so it is the server's: shown only while sign-up is open, never on a guess.
   const { signup } = useSignupProbe()
   return (
-    <header className="hero" id="top">
+    <section className="hero" id="top">
       <div className="wrap grid">
         <div>
           {signup === 'open' ? (
@@ -266,7 +271,7 @@ function Hero({ onWatch }: { onWatch: () => void }) {
           </div>
         </div>
       </div>
-    </header>
+    </section>
   )
 }
 
@@ -1050,7 +1055,9 @@ function PricingBand() {
   return (
     <section className="band price" id="pricing" aria-labelledby="p-h">
       <div className="wrap">
-        <p className="eyebrow">Pricing</p>
+        <p className="eyebrow">
+          Pricing <StatusLabel capability={PLAN_SANDBOX} labels={pricing?.labels} />
+        </p>
         <h2 className="h2" id="p-h">
           Start free. <span className="pill">Seriously.</span>
         </h2>
@@ -1158,10 +1165,13 @@ function Footer() {
         <nav aria-label="Footer">
           <a href="#how">How it works</a>
           <a href="#try">Try it</a>
-          <a href="#pricing">Pricing</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/your-money">Your money</a>
+          <a href="/documentation">Documentation</a>
           <a href={SIGNUP}>Open an account</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
+          <a href={`mailto:${COMPANY_CONTACT}`}>{COMPANY_CONTACT}</a>
         </nav>
         <span data-company-line>{COMPANY_LINE}</span>
         <a href="https://aiagentsdirectory.com/agent/talyvor" target="_blank" rel="noopener" title="Discover Talyvor on AI Agents Directory">

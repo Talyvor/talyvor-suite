@@ -99,14 +99,14 @@ describe('a signed-out visitor arrives from talyvor.com and can act', () => {
     expect((await screen.findAllByText(/needs legal review/i)).length).toBeGreaterThan(0)
   })
 
-  it('reaches pricing — the section the nav names is on the page, with its plans', async () => {
+  it('reaches pricing — the nav names /pricing, and the plans are on the page too', async () => {
     mockBff()
     const { container } = at('/marketing')
     const link = (await screen.findAllByRole('link', { name: /^pricing$/i }))[0]
-    const href = link.getAttribute('href') ?? ''
-    // B64.1: version 4 carries its plans on the page (B64.3 draws them from Lens's plan table).
-    expect(href).toBe('#pricing')
-    const section = container.querySelector(href)
+    // B17.498: the nav is the site's one header (B51.1), so its Pricing is /pricing, as on every public page.
+    expect(link.getAttribute('href')).toBe('/pricing')
+    // B64.1: version 4 still carries its plans on the page (B64.3 draws them from Lens's plan table).
+    const section = container.querySelector('#pricing')
     expect(section).not.toBeNull()
     expect(section).toHaveTextContent('Start free. Seriously.')
     expect(section).toHaveTextContent('Solo')
