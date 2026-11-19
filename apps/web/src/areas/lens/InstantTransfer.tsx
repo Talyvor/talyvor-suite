@@ -141,44 +141,10 @@ export function PayInstantTransferScreen() {
   if (shows && !shows.instantTransfer) return <Navigate to="/money/pay" replace />
   return (
     <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4 pb-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Crumb trail={[{ label: 'Pay', href: '/money/pay' }, { label: 'Instant transfer' }]} />
-        {shows ? <PayTabs payoutBatches={shows.payoutBatches} /> : null}
-      </div>
+      {/* B57.171 — Pay's row of pages is the shell's, above the crumb, as on every page under Pay. */}
+      <Crumb trail={[{ label: 'Pay', href: '/money/pay' }, { label: 'Instant transfer' }]} />
       {shows ? <InstantTransferForm /> : <p className="text-body text-ink-3">Reading…</p>}
     </div>
-  )
-}
-
-/** B57.164 — W3's row of Pay's pages above the form, Instant transfer on: each a link to its own page under Pay. */
-function PayTabs({ payoutBatches }: { payoutBatches: boolean }) {
-  const tabs = [
-    { to: '/money/pay', label: 'One payment' },
-    { to: '/money/pay/instant-transfer', label: 'Instant transfer' },
-    { to: '/money/pay/standing-orders', label: 'Standing orders' },
-    { to: '/money/pay/mandates', label: 'Mandates' },
-    ...(payoutBatches ? [{ to: '/money/pay/bulk-payouts', label: 'Payout batches' }] : []),
-  ]
-  return (
-    <nav aria-label="Pay" className="flex flex-wrap gap-1.5" data-testid="instant-pay-tabs">
-      {tabs.map((t) => {
-        const on = t.to === '/money/pay/instant-transfer'
-        return (
-          <Link
-            key={t.to}
-            to={t.to}
-            aria-current={on ? 'page' : undefined}
-            className={cn(
-              'inline-flex h-8.5 items-center whitespace-nowrap rounded-pill px-3.5 text-body font-semibold transition-colors duration-200',
-              on ? 'bg-primary text-on-primary' : 'bg-cloud text-ink-2',
-              pocketFocusRing,
-            )}
-          >
-            {t.label}
-          </Link>
-        )
-      })}
-    </nav>
   )
 }
 

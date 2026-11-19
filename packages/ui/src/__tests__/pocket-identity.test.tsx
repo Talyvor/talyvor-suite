@@ -99,6 +99,20 @@ describe('the kit’s logo', () => {
     expect(css).toMatch(/\[data-theme='dark'\] \{\s*--logo-on-light: none;\s*--logo-on-dark: block;/)
   })
 
+  // B64.11 — Safari draws the SVG's glow soft on Retina, so under 240 px the logo is the kit's PNG export.
+  it('under 240 px shows the kit’s small-logo PNGs, the 240 file at 1x and the 480 file at 2x, never the SVG', () => {
+    const { container } = render(<Logo width={144} />)
+    expect([...container.querySelectorAll('img')].map((i) => [i.getAttribute('src'), i.getAttribute('srcset'), i.getAttribute('alt'), i.style.display])).toEqual(
+      (['light', 'dark'] as const).map((v) => [
+        `/brand/logo/talyvor-logo-small-on-${v}-240.png`,
+        `/brand/logo/talyvor-logo-small-on-${v}-240.png 1x, /brand/logo/talyvor-logo-small-on-${v}-480.png 2x`,
+        'Talyvor',
+        `var(--logo-on-${v})`,
+      ]),
+    )
+    for (const f of ['light-240', 'light-480', 'dark-240', 'dark-480']) expect(existsSync(resolve(dir, `talyvor-logo-small-on-${f}.png`)), f).toBe(true)
+  })
+
   it('the symbol from 48 px and each app-icon drawing for its size', () => {
     expect([symbolFile(120), symbolFile(119), symbolFile(48)]).toEqual(['talyvor-symbol', 'talyvor-symbol-small', 'talyvor-symbol-small'])
     expect([120, 48, 32, 20, 16].map(appIconFile)).toEqual([

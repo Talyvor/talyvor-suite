@@ -43,7 +43,7 @@ import (
 //	GET  /api/agents/{id}/card                         B19.24: its test-mode card and every purchase on it (404: none)
 //	POST /api/agents/{id}/card          {cardholder}   B19.24: issue it one, the cardholder's name and billing address
 //	POST /api/agents/{id}/pay           {"to_agent_id", "amount_ulxc", "memo"}   pay another of this workspace's agents
-//	GET  /api/agents/approvals                         what the agents' rules sent to a person, newest first
+//	GET  /api/agents/approvals                         what the agents' rules sent to a person, newest first (B28.59: ?format=csv as a CSV)
 //	POST /api/agents/approvals/{id}/approve, …/deny    decide one; approve {"always_allow": {"amount_ulxc", "per"}} also saves it for the payee (B41.4); deny {"reason"} says why (B55.19)
 //	GET  /api/payment-proofs/{id}                      B62.3: the proof of one payment the rules let through (Lens B62.1), by its money entry or reference
 //
@@ -651,6 +651,17 @@ func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tena
 	a.statementRelay(w, r, t, lensWorkspacePath(t, suffix), "from", "to", "format", "kind", "q", "group", "limit", "cursor")
 }
 
+// listRelay is agentBankRelayPath for a GET of a list Lens also writes as a CSV (B28.59, Lens B28.332): with
+// ?format=csv the same list comes back as Lens's file, one row per item of its JSON list, with Lens's filename. No
+// other query key is sent up.
+func (a *app) listRelay(w http.ResponseWriter, r *http.Request, t tenant, path string) {
+	if r.URL.Query().Get("format") == "csv" {
+		a.statementRelay(w, r, t, path, "format")
+		return
+	}
+	a.agentBankRelayPath(w, r, t, http.MethodGet, path, nil)
+}
+
 // maxStatementLines is the most lines one page of a statement asks Lens for (B57.24).
 const maxStatementLines = 500
 
@@ -862,7 +873,7 @@ func (a *app) handleAgentApprovals(w http.ResponseWriter, r *http.Request, t ten
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/approvals", nil)
+	a.listRelay(w, r, t, lensWorkspacePath(t, "/agents/approvals"))
 }
 
 // handlePaymentProof — GET /api/payment-proofs/{id} (B62.3): what the owner was shown and signed, the rule, the key
@@ -1281,7 +1292,7 @@ func (a *app) handleResumeChallenge(all bool) func(http.ResponseWriter, *http.Re
 // B19.21 — scheduled payments and automatic top-ups (Lens B19.8; a schedule that pays a marketplace
 // listing, B19.17). Lens runs both every minute and pays each tick once.
 //
-//	GET  /api/agents/schedules                     every schedule in the workspace
+//	GET  /api/agents/schedules                     every schedule in the workspace (B28.59: ?format=csv as a CSV)
 //	POST /api/agents/{id}/schedules                {to_agent_id | to_listing_id, amount_ulxc, memo, every, first_run_at}
 //	GET  /api/agents/schedules/{sid}/runs          each tick: paid, or refused and why
 //	POST /api/agents/schedules/{sid}/stop          stops it (Lens: DELETE …/agents/schedules/{sid})
@@ -1293,7 +1304,7 @@ func (a *app) handleAgentSchedules(w http.ResponseWriter, r *http.Request, t ten
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/schedules", nil)
+	a.listRelay(w, r, t, lensWorkspacePath(t, "/agents/schedules"))
 }
 
 // handleAgentSchedule — POST /api/agents/{id}/schedules: the agent pays another agent, or a listing, every

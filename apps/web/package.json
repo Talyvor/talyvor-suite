@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run --reporter=default --reporter=json --outputFile=.vitest-report.json && node ../../scripts/check-test-manifest.mjs . && node scripts/check-audit-gate.mjs",
     "test:accept": "vitest run --reporter=default --reporter=json --outputFile=.vitest-report.json && node ../../scripts/check-test-manifest.mjs . --update && node scripts/check-audit-gate.mjs",
-    "pocket:shots": "node scripts/pocket/shots.mjs"
+    "pocket:shots": "node scripts/pocket/shots.mjs",
+    "pillcheck": "node scripts/pillcheck.mjs"
   },
   "dependencies": {
     "@talyvor/ui": "workspace:*",

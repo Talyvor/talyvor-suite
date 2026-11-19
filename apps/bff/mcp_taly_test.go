@@ -20,6 +20,9 @@ type fakeLensForTaly struct {
 	called []map[string]any  // the arguments of each Lens /mcp tools/call
 	asked  []json.RawMessage // each model request
 	audio  string            // the recording's bytes and type, as transcription received them
+	// gatewayOff is a workspace with the old gateway's area hidden, as every launch workspace is (Lens B59.1): its
+	// catalog answers 404, and the model ids are listed only with their capabilities.
+	gatewayOff bool
 }
 
 func (f *fakeLensForTaly) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +38,14 @@ func (f *fakeLensForTaly) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "POST " + lensSessionKeyPath:
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"key":"sk-`+ws+`","expires_at":"`+time.Now().Add(time.Hour).Format(time.RFC3339)+`"}`)
+	case "GET /v1/models/capabilities":
+		_, _ = io.WriteString(w, `{"claude-opus-4-1":{"vision":true},"claude-opus-5-5":{"vision":true},"claude-fable-5-1":{"vision":true},`+
+			`"claude-sonnet-5-5":{"vision":true},"claude-haiku-5-5":{"vision":true},"claude-opus-5":{"vision":true},"gpt-9":{"vision":true}}`)
 	case "GET /v1/catalog/models":
+		if f.gatewayOff {
+			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			return
+		}
 		_, _ = io.WriteString(w, `[{"id":"claude-old","provider":"anthropic","tier":"frontier","release_date":"2025-01-01"},`+
 			`{"id":"claude-new","provider":"anthropic","tier":"frontier","release_date":"2026-06-01"},`+
 			`{"id":"claude-fast","provider":"anthropic","tier":"fast","release_date":"2026-09-01"},`+
@@ -202,5 +212,23 @@ func TestMCPTalyForTheDesktopApp(t *testing.T) {
 	}
 	if r := toolCall(t, a, bob, "transcribe", map[string]any{"audio_base64": "not base64!", "mime": "audio/wav"}); r["isError"] != true {
 		t.Fatalf("a recording that is not base64: %v", r)
+	}
+}
+
+// TestMCPTalyWithTheGatewayHidden is B17.481: on a workspace whose old gateway area is hidden, Lens's catalog answers
+// 404, and ask_taly still answers, on the newest frontier Anthropic model Lens lists.
+func TestMCPTalyWithTheGatewayHidden(t *testing.T) {
+	a, lens, _, bob := talyApp(t)
+	lens.gatewayOff = true
+	r := toolCall(t, a, bob, "ask_taly", map[string]any{"message": "What accounts does this workspace have?", "thread": []any{}})
+	if r["isError"] != false || strings.TrimSpace(r["structuredContent"].(map[string]any)["reply"].(string)) == "" {
+		t.Fatalf("ask_taly with the catalog hidden: %v", r)
+	}
+	var asked struct {
+		Model string `json:"model"`
+	}
+	_ = json.Unmarshal(lens.asked[0], &asked)
+	if asked.Model != "claude-opus-5-5" {
+		t.Fatalf("Taly was asked on %q, want claude-opus-5-5", asked.Model)
 	}
 }

@@ -27,7 +27,17 @@ func setSecurityHeaders(h http.Header) {
 	h.Set("Referrer-Policy", "same-origin")
 	// B42.5 — a body relayed from Lens is never sniffed into HTML: it is only ever what its Content-Type says.
 	h.Set("X-Content-Type-Options", "nosniff")
+	// B67.4 — set here, not left to the front door: the Caddy file the server runs (talyvor-lens/deploy/caddy) sets no
+	// HSTS, so the live pages carried none. A browser ignores it on a plain-http self-host (RFC 6797 §8.1).
+	h.Set("Strict-Transport-Security", "max-age=31536000")
+	h.Set("Permissions-Policy", permissionsPolicy)
 }
+
+// permissionsPolicy — B67.4: what the app never uses is off for it and anything it frames. The passkey prompt
+// (passkeys.ts) and Chat's microphone (VoiceButton.tsx) stay on, for the app's own origin only.
+const permissionsPolicy = "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), " +
+	"magnetometer=(), microphone=(self), midi=(), payment=(), publickey-credentials-create=(self), " +
+	"publickey-credentials-get=(self), serial=(), usb=()"
 
 // relayContentType — B50.6: a body relayed from Lens, Track or Docs (an uploaded file, an export) is never a page or a
 // script on the app's origin. It keeps its upstream type, never one Go sniffs from the bytes, and a type a browser
@@ -67,6 +77,8 @@ func appPagePolicy(page []byte) string {
 
 // B44.2 — talyvor.com's public pages may load Meta's pixel once the visitor accepts it: its script from
 // connect.facebook.net, its events to www.facebook.com. Every other page, the app's included, keeps the policy above.
+// B64.4 — and the marketing page fetches each loop whole from this origin and plays it from a blob: URL, so a film
+// never stalls mid-play (media-src 'self' blob:).
 func isPublicSitePath(p string) bool {
 	switch p {
 	case "/pricing", "/signup", "/privacy", "/terms", "/marketing", "/documentation":
@@ -77,5 +89,5 @@ func isPublicSitePath(p string) bool {
 
 func publicSitePolicy(policy string) string {
 	return strings.Replace(policy, "script-src 'self'", "script-src 'self' https://connect.facebook.net", 1) +
-		"; connect-src 'self' https://www.facebook.com https://connect.facebook.net"
+		"; connect-src 'self' https://www.facebook.com https://connect.facebook.net; media-src 'self' blob:"
 }

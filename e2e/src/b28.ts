@@ -59,6 +59,7 @@ export const NO_SCENARIO: Readonly<Record<string, string>> = {
   'B28.248': "Docs' /metrics; production serves Docs only to the BFF, on 127.0.0.1, so no request from outside reaches it",
   'B28.436': "Track's /metrics; production serves Track only to the BFF, on 127.0.0.1, so no request from outside reaches it",
   'B28.442': "Track's check of the BFF's signed assertion; production serves Track only to the BFF, on 127.0.0.1, so no forged one can be sent from outside",
+  'B28.460': "the red team's own admin-gate-lens control in hostile.ts, which the red team runs against Lens's main every night; nothing a person or an agent does reaches it",
 }
 
 const EDGE_WHY = 'edge-infra is never deployed: its features are proven on kind by its nightly workflows (the Talyvor Edge section)'
@@ -116,7 +117,7 @@ export function b28Report(buildMd: string, named: ReadonlyMap<string, readonly s
 
 export const untestedMarker = (f: Pick<B28Feature, 'id'>): string => `b28-untested-${f.id}`
 
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\\|]/g, '\\$&')
 
 function verdictText(f: B28Feature, filed: Readonly<Record<string, string>>): string {
   if (f.state === 'not run') return 'not run — no user reached it this run'

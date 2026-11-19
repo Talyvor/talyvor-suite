@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { type UseQueryResult, useQueries, useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Bar, Button, Card, Chip, EmptyState, Eyebrow, Face, Icon, Input, Money, Row, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Bar, Button, Card, Chip, EmptyState, Eyebrow, Face, Icon, Input, Money, Row, Shapes, pocketFocusRing } from '@talyvor/ui/pocket'
 import { cn, focusRing, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, MANDATE_REQUESTS_KEY, PREPARED_KEY, PreparedRow, rulesKey } from './AgentBank'
@@ -202,7 +202,9 @@ export function Home() {
             </Button>
           </div>
         ) : !book.data || shows === null ? (
-          <p className="text-body text-ink-3">Reading…</p>
+          <Card tone="white">
+            <Shapes figure rows={3} />
+          </Card>
         ) : (
           <div className="grid grid-cols-1 items-start gap-4 wide:grid-cols-12">
             {waitingKnown && waiting > 0 ? (
@@ -536,7 +538,7 @@ function Total({ agents, shows }: { agents: Agent[]; shows: Shows }) {
             <Eyebrow>{shows.total}</Eyebrow>
           </span>
           {accounts.isError ? null : reading ? (
-            <span className="block h-14 w-56 rounded-tile bg-cloud-2" aria-label="Reading…" />
+            <Shapes figure rows={0} />
           ) : total === null ? (
             <p className="text-body text-ink-2">We couldn’t read today’s exchange rates, so your total is in each currency below.</p>
           ) : (

@@ -18,7 +18,7 @@ let refusal: { status: number; error: string } | null
 let lookups: { status: number; error: string } | null
 
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
-const text = (el: Element | null) => (el?.textContent ?? '').replace(/ /g, ' ')
+const text = (el: Element | null) => (el?.textContent ?? '').replace(/[\u00a0\u202f]/g, ' ')
 
 beforeEach(() => {
   posts = []

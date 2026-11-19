@@ -6,6 +6,7 @@ import { PayInstantTransferScreen } from './InstantTransfer'
 import { InstantTransferScreen } from './InstantTransferReceipt'
 import { AccountStatement } from './AccountStatement'
 import { AppMoney } from './money'
+import { PlaceTabs } from '../../components/PlaceTabs'
 
 // B59.19 — Instant transfer on the web (launch pack 4.1, design W3 and P7 to P10): the quote card's fields and its 30
 // seconds counting down, with a fresh quote when they run out; a send Lens refuses by its field, and one it asks the
@@ -100,6 +101,10 @@ function show(at: string) {
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter initialEntries={[at]}>
         <AppMoney>
+          {/* B57.171 — the shell draws Pay's row of pages above each of them. */}
+          <div data-design="pocket">
+            <PlaceTabs />
+          </div>
           <Routes>
             <Route path="/money/pay" element={<p>Pay</p>} />
             <Route path="/money/pay/instant-transfer" element={<PayInstantTransferScreen />} />
@@ -216,15 +221,11 @@ describe('its progress', () => {
 describe('B57.164: the form as W3 draws it', () => {
   it('has Pay’s pages above it, Instant transfer on', async () => {
     show('/money/pay/instant-transfer')
-    const tabs = await screen.findByRole('navigation', { name: 'Pay' })
-    expect(within(tabs).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['One payment', '/money/pay'],
-      ['Instant transfer', '/money/pay/instant-transfer'],
-      ['Standing orders', '/money/pay/standing-orders'],
-      ['Mandates', '/money/pay/mandates'],
-      ['Payout batches', '/money/pay/bulk-payouts'],
-    ])
-    expect(within(tabs).getByRole('link', { name: 'Instant transfer' }).getAttribute('aria-current')).toBe('page')
+    const tabs = await screen.findByRole('tablist', { name: 'Pay' })
+    expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(['One payment', 'Invoices', 'Instant transfer', 'Standing orders', 'Mandates', 'Payout batches'])
+    expect(within(tabs).getByRole('tab', { name: 'Instant transfer' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(within(tabs).getByRole('tab', { name: 'One payment' }))
+    expect(await screen.findByText('Pay')).toBeTruthy()
   })
 
   it('draws the picked payee as a card, with New payee while Lens still counts it new', async () => {

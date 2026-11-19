@@ -52,7 +52,7 @@ import { describe, expect, it } from 'vitest'
  * wide diff resting on no measurement. A future session widening `CITED_FILE` should re-measure
  * rather than trust this paragraph's numbers.
  *
- * ⚠ NOT EVERY Go CITATION IS THE SAME CLASS, AND THE OTHER CLASS IS NOW CHECKED. `apps/bff/lens.go:1088`
+ * ⚠ NOT EVERY Go CITATION IS THE SAME CLASS, AND THE OTHER CLASS IS NOW CHECKED. `apps/bff/lens.go:1095`
  * and `apps/bff/billing.go:300` name a file IN THIS REPOSITORY, so they are verifiable from here
  * and stay out of this rule's scope. This paragraph used to end "a guard could actually check
  * them", and none did — `pointerAudit.test.ts`'s POINTER regex covered `.tsx|.ts|.css|.mjs|.js`
@@ -338,7 +338,7 @@ describe('citations of upstream Go source', () => {
   const lineCitationOf = (base: string) =>
     // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     new RegExp(
-      `\\b${base.replace(/\./g, '\\.')}(?::\\d+(?:[-/]\\d+)*|[^\\n]{0,24}?\\blines?\\s+\\d+)`,
+      `\\b${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?::\\d+(?:[-/]\\d+)*|[^\\n]{0,24}?\\blines?\\s+\\d+)`,
       'g',
     )
 

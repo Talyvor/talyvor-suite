@@ -74,7 +74,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'xss-shown-back', 'pocket-03', 'pocket-04', 'pocket-05', 'pocket-06', 'pocket-08', 'pocket-13', 'pocket-15', 'pocket-16',
     'pocket-17',
   ],
-  'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote'],
+  'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote', 'instant-transfer-send'],
   activity: [
     'account-statements', 'agent-analytics', 'alert-channels', 'budgets-by-category', 'coach-week', 'daily-briefing',
     'ledger-reads-correctly', 'limit-alerts', 'month-plan', 'spend-notice-push', 'spending-screen', 'statement-journal',
@@ -167,6 +167,7 @@ const LEDGER_PARKED = 'it reads the Ledger page (ledger-balance), which the laun
  * B61.86 — its steps press or read an LXC control or figure that B61.14 took off every launch account: the agent page's
  * credit rows (Send or request, Requests, Transfers, Recurring transfer, Pots, Escrow, Cash out, Automatic top-up) are the
  * parked gateway's, and Home and Agents name no LXC total. Found by playing the launch self-test against that web.
+ * B17.495 — statement-paging reads an agent's credit statement, which B61.55 took off the agent page and Statements.
  */
 export const LXC_PARKED = 'LXC is parked: its steps need an LXC control or figure B61.14 took off every launch screen'
 const NO_HERO_PHOTO = 'it measures the homepage hero photograph’s fade, and the homepage has had no photograph since B57.60 (Pocket’s hero, the approval sheet’s picture)'
@@ -176,12 +177,12 @@ export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
   ...Object.fromEntries([
     'agent-analytics', 'agent-archive', 'agent-hourly-limit', 'agent-limit', 'agent-limit-boost', 'agent-model-limit', 'agent-pause-all',
     'agent-request-rate', 'agent-rules-unbypassable', 'first-agent', 'keys-unlisted', 'ledger-call-once', 'ledger-moves-at-once',
-    'sdk-wallet-quickstart', 'statement-reconciles', 'subscriptions-view', 'wallet-currency', 'wallet-home', 'wallet-onboarding',
+    'sdk-wallet-quickstart', 'statement-reconciles', 'wallet-currency', 'wallet-home', 'wallet-onboarding',
   ].map((id) => [id, NEEDS_A_MODEL])),
   ...Object.fromEntries([
     'agent-approval', 'agent-approval-push', 'agent-payee-daily-cap', 'agent-payee-lists', 'agent-runs-out-date', 'approvals-badge',
-    'approvals-inbox', 'approve-always-allow', 'home-daily-briefing', 'statement-line-kinds', 'wallet-cash-out', 'wallet-give-back',
-    'wallet-pots', 'wallet-recurring', 'wallet-request', 'wallet-send-refund',
+    'approvals-inbox', 'approve-always-allow', 'home-daily-briefing', 'statement-line-kinds', 'statement-paging', 'wallet-cash-out',
+    'wallet-give-back', 'wallet-pots', 'wallet-recurring', 'wallet-request', 'wallet-send-refund',
   ].map((id) => [id, LXC_PARKED])),
   ...Object.fromEntries([
     'agent-cards', 'agent-wallet-kinds', 'batch-approval-pays-once', 'coach-week', 'invoices-screen', 'money-layer-contract', 'pay-screen',

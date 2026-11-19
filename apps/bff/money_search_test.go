@@ -255,3 +255,63 @@ func TestMoneyPlanReachesLensWithOnlyItsFields(t *testing.T) {
 		t.Fatalf("POST = %d; want 405", rec.Code)
 	}
 }
+
+// B28.61 — low-balance thresholds are set, listed and removed, and their alerts read, through Lens's /v1/money/low-balance
+// routes: only {agent_id, currency, threshold_minor} goes up, and Lens's refusal comes back in its own words.
+func TestMoneyLowBalanceReachesLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, strings.TrimSpace(r.Method+" "+r.URL.RequestURI()+" "+string(b)))
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPut && strings.Contains(string(b), `"threshold_minor":0`):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"economy: threshold_minor must be above zero"}`))
+		case r.Method == http.MethodPut:
+			_, _ = w.Write([]byte(`{"id":"bth_1","agent_id":"agt_1","currency":"GBP","threshold_minor":2000,"balance_minor":1500,"has_account":true,"below":true}`))
+		case r.Method == http.MethodDelete:
+			_, _ = w.Write([]byte(`{"deleted":"bth_1"}`))
+		case r.URL.Path == "/v1/money/low-balance/alerts":
+			_, _ = w.Write([]byte(`{"alerts":[{"id":"lba_1","agent_id":"agt_1","currency":"GBP","balance_minor":1500,"threshold_minor":2000}]}`))
+		default:
+			_, _ = w.Write([]byte(`{"thresholds":[]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	if rec := doJSON(a, http.MethodPut, "/api/money/low-balance", `{"agent_id":"agt_1","currency":"GBP","threshold_minor":2000,"below":false}`); rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), `"below":true`) {
+		t.Fatalf("set = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPut, "/api/money/low-balance", `{"agent_id":"agt_1","currency":"GBP","threshold_minor":0}`); rec.Code != http.StatusBadRequest ||
+		!strings.Contains(rec.Body.String(), "must be above zero") {
+		t.Fatalf("zero = %d %s; want 400 in Lens's words", rec.Code, rec.Body.String())
+	}
+	for _, p := range []string{"/api/money/low-balance?workspace_id=ws_other", "/api/money/low-balance/alerts?workspace_id=ws_other"} {
+		if rec := doJSON(a, http.MethodGet, p, ""); rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d %s", p, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := doJSON(a, http.MethodDelete, "/api/money/low-balance/bth_1", ""); rec.Code != http.StatusOK {
+		t.Fatalf("delete = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/low-balance/alerts", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST alerts = %d; want 405", rec.Code)
+	}
+	want := []string{
+		`PUT /v1/money/low-balance {"agent_id":"agt_1","currency":"GBP","threshold_minor":2000}`,
+		`PUT /v1/money/low-balance {"agent_id":"agt_1","currency":"GBP","threshold_minor":0}`,
+		"GET /v1/money/low-balance",
+		"GET /v1/money/low-balance/alerts",
+		"DELETE /v1/money/low-balance/bth_1",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens got %q; want %q", got, want)
+	}
+}

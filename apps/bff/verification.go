@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // verification.go — B30.116: the owner's verification levels (Lens B30.4), reached with this session's own token:
@@ -21,6 +22,19 @@ import (
 // record, and a refusal comes back with its sentence (agentBankRelay). Every body is rebuilt from the fields its
 // own check confirms, so a contact check never carries a name and an identity check never a phone number. The
 // level each capability needs for live money is level_needed on GET /api/wallets/capabilities (wallet_money.go).
+//
+// B65.2 — the GET's ?return_to= and the identity check's return_to name the page the identity partner's own page
+// (Persona's) sends the person back to: "signup" for sign-up's last step, "settings" for Settings, Verification, and
+// (B65.4) "phone" for the phone app's own identity step. Only those names reach Lens (Lens B65.1 keeps the addresses);
+// anything else is dropped, and Lens sends them to Settings.
+
+// checkReturnName is name when it is one of Lens's return names, else "".
+func checkReturnName(name string) string {
+	if name == "signup" || name == "settings" || name == "phone" {
+		return name
+	}
+	return ""
+}
 
 // handleVerification — GET /api/verification.
 func (a *app) handleVerification(w http.ResponseWriter, r *http.Request, t tenant) {
@@ -28,7 +42,11 @@ func (a *app) handleVerification(w http.ResponseWriter, r *http.Request, t tenan
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	a.agentBankRelay(w, r, t, http.MethodGet, "/verification", nil)
+	suffix := "/verification"
+	if to := checkReturnName(r.URL.Query().Get("return_to")); to != "" {
+		suffix += "?" + url.Values{"return_to": {to}}.Encode()
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
 }
 
 // handleVerificationContact — POST /api/verification/contact: the email and phone check (L1).
@@ -70,11 +88,13 @@ func (a *app) handleVerificationIdentity(w http.ResponseWriter, r *http.Request,
 		Country     string       `json:"country"`
 		DateOfBirth string       `json:"date_of_birth"`
 		Address     *homeAddress `json:"address,omitempty"`
+		ReturnTo    string       `json:"return_to,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
+	in.ReturnTo = checkReturnName(in.ReturnTo)
 	// UPSTREAM-BINDS-ONLY lensVerificationIdentityBody: company_number, directors, email, people_with_significant_control, phone
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPost, "/verification/identity", body)

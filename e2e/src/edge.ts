@@ -256,7 +256,7 @@ export const failedNow = (w: Workflow): boolean => w.conclusion !== undefined &&
 
 // ── The report ──────────────────────────────────────────────────────────────────────────────────────
 
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\\|]/g, '\\$&')
 const when = (iso: string): string => `${iso.slice(0, 16).replace('T', ' ')}Z`
 
 /** A workflow's result as the report says it: a stale run is never green. */

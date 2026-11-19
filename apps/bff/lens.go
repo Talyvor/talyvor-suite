@@ -631,6 +631,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/alerts/channels", a.requireTenant(a.handleMoneyAlertChannels))        // B28.66, money_search.go
 	a.mux.HandleFunc("/api/money/alerts/channels/{id}", a.requireTenant(a.handleMoneyAlertChannel))    // B28.66, money_search.go
 	a.mux.HandleFunc("/api/money/alerts/deliveries", a.requireTenant(a.handleMoneyAlertDeliveries))    // B28.66, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance", a.requireTenant(a.handleMoneyLowBalance))               // B28.61, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance/alerts", a.requireTenant(a.handleMoneyLowBalanceAlerts))  // B28.61, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance/{id}", a.requireTenant(a.handleMoneyLowBalanceOne))       // B28.61, money_search.go
 	a.mux.HandleFunc("/api/money/budgets", a.requireTenant(a.handleMoneyBudgets))                      // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/budgets/{id}", a.requireTenant(a.handleMoneyBudget))                  // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/spending/subscriptions", a.requireTenant(a.handleMoneySubscriptions)) // B41.20, money_search.go
@@ -922,6 +925,10 @@ func newApp(cfg config, auth *authenticator) *app {
 
 	// B28.454 — the chat canvas's own document, sandboxed with a policy of its own (canvas.go).
 	a.mux.HandleFunc("/canvas", serveCanvas)
+
+	// B67.4 — real files for a search engine, not the app's page (site_files.go).
+	a.mux.HandleFunc("/robots.txt", a.robotsTxt)
+	a.mux.HandleFunc("/sitemap.xml", a.sitemapXML)
 
 	// Everything else is the SPA (client-side routes resolve to index.html).
 	a.mux.Handle("/", a.spaHandler())
@@ -1659,6 +1666,8 @@ func (a *app) spaHandler() http.Handler {
 		if st, err := os.Stat(full); err == nil && !st.IsDir() {
 			if isUnhashedBundleFile(clean) {
 				setMustRevalidate(w)
+			} else if hashedSiteMedia.MatchString(clean) {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
 			fs.ServeHTTP(w, r)
 			return

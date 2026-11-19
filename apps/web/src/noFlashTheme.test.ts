@@ -54,7 +54,7 @@ const HTML = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
  * `type="module" src=…`, so this pattern cannot pick it up, and the count is asserted below
  * rather than assumed: a second bare `<script>` would make "the first match" a silent choice.
  */
-const INLINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1])
+const INLINE = [...HTML.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)].map((m) => m[1])
 
 /**
  * ⚠ THE KEY IS HARD-CODED HERE ON PURPOSE. Reading it back out of index.html would compare the
