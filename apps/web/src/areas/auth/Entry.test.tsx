@@ -266,6 +266,19 @@ describe('an already-signed-in person goes straight in', () => {
     }
   })
 
+  it('someone whose account opens on /signup is not sent Home: their step goes on to the key', async () => {
+    // The join's session, on sign-up's steps; then the account opens and /auth/me answers a finished session while the
+    // page is still /signup. Only someone who ARRIVED signed in goes straight in.
+    mockMe({ signup_open: true, authenticated: true, signup_unfinished: true })
+    at('/signup')
+    await screen.findByText(/Answers you get may be reused/)
+    vi.restoreAllMocks()
+    mockMe({ signup_open: true, authenticated: true })
+    await queryClient.refetchQueries({ queryKey: ['auth-me'] })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(window.location.pathname).toBe('/signup')
+  })
+
   it('signed out, both doors still show their form; the gate’s card stays in place on the page asked for', async () => {
     for (const path of ['/signup', '/signin', '/ledger']) {
       mockMe({ signup_open: true })

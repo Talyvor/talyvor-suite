@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo, cn } from '@talyvor/ui'
@@ -400,12 +400,16 @@ export function SignUp() {
   const authenticated = me.data?.authenticated === true
   const joining = authenticated && me.data?.signup_unfinished === true
   const returnTo = useReturnTo()
+  // B64.12 — someone who ARRIVES with a session goes straight in (to a same-site returnTo or Home), as on /signin. Decided
+  // on the first answer this page sees: a person whose account opens here (step 2) becomes signed in on this page, and
+  // their step is already moving them on to the key; sending them Home would race it and skip the key.
+  const arrivedSignedIn = useRef<boolean | null>(null)
+  if (me.data && arrivedSignedIn.current === null) arrivedSignedIn.current = authenticated && !joining
   useDocumentTitle('Create a workspace')
-  // B64.12 — someone with a session goes straight in (to a same-site returnTo or Home), as on /signin.
-  if (authenticated && !joining) return <Navigate to={returnTo ?? '/'} replace />
+  if (arrivedSignedIn.current && authenticated && !joining) return <Navigate to={returnTo ?? '/'} replace />
   // B61.26 — a stranger: the door, drawn while /auth/me is still answering too, as most who open /signup are strangers.
-  // A new number's session comes back here for steps 1 and 2.
-  if (!joining && me.data?.mode !== 'disabled') {
+  // A new number's session comes back here for steps 1 and 2, and stays on them while its account opens.
+  if (!authenticated && me.data?.mode !== 'disabled') {
     return (
       <EntryFrame>
         <SignInCard
