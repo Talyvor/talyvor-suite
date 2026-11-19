@@ -118,8 +118,8 @@ func TestVerificationIdentityWithoutAnAddressSendsNone(t *testing.T) {
 	}
 }
 
-// B65.2 — the page the identity partner sends the person back to reaches Lens by its name, signup or settings, on the
-// GET's query and the identity check's body; an address, or any other name, never reaches Lens.
+// B65.2, B65.4 — the page the identity partner sends the person back to reaches Lens by its name, signup, settings or
+// phone, on the GET's query and the identity check's body; an address, or any other name, never reaches Lens.
 func TestVerificationReturnReachesLensOnlyByItsName(t *testing.T) {
 	var mu sync.Mutex
 	got := []string{}
@@ -143,31 +143,34 @@ func TestVerificationReturnReachesLensOnlyByItsName(t *testing.T) {
 	t.Cleanup(srv.Close)
 	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
 
-	for _, path := range []string{"/api/verification?return_to=signup", "/api/verification?return_to=https%3A%2F%2Fevil.example", "/api/verification"} {
+	for _, path := range []string{"/api/verification?return_to=signup", "/api/verification?return_to=https%3A%2F%2Fevil.example", "/api/verification", "/api/verification?return_to=phone"} {
 		if rec := doJSON(a, http.MethodGet, path, ""); rec.Code != http.StatusOK {
 			t.Fatalf("GET %s = %d %s", path, rec.Code, rec.Body.String())
 		}
 	}
-	for _, to := range []string{"signup", "https://evil.example/back"} {
+	for _, to := range []string{"signup", "https://evil.example/back", "phone"} {
 		body := `{"name":"Ada Owner","country":"GB","date_of_birth":"1990-04-01","return_to":"` + to + `"}`
 		if rec := doJSON(a, http.MethodPost, "/api/verification/identity", body); rec.Code != http.StatusCreated {
 			t.Fatalf("identity with return_to %q = %d %s", to, rec.Code, rec.Body.String())
 		}
 	}
-	if len(got) != 5 {
-		t.Fatalf("Lens received %d requests, want 5: %q", len(got), got)
+	if len(got) != 7 {
+		t.Fatalf("Lens received %d requests, want 7: %q", len(got), got)
 	}
 	ws := strings.Split(strings.TrimPrefix(strings.Fields(got[0])[1], "/v1/workspaces/"), "/")[0]
 	base := "/v1/workspaces/" + ws + "/verification"
-	for i, want := range []string{"GET " + base + "?return_to=signup ", "GET " + base + " ", "GET " + base + " "} {
+	for i, want := range []string{"GET " + base + "?return_to=signup ", "GET " + base + " ", "GET " + base + " ", "GET " + base + "?return_to=phone "} {
 		if got[i] != want {
 			t.Fatalf("Lens's request %d was %q, want %q", i+1, got[i], want)
 		}
 	}
-	if !strings.Contains(got[3], `"return_to":"signup"`) {
-		t.Fatalf("the identity check reached Lens as %q, want return_to signup", got[3])
+	if !strings.Contains(got[4], `"return_to":"signup"`) {
+		t.Fatalf("the identity check reached Lens as %q, want return_to signup", got[4])
 	}
-	if strings.Contains(got[4], "return_to") || strings.Contains(got[4], "evil") {
-		t.Fatalf("an address as return_to reached Lens as %q, want no return_to", got[4])
+	if strings.Contains(got[5], "return_to") || strings.Contains(got[5], "evil") {
+		t.Fatalf("an address as return_to reached Lens as %q, want no return_to", got[5])
+	}
+	if !strings.Contains(got[6], `"return_to":"phone"`) {
+		t.Fatalf("the phone's identity check reached Lens as %q, want return_to phone", got[6])
 	}
 }
