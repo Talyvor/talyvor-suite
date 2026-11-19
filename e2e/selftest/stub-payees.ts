@@ -36,6 +36,9 @@
 // up to ten, one per merchant, each capped, waits for the owner's one approval, which holds the caps' total out of the agent's
 // account once (card_hold) and issues every card, active for 24 hours. Approved again it is answered as it stands. Its defect:
 //   card-hold-twice        — approving an issued batch again holds its total again
+//   card-life-25h          — B17.512: the cards are issued closing in 25 hours, not 24
+// B17.512 — the card desk keeps its own clock, STUB_CLOCK_AHEAD_MS ahead of the runner's (Lens's database clock is not the
+// testers' Mac's), and says it in each card answer's Date header, as Lens's server does.
 
 // B41.11 — and a new payee's cooling-off (Lens B41.111): a payee reads cooling_off_until 24 hours after it is saved, and until
 // then a payment of more than 1,000 to it is refused 409; POST …/{id}/called/challenge and …/{id}/called end it, only on an
@@ -163,6 +166,7 @@ const MANDATE_UNSIGNED = 'economy: this workspace signs its mandates with a pass
 const paymentKey = (b: OwnerPayment) => `payment:${[b.account_id, b.payee_id, b.amount_minor, b.currency, b.funding, b.reference, b.idempotency_key].map((x) => x ?? '').join('\0')}`
 /** Minor units as Lens prints them: "GBP 10.00". */
 const money = (minor: number, currency: string): string => `${currency} ${(minor / 100).toFixed(2)}`
+const lensNow = (): number => Date.now() + Number(process.env.STUB_CLOCK_AHEAD_MS ?? 0)
 
 export class PayeeDesk {
   private readonly payees = new Map<string, Payee[]>()
@@ -323,6 +327,7 @@ export class PayeeDesk {
   /** B46.20 — the card routes, on the owner's key (`agentID` '') or on agent `agentID`'s own: true when `path` was one of them. */
   async cardRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string, agentID: string): Promise<boolean> {
     if (!path.startsWith('/v1/money/cards')) return false
+    res.setHeader('Date', new Date(lensNow()).toUTCString())
     const batches = this.cardBatches.get(ws) ?? []
     const mine = batches.filter((b) => agentID === '' || b.agent_id === agentID)
     if (path === '/v1/money/cards' && req.method === 'GET') return this.json(res, 200, { batches: [...mine].reverse() }), true
@@ -364,7 +369,7 @@ export class PayeeDesk {
     }
     from.test_minor -= batch.total_minor // the card_hold
     from.balance_minor -= batch.total_minor
-    const expires = new Date(Date.now() + 86_400_000).toISOString()
+    const expires = new Date(lensNow() + (this.broken('card-life-25h') ? 25 : 24) * 3_600_000).toISOString()
     for (const c of batch.cards) Object.assign(c, { status: 'active', last4: randomBytes(2).toString('hex'), expires_at: expires })
     Object.assign(batch, { status: 'issued', approved_by: 'owner', approved_at: new Date().toISOString() })
     return this.json(res, 200, batch), true
