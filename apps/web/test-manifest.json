@@ -135,6 +135,7 @@
   "src/areas/lens/ledgerReconciles.test.tsx": 2,
   "src/areas/lens/LimitAlerts.test.tsx": 5,
   "src/areas/lens/LimitBoost.test.tsx": 3,
+  "src/areas/lens/ListFile.test.tsx": 2,
   "src/areas/lens/lxcSplitCoverage.test.tsx": 5,
   "src/areas/lens/Members.test.tsx": 11,
   "src/areas/lens/mintAttribution.test.tsx": 5,
