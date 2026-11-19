@@ -1,5 +1,5 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { existsSync } from 'node:fs'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CONTACT_EMAIL, Landing } from './Landing'
@@ -123,16 +123,81 @@ describe('Try Penny', () => {
 })
 
 describe('Pricing on the page', () => {
-  it('switches between people and companies, and between dollars, pounds and euros', () => {
+  // B64.3: the plans are Lens's two ladders, read through GET /api/pricing as /pricing reads them, so the two pages
+  // cannot drift. Every figure here differs from Nick's 15 Nov plans: only a page that follows the plan table prints them.
+  const ladders = {
+    currencies: ['GBP', 'EUR', 'USD'],
+    stablecoin_priced_in: 'USD',
+    personal: [
+      { id: 'personal_solo', name: 'Solo', price_minor: { GBP: 0, EUR: 0, USD: 0 }, agents: 4, people: 1 },
+      { id: 'personal_crew', name: 'Crew', price_minor: { GBP: 412, EUR: 433, USD: 455 }, agents: 11, people: 1 },
+      { id: 'personal_fleet', name: 'Fleet', price_minor: { GBP: 812, EUR: 913, USD: 1014 }, agents: 27, people: 1 },
+    ],
+    business: [
+      { id: 'business_studio', name: 'Studio', price_minor: { GBP: 1100, EUR: 1150, USD: 1200 }, agents: 4, people: 2 },
+      { id: 'business_company', name: 'Company', price_minor: { GBP: 3600, EUR: 3600, USD: 3600 }, agents: 26, people: 6 },
+      { id: 'business_group', name: 'Group', price_minor: { GBP: 12600, EUR: 12700, USD: 12800 }, agents: -1, people: 24 },
+      { id: 'business_custom', name: 'Custom', price_minor: null, by_contract: true, agents: -1, people: -1 },
+    ],
+  }
+  function serve(labels?: Record<string, string>) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input) !== '/api/pricing') return new Response('null', { status: 404 })
+      return new Response(JSON.stringify({ min_usd_cents: 0, max_usd_cents: 0, preset_usd_cents: [], ladders, labels }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
+  }
+  const cards = (container: HTMLElement) =>
+    [...container.querySelectorAll('#plans .pc')].map((c) => [...c.childNodes].map((n) => n.textContent).join(' | '))
+
+  it('draws the plan table it is served, in three currencies with dollars first', async () => {
+    serve()
     const { container } = render(<Landing />)
-    const plans = () => container.querySelector('#plans')!.textContent
-    expect(plans()).toContain('Fleet$9.99 a month')
+    await waitFor(() => expect(container.querySelectorAll('#plans .pc')).toHaveLength(3))
+    const currency = within(screen.getByRole('group', { name: 'Currency' })).getAllByRole('button')
+    expect(currency.map((b) => b.textContent)).toEqual(['$', '£', '€'])
+    expect(currency[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(cards(container)).toEqual([
+      'Solo | Free | 4 agentsYour own accountA card for every agent',
+      'Crew | $4.55 a month | 11 agentsEverything in Solo',
+      'Fleet | $10.14 a month | 27 agentsEverything in Crew',
+    ])
     fireEvent.click(screen.getByRole('button', { name: '£' }))
-    expect(plans()).toContain('Fleet£7.99 a month')
+    expect(cards(container)[2]).toBe('Fleet | £8.12 a month | 27 agentsEverything in Crew')
     fireEvent.click(screen.getByRole('button', { name: '€' }))
-    expect(plans()).toContain('Fleet€8.99 a month')
+    expect(cards(container)[1]).toBe('Crew | €4.33 a month | 11 agentsEverything in Solo')
     fireEvent.click(screen.getByRole('button', { name: 'For companies' }))
-    expect(plans()).toContain('Group€125 a month')
-    expect(plans()).toContain('CustomLet’s talk')
+    expect(cards(container)).toEqual([
+      'Studio | €11.50 a month | 4 agents2 peopleA statement for every agent',
+      'Company | €36 a month | 26 agents6 peopleEverything in Studio',
+      'Group | €127 a month | Unlimited agents24 peopleEverything in Company',
+      `Custom | Let’s talk | Built with youBy contract${CONTACT_EMAIL}`,
+    ])
+  })
+
+  it('says every plan costs nothing only while spending on Talyvor is Sandbox', async () => {
+    const line = 'While you’re in Sandbox, every plan costs nothing.'
+    serve({ spend_on_talyvor: 'sandbox' })
+    const sandbox = render(<Landing />)
+    await waitFor(() => expect(sandbox.container.querySelectorAll('#plans .pc')).toHaveLength(3))
+    expect(sandbox.container.querySelector('.price .lede')).toHaveTextContent(
+      `Three plans for people, three for companies, and one we build with you. ${line}`,
+    )
+    cleanup()
+    vi.restoreAllMocks()
+    serve({ spend_on_talyvor: 'live' })
+    const live = render(<Landing />)
+    await waitFor(() => expect(live.container.querySelectorAll('#plans .pc')).toHaveLength(3))
+    expect(live.container.querySelector('.price .lede')).toHaveTextContent(
+      /^Three plans for people, three for companies, and one we build with you\.$/,
+    )
+  })
+
+  it('types no price into the page source', () => {
+    const source = readFileSync(resolve(__dirname, 'Landing.tsx'), 'utf8')
+    expect(source).not.toMatch(/\b(3|7|8|9)\.99\b/)
+    expect(source).not.toMatch(/\b(usd|gbp|eur)\s*:\s*\d/)
   })
 })
