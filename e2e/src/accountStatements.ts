@@ -7,7 +7,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
 import { fail } from './bank.ts'
 import type { Scenario } from './scenarios.ts'
 import { call, said } from './settings.ts'
@@ -28,6 +28,12 @@ async function fromPage(page: Page, path: string): Promise<{ status: number; typ
 }
 
 const day = (d: Date) => d.toISOString().slice(0, 10)
+
+/** The band's Balance now: its figure alone. Under each figure the band names the currency ("GBP"), as the design's band
+ * puts a second line under each figure, so the figure is read from its <Money> ([data-money]), not the whole <dd>. */
+export async function bandBalance(band: Pick<Locator, 'locator'>): Promise<string> {
+  return ((await band.locator('dd').nth(3).locator('[data-money]').textContent()) ?? '').trim()
+}
 
 export function accountStatements(): Scenario {
   return {
@@ -94,7 +100,7 @@ export function accountStatements(): Scenario {
         const band = page.locator('[data-testid="account-statement-band"]')
         if (!(await band.waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false))) return fail("Statements must show the company GBP account's band; it does not")
         if ((await tab.getAttribute('aria-selected')) !== 'true') return fail('the Company · GBP tab must be the one open')
-        const balance = ((await band.locator('dd').nth(3).textContent()) ?? '').trim()
+        const balance = await bandBalance(band)
         const want = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(st.closing_minor / 100)
         ctx.evidence.push({ note: 'the band', answer: ((await band.textContent()) ?? '').replace(/\s+/g, ' ') })
         if (balance !== want) return fail(`the band's Balance must read ${want}; it reads "${balance}"`)

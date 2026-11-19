@@ -141,6 +141,12 @@ const HIDDEN: RegExp[] = process.env.STUB_HIDE_AREAS !== '1' ? [] : (() => {
   if (prefixes.length === 0) throw new Error(`STUB_HIDE_AREAS=1 needs STUB_LENS_SRC, a Lens checkout with internal/areas/areas.go (got "${src}")`)
   return prefixes.map((x) => new RegExp(`^${x.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{\}/g, '[^/]+')}(/|$)`))
 })()
+/**
+ * B17.472 — STUB_AREAS: the areas every workspace has (comma-separated, may be empty); with the hidden areas hidden, none.
+ * Otherwise the stub serves no areas route, as a Lens before B59.1.
+ */
+const AREAS: string[] | undefined =
+  process.env.STUB_AREAS !== undefined ? process.env.STUB_AREAS.split(',').filter((a) => a !== '') : HIDDEN.length > 0 ? [] : undefined
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 /** B61.51 — STUB_IDENTITY_GATE=on: the routes that move money, refused below the level (above). */
 const IDENTITY_GATE = process.env.STUB_IDENTITY_GATE === 'on'
@@ -432,12 +438,16 @@ function filedOf(result: string): { identifier: string; title: string } | undefi
 /** HTML (or anything else, as it is) to the Markdown Lens's conversion produces. */
 function toMarkdown(raw: string, mediaType: string): string {
   if (!/html/.test(mediaType)) return raw.trim()
-  return raw
-    .replace(/<(script|style|title)[^>]*>[\s\S]*?<\/\1>/gi, '')
+  // Each removal runs until nothing is left to remove, so a tag split by another (`<scr<b>ipt>`) cannot survive it.
+  const untilStable = (s: string, re: RegExp): string => {
+    for (let prev = ''; prev !== s; ) [prev, s] = [s, s.replace(re, '')]
+    return s
+  }
+  const md = untilStable(raw, /<(script|style|title)[^>]*>[\s\S]*?<\/\1>/gi)
     .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, n: string, t: string) => `\n${'#'.repeat(Number(n))} ${t.trim()}\n`)
     .replace(/<\/t[dh]>/gi, ' | ')
     .replace(/<\/(p|tr|table|div)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
+  return untilStable(md, /<[^>]+>/g)
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
@@ -1022,7 +1032,7 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   // talyvor-lens B19.2 — an agent's byte-identical retry under one Idempotency-Key (same key, model and prompt) is
   // answered and charged once; STUB_BREAK=call-replay charges every copy.
   const idem = agentCall === undefined ? '' : String(req.headers['idempotency-key'] ?? '')
-  const retryKey = idem === '' || broke('call-replay') ? undefined : createHash('sha256').update([credential, idem, model.id, said].join('\0')).digest('hex')
+  const retryKey = idem === '' || broke('call-replay') ? undefined : [credential, idem, model.id, said].join('\0')
   const retried = retryKey === undefined ? undefined : retries.get(retryKey)
   if (retried !== undefined) {
     answer = retried
@@ -1293,6 +1303,8 @@ createServer(async (req, res) => {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
       return void res.end('404 page not found\n')
     }
+    // B17.472 — Lens B59.1's read of a workspace's areas, where the stub has them (AREAS, above).
+    if (AREAS !== undefined && req.method === 'GET' && /^\/v1\/workspaces\/[^/]+\/areas$/.test(p)) return json(res, 200, { areas: AREAS })
     if (p === '/healthz') return json(res, 200, { status: broke('status-truth') ? 'degraded' : 'healthy', uptime_seconds: Math.floor(process.uptime()), version: 'stub' })
     // talyvor-lens B45.28, B45.29 — the AP2 key and outside agents' payment requests, on no credential (stub-trust-layer.ts).
     if (await bank.trustLayer.route(req, res, p, BASE)) return
@@ -2004,6 +2016,8 @@ createServer(async (req, res) => {
     }
     return miss(req, res, p)
   } catch (e) {
-    return json(res, 500, { error: String(e) })
+    // The failure goes to the stub's own log; the answer names no more of it than Lens's own 500 would.
+    console.error('stub lens:', e)
+    return json(res, 500, { error: 'the stub failed; see its log' })
   }
 }).listen(PORT, '127.0.0.1', () => console.log(`stub lens on ${BASE}${BREAK !== '' ? ` (broken: ${BREAK})` : ''}`))

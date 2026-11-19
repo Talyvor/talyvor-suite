@@ -9,6 +9,9 @@ import { agentBankApi, type DeviceKey, type Passkey, type PaymentProof, type Pro
 // B62.3 — a payment's proof, from Lens B62.1's record: what the owner approved (the payee and the amount), when, with
 // which key, the rule that asked them or let it pass, and what was sent. The agent's task sits above it in its own words,
 // always after "The agent says:" (Lens B62.2), never as a fact. One button copies the proof as text, for a dispute.
+// B57.190 — drawn as the P10 receipt draws a section of its own: a cloud plane with its heading inside, the facts on the
+// page plane, and the verdict with its mark as the approval sheet's lines carry theirs. The task moves up to the page's
+// headline, under who it was paid to, as the approval sheet draws what a payment is for; the copy still starts with it.
 
 /** What the agent says a payment is for, as every screen shows it: after these words and nothing else. A span inside a line. */
 export function TaskSays({ task, className, inline = false }: { task?: string; className?: string; inline?: boolean }) {
@@ -63,9 +66,12 @@ function PaidTo({ p }: { p: ProofPayment }) {
 /** The read of a payment's proof by its money entry: its page starts it beside the statement, so both arrive at once. */
 export const paymentProofQuery = (entry: string) => ({ queryKey: ['payment-proof', entry], queryFn: () => agentBankApi.paymentProof(entry) })
 
+/** What the agent says a payment is for: the statement's line's own, else the one its proof recorded. */
+export const paymentTask = (task: string | undefined, p: PaymentProof | null | undefined) => task || p?.sent.task
+
 /**
- * The proof of one payment, drawn, with the agent's task above it (`task`, the statement's; else the record's); nothing
- * but the task for a payment the rules never judged.
+ * The proof of one payment, drawn; its copy starts with the agent's task (`task`, the statement's; else the record's).
+ * Nothing for a payment the rules never judged.
  */
 export function PaymentProofSection({ entry, task }: { entry: string; task?: string }) {
   const proof = useQuery(paymentProofQuery(entry))
@@ -75,12 +81,12 @@ export function PaymentProofSection({ entry, task }: { entry: string; task?: str
   const body = useRef<HTMLDivElement>(null)
   if (proof.isError) return <p className="text-body text-ink-2">We couldn’t read this payment’s proof. Try again in a moment.</p>
   const p = proof.data
-  const says = task || p?.sent.task
-  if (!p) return proof.isPending ? null : <TaskSays task={says} />
+  if (!p) return null
+  const says = paymentTask(task, p)
   const rule = `${PROOF_RULE[p.rule] ?? 'The agent’s rules'}${p.rules_version != null ? ` (rules version ${p.rules_version})` : ''}`
   const copy = () => {
     if (!body.current) return
-    void (navigator.clipboard?.writeText(receiptText(body.current, 'Payment proof')) ?? Promise.reject(new Error('no clipboard'))).then(
+    void (navigator.clipboard?.writeText(receiptText(body.current, says ? `Payment proof\nThe agent says: “${says}”` : 'Payment proof')) ?? Promise.reject(new Error('no clipboard'))).then(
       () => showToast('Proof copied'),
       () => showToast('We couldn’t copy it. Select it and copy it instead.'),
     )
@@ -99,22 +105,22 @@ export function PaymentProofSection({ entry, task }: { entry: string; task?: str
         { label: 'What was sent', value: <PaidTo p={p.sent} /> },
       ]
   return (
-    <section className="grid gap-2" aria-labelledby="payment-proof-title" data-testid="payment-proof">
+    <section className="grid gap-3 rounded-inset bg-cloud p-4" aria-labelledby="payment-proof-title" data-testid="payment-proof">
       <div ref={body} className="contents">
-        <TaskSays task={says} />
-        <h2 id="payment-proof-title" className="font-display text-reading font-bold text-ink">
+        <h2 id="payment-proof-title" className="font-display text-head font-bold text-ink">
           Proof
         </h2>
-        <Facts facts={facts} />
+        <Facts on="cloud" facts={facts.map((f) => ({ ...f, label: <span className="whitespace-nowrap">{f.label}</span> }))} />
         {signed ? (
-          <p className="text-caption text-ink-3" data-receipt-line>
+          <p className={`flex items-start gap-2 text-body ${p.verified ? 'text-ink-2' : 'text-danger'}`} data-receipt-line data-testid="proof-verdict">
+            <Icon name={p.verified ? 'check' : 'x'} size={18} className={`mt-0.5 shrink-0 ${p.verified ? 'text-success' : ''}`} />
             {p.verified ? 'The signature checks out: it is by this key, over exactly what you approved.' : 'The signature does not check out against what you approved.'}
           </p>
         ) : null}
       </div>
       <div>
-        <Button type="button" variant="secondary" onClick={copy}>
-          <Icon name="copy" size={18} />
+        <Button type="button" size="sm" variant="secondary" onClick={copy}>
+          <Icon name="copy" size={16} />
           Copy the proof
         </Button>
       </div>

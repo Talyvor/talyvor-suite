@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Dialog, EmptyState, Eyebrow, Field, Icon, Input, Row as PocketRow, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Dialog, EmptyState, Eyebrow, Field, Icon, Input, Row as PocketRow, Shapes, showSnack } from '@talyvor/ui/pocket'
 import { keysApi, type MintResult, type WorkspaceAPIKey } from './keysApi'
 import { formatWhen } from './format'
 import { ApiError, getJSON, readable } from '../../lib/api'
@@ -255,7 +255,7 @@ function AccessList() {
         .items,
   })
 
-  if (list.isPending) return <p className="text-body text-ink-2">Loading…</p>
+  if (list.isPending) return <Shapes label="Loading…" />
   if (list.isError)
     return (
       <p className="text-body text-ink-2">
@@ -509,7 +509,7 @@ export function Keys() {
               </Button>
             </div>
             {list.isLoading ? (
-              <p className="text-body text-ink-2">Loading…</p>
+              <Shapes label="Loading…" />
             ) : list.isError ? (
               <PanelFailure error={list.error} what="your keys" />
             ) : empty ? (

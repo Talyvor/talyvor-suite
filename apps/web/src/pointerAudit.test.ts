@@ -250,7 +250,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'error={ledger.error}',
     why: 'the CORRECT copy of the seam Spend.tsx had backwards — the whole positive control for that finding is that this line reads `ledger.error` while its guard is `ledger.isError`',
   },
-  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:371|apps/web/src/areas/lens/Overview.tsx:327': {
+  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:373|apps/web/src/areas/lens/Overview.tsx:327': {
     kind: 'LIVE',
     fragment: '<Failed what="the mint ledger" error={ledger.error} />',
     why: 'the same line quoted VERBATIM beside the must-stay-green control that asserts its wording, so the quote and the assertion cannot drift apart',
@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1088': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1092': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,7 +444,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1088': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1092': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',

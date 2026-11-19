@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { pressEverything } from '../../test/pressEverything'
 
 // SignUp.test.tsx — B59.8: sign-up asks who the account is for, the kind of money, then a key, and (B61.20) confirms who
 // you are, in the launch pack's words (SPEC 3.2; the design's P1, P2 and W1). The words are typed here rather than imported, so a changed word in
@@ -17,6 +18,11 @@ interface MockOptions {
   /** B61.20 — the account's type, and the check the provider does not pass */
   accountType?: 'personal' | 'business'
   fails?: 'contact' | 'identity' | 'company'
+  /** B61.118 — the check the provider has not decided yet */
+  pending?: 'contact' | 'identity' | 'company'
+  /** B65.2 — the identity partner's one-time link a pending person check carries, and the checks already on the record */
+  link?: string
+  record?: Array<Record<string, unknown>>
   /** B61.110 — the countries Lens serves (GET /v1/public/countries, on /api/pricing), and one it refuses */
   served?: string[]
   refuses?: string
@@ -25,10 +31,14 @@ interface MockOptions {
 /** talyvor-lens B61.53's refusal of a country Talyvor does not serve. */
 const NOT_SERVED = { code: 'country_not_served', error: 'Talyvor is not available in that country yet.', field: 'country' }
 
+/** B65.2 — every read of the record since the last mockFetch, with its query */
+let reads: string[] = []
+
 function mockFetch(o: MockOptions = {}) {
   const sent: Array<{ url: string; body: unknown }> = []
+  reads = []
   // Lens B30.4's record: each check needs the one below it, newest first; the Test provider passes it in Sandbox.
-  const checks: Array<Record<string, unknown>> = []
+  const checks: Array<Record<string, unknown>> = [...(o.record ?? [])]
   const reached = () => checks.filter((c) => c.status === 'completed').length
   const record = () => ({ workspace_id: 'ws_1', level: `L${reached()}`, meaning: MEANINGS[reached()], live_level: 'L0', live_meaning: MEANINGS[0], checks: checks.length ? [...checks] : null })
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -39,7 +49,10 @@ function mockFetch(o: MockOptions = {}) {
       return json({ company_name: 'Northwind Studio', registration_number: '12345678', country: 'GB', people: [{ name: 'Maya Lind', role: 'director', share_bps: 10000 }] })
     }
     if (url === '/api/pricing' && o.served) return json({ min_usd_cents: 1000, max_usd_cents: 1000000, preset_usd_cents: [1000], countries: o.served })
-    if (url === '/api/verification') return json(record())
+    if (url === '/api/verification' || url.startsWith('/api/verification?')) {
+      reads.push(url)
+      return json(record())
+    }
     const m = /^\/api\/verification\/(contact|identity|company)$/.exec(url)
     if (m && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as { country?: string }
@@ -47,8 +60,9 @@ function mockFetch(o: MockOptions = {}) {
       if (o.refuses && body.country === o.refuses) return json(NOT_SERVED, 400)
       const level = ['contact', 'identity', 'company'].indexOf(m[1]) + 1
       if (reached() < level - 1) return json({ error: 'economy: verification levels are reached in order' }, 409)
-      const status = o.fails === m[1] ? 'failed' : 'completed'
-      const check = { level: `L${level}`, subject: ['contact', 'person', 'company'][level - 1], method: 'test', test: true, status, evidence_ref: `test_kyc_${level}`, verified_name: level === 2 ? 'Maya Lind' : undefined, started_at: '2026-11-15T09:00:00Z', checked_at: '2026-11-15T09:00:00Z' }
+      const status = o.fails === m[1] ? 'failed' : o.pending === m[1] ? 'pending' : 'completed'
+      const link = status === 'pending' && level === 2 ? o.link : undefined
+      const check = { level: `L${level}`, subject: ['contact', 'person', 'company'][level - 1], method: 'test', test: true, status, evidence_ref: `test_kyc_${level}`, verified_name: level === 2 ? 'Maya Lind' : undefined, started_at: '2026-11-15T09:00:00Z', checked_at: '2026-11-15T09:00:00Z', link }
       checks.unshift(check)
       return json({ check, verification: record() }, 201)
     }
@@ -273,6 +287,9 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(within(row('person')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    // B61.118 — once passed, no line about finishing the check later
+    expect(screen.queryByTestId('identity-way-in')).toBeNull()
+    expect(screen.queryByText(/in the background|try the check again/)).toBeNull()
     expect(sent).toEqual([
       { url: '/api/verification/contact', body: { email: 'maya@example.com', phone: '+447700900123' } },
       {
@@ -283,6 +300,8 @@ describe('step 4: confirm who you are (B61.20)', () => {
           date_of_birth: '1990-04-01',
           // B61.46 — the home address goes with the identity check, its country the one they live in
           address: { lines: ['12 Marlborough Road'], town: 'Twickenham', postcode: 'TW1 3AA', country: 'GB' },
+          // B65.2 — the identity partner sends the person back to this step
+          return_to: 'signup',
         },
       },
     ])
@@ -322,7 +341,7 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(sent.map((s) => s.url)).toEqual(['/api/verification/contact', '/api/verification/identity', '/api/verification/company'])
   })
 
-  it('a check that does not pass says what to fix, and the app stays shut', async () => {
+  it('a check that does not pass says what to fix, and still lets the person into the app (B61.118)', async () => {
     mockFetch({ authenticated: true, fails: 'identity' })
     at('/signup/confirm')
     await screen.findByLabelText('Legal name')
@@ -331,7 +350,109 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(await screen.findByText('We couldn’t confirm who you are. Check your legal name, date of birth, home address and country, and try again.')).toBeInTheDocument()
     expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(within(row('person')).getByText('Not passed')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Open the app' })).toBeNull()
+    const wayIn = screen.getByTestId('identity-way-in')
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(wayIn).toHaveTextContent('You can try the check again from Settings, Verification.')
+    expect(screen.queryByText('You’re confirmed. Your account is open.')).toBeNull()
+    // the form stays, to start the check again here (B65.2)
+    expect(screen.getByRole('button', { name: 'Start again' })).toBeInTheDocument()
+  })
+
+  it('while the person check waits for the checker, a way into the app says the check finishes in the background (B61.118)', async () => {
+    mockFetch({ authenticated: true, pending: 'identity' })
+    at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    fillYou()
+    run()
+    const wayIn = await screen.findByTestId('identity-way-in')
+    expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
+    expect(within(row('person')).getByText('Waiting for the checker')).toBeInTheDocument()
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(wayIn).toHaveTextContent('You can look around now. Once your identity check passes, you can move money.')
+    expect(screen.queryByText('You’re confirmed. Your account is open.')).toBeNull()
+  })
+
+  it('the way in while a check waits is a Pocket card, and Open the app is the page’s one primary action (B57.192)', async () => {
+    mockFetch({ authenticated: true, pending: 'identity' })
+    const { container } = at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    fillYou()
+    run()
+    const wayIn = await screen.findByTestId('identity-way-in')
+    expect(wayIn).toHaveClass('rounded-card', 'bg-page', 'shadow-pocket')
+    expect(container.querySelectorAll('.bg-primary')).toHaveLength(1)
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveClass('bg-primary')
+    // trying the check again stays on the page, a step back from the way in
+    expect(screen.getByRole('button', { name: 'Confirm who I am' })).toHaveClass('shadow-edge')
+  })
+
+  it('a new account’s identity step has the same way into the app while its check waits (B61.118)', async () => {
+    mockFetch({ authenticated: true, pending: 'identity' })
+    at('/accounts/new/confirm')
+    await screen.findByLabelText('Legal name')
+    fillYou()
+    run()
+    const wayIn = await screen.findByTestId('identity-way-in')
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(wayIn).toHaveTextContent('You can look around now. Once your identity check passes, you can move money.')
+  })
+
+  // B65.2 — Lens B65.1's records: the contact check passed, and the person check where the partner left it.
+  const contactPassed = { level: 'L1', subject: 'contact', method: 'test', test: true, status: 'completed', evidence_ref: 'test_kyc_1', started_at: '2026-11-18T09:00:00Z', checked_at: '2026-11-18T09:00:00Z' }
+  const personCheck = (status: string, detail: string) => ({
+    level: 'L2', subject: 'person', method: 'persona', test: true, status, evidence_ref: 'inq_1', verified_name: 'Maya Lind', detail, started_at: '2026-11-18T09:01:00Z', checked_at: '2026-11-18T09:05:00Z',
+  })
+  const LINK = 'https://inquiry.withpersona.com/verify?code=one-time&redirect-uri=https%3A%2F%2Fapp.talyvor.com%2Fsignup%2Fconfirm'
+
+  it('a person check waiting for the partner draws one button that opens its page in this tab, and nothing to upload (B65.2)', async () => {
+    const sent = mockFetch({ authenticated: true, pending: 'identity', link: LINK })
+    at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    const step = screen.getByRole('region', { name: 'Your ID document' })
+    expect(step).toHaveTextContent('Persona, our identity partner, checks a photo of your ID and a selfie for us.')
+    expect(within(step).getByRole('link', { name: 'Our privacy notice' })).toHaveAttribute('href', '/privacy')
+    expect(within(step).queryByRole('link', { name: 'Verify your ID' })).toBeNull()
+    fillYou()
+    run()
+    const go = await within(step).findByRole('link', { name: 'Verify your ID' })
+    expect(go).toHaveAttribute('href', LINK)
+    expect(go).not.toHaveAttribute('target')
+    // the details went with the check: no second check is started from here while this one waits
+    expect(screen.queryByRole('button', { name: 'Confirm who I am' })).toBeNull()
+    expect(screen.queryByLabelText('Legal name')).toBeNull()
+    // the link is on the button only, and the page has no file input and none of the partner's own words
+    expect(document.body.innerHTML.split('one-time').length - 1).toBe(1)
+    expect(document.querySelector('input[type="file"]')).toBeNull()
+    expect(document.body).not.toHaveTextContent('Persona:')
+    // the partner sends the person back to this step: Lens is told so by name, on the check and on every read
+    expect(sent.find((x) => x.url === '/api/verification/identity')?.body).toMatchObject({ return_to: 'signup' })
+    expect(reads.length).toBeGreaterThan(0)
+    expect(reads.every((u) => u === '/api/verification?return_to=signup')).toBe(true)
+  })
+
+  it('back from the partner with the check passed, sign-up opens Home (B65.2)', async () => {
+    mockFetch({ authenticated: true, record: [personCheck('completed', 'Your ID is checked.'), contactPassed] })
+    at('/signup/confirm?inquiry-id=inq_1&status=completed')
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    expect(window.location.search).toBe('')
+  })
+
+  it('back from the partner with the check expired, the step says so in plain words and offers Start again (B65.2)', async () => {
+    const sent = mockFetch({ authenticated: true, record: [personCheck('failed', 'Your ID check expired. Start it again.'), contactPassed] })
+    at('/signup/confirm?inquiry-id=inq_1&status=expired')
+    expect(await screen.findByText('Your identity check expired. Start it again.')).toBeInTheDocument()
+    expect(within(row('person')).getByText('Not passed')).toBeInTheDocument()
+    expect(window.location.search).toBe('')
+    expect(document.body).not.toHaveTextContent(/Persona:|expired&|status=/)
+    type('Legal name', 'Maya Lind')
+    type('Date of birth', '1990-04-01')
+    type('Address line 1', '12 Marlborough Road')
+    type('Town or city', 'Twickenham')
+    type('Postcode', 'TW1 3AA')
+    fireEvent.change(screen.getByLabelText('Country you live in'), { target: { value: 'GB' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start again' }))
+    await waitFor(() => expect(sent.map((x) => x.url)).toEqual(['/api/verification/identity']))
+    expect(sent[0].body).toMatchObject({ name: 'Maya Lind', return_to: 'signup' })
   })
 
   it('until the checks pass, Home says so in one sentence and leads back to the step', async () => {
@@ -340,6 +461,24 @@ describe('step 4: confirm who you are (B61.20)', () => {
     const gate = await screen.findByTestId('identity-gate')
     expect(gate).toHaveTextContent('Your account can look around but can’t move money until you confirm who you are.')
     expect(within(gate).getByRole('link', { name: 'Finish confirming who you are' })).toHaveAttribute('href', '/signup/confirm')
+  })
+})
+
+describe('every control on the identity step does something while the check waits for the partner (B65.2)', () => {
+  it('/signup/confirm', async () => {
+    const report = await pressEverything('/signup/confirm', {
+      '/auth/me': { mode: 'oidc', authenticated: true, user: { sub: 's', email: 'maya@example.com' } },
+      '/api/workspace/account': { account_type: 'personal', money_kind: 'hybrid' },
+      '/api/verification?return_to=signup': {
+        workspace_id: 'ws-1', level: 'L1', meaning: 'email and phone confirmed', live_level: 'L0', live_meaning: 'signed in',
+        checks: [
+          { level: 'L2', subject: 'person', method: 'persona', test: true, status: 'pending', evidence_ref: 'inq_1', link: 'https://inquiry.withpersona.com/verify?code=one-time', started_at: '2026-11-18T09:01:00Z', checked_at: '2026-11-18T09:01:00Z' },
+          { level: 'L1', subject: 'contact', method: 'test', test: true, status: 'completed', evidence_ref: 'test_kyc_1', started_at: '2026-11-18T09:00:00Z', checked_at: '2026-11-18T09:00:00Z' },
+        ],
+      },
+    })
+    expect(report.dead).toEqual([])
+    expect(report.pressed).toBeGreaterThan(2)
   })
 })
 

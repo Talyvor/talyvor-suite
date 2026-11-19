@@ -226,7 +226,7 @@ export const hostileMarker = (v: Pick<HostileVerdict, 'id'>): string => `hostile
 
 // ── The report ──────────────────────────────────────────────────────────────────────────────────────
 
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\\|]/g, '\\$&')
 
 /** The report's hostile pull requests section: each one, the guard that must stop it, and whether it did. */
 export function renderHostile(h: HostileReport | undefined): string[] {

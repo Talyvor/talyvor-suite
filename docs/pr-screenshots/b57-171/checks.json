@@ -1,0 +1,6 @@
+[
+  { "route": "/activity" },
+  { "route": "/money/pay" },
+  { "route": "/money/pay/standing-orders" },
+  { "route": "/settings" }
+]

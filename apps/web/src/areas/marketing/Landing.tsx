@@ -3,6 +3,7 @@ import { useDocumentTitle } from '../../documentTitle'
 import { useSignupProbe } from '../../lib/signupOpen'
 import { COMPANY_CONTACT, COMPANY_LINE } from '../../company'
 import SITE_CSS from './site.css?raw'
+import { formatMinor, usePricing, type LadderPlan } from './pricingApi'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). talyvor.com redirects here. It must render
 // with no session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so nothing here may
@@ -971,31 +972,42 @@ function TheUsualWay() {
 
 // ── Pricing ──────────────────────────────────────────────────────────────────────────────────────
 
-type Currency = 'usd' | 'gbp' | 'eur'
-type Plan = [name: string, price: Record<Currency, number> | null, features: string[]]
-/** Nick's 15 Nov plans, as index.html draws them. B64.3 renders these from Lens's public plan table instead. */
-const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
-const PLANS: Record<'people' | 'companies', Plan[]> = {
-  people: [
-    ['Solo', { usd: 0, gbp: 0, eur: 0 }, ['3 agents', 'Your own account', 'A card for every agent']],
-    ['Crew', { usd: 3.99, gbp: 3.99, eur: 3.99 }, ['10 agents', 'Everything in Solo']],
-    ['Fleet', { usd: 9.99, gbp: 7.99, eur: 8.99 }, ['25 agents', 'Everything in Crew']],
-  ],
-  companies: [
-    ['Studio', { usd: 10, gbp: 10, eur: 10 }, ['3 agents', people(1), 'A statement for every agent']],
-    ['Company', { usd: 35, gbp: 35, eur: 35 }, ['25 agents', people(5), 'Everything in Studio']],
-    ['Group', { usd: 125, gbp: 125, eur: 125 }, ['Unlimited agents', people(25), 'Everything in Company']],
-    ['Custom', null, ['Built with you', 'By contract', CONTACT_EMAIL]],
-  ],
-}
-const SYM: Record<Currency, string> = { usd: '$', gbp: '£', eur: '€' }
+// B64.3 — the plans are Lens's two ladders, read from GET /api/pricing exactly as /pricing reads them (pricingApi.ts),
+// so the two pages cannot drift: every price, agent and people count, and the currencies, are the plan table's. Only
+// the words are here.
 
-function PriceText({ v, c }: { v: number | null; c: Currency }) {
-  if (v === null) return <>Let’s talk</>
-  if (v === 0) return <>Free</>
+/** The words index.html gives each plan under its counts. "Everything in" names the plan below it on the ladder. */
+const PLAN_LINES: Record<string, string[]> = {
+  personal_solo: ['Your own account', 'A card for every agent'],
+  business_studio: ['A statement for every agent'],
+}
+/** Dollars first, as index.html draws the switch, then pounds and euros, then any other currency Lens prices in. */
+const CURRENCY_FIRST = ['USD', 'GBP', 'EUR']
+const PLAN_SANDBOX = 'spend_on_talyvor'
+
+const people = (n: number) => (n < 0 ? 'Unlimited people' : `${n} ${n === 1 ? 'person' : 'people'}`)
+const agents = (n: number) => (n < 0 ? 'Unlimited agents' : `${n} agents`)
+
+function currencySymbol(c: string): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: c }).formatToParts(0).find((p) => p.type === 'currency')?.value ?? c
+}
+
+function planLines(plan: LadderPlan, below: LadderPlan | undefined, business: boolean): string[] {
+  if (plan.by_contract) return ['Built with you', 'By contract', CONTACT_EMAIL]
+  return [
+    agents(plan.agents),
+    ...(business ? [people(plan.people)] : []),
+    ...(below ? [`Everything in ${below.name}`] : (PLAN_LINES[plan.id] ?? [])),
+  ]
+}
+
+function PriceText({ plan, c }: { plan: LadderPlan; c: string }) {
+  const minor = plan.price_minor?.[c]
+  if (plan.by_contract || typeof minor !== 'number') return <>Let’s talk</>
+  if (minor === 0) return <>Free</>
   return (
     <>
-      {SYM[c] + (Number.isInteger(v) ? String(v) : v.toFixed(2))}
+      {formatMinor(minor, c)}
       <span> a month</span>
     </>
   )
@@ -1003,7 +1015,15 @@ function PriceText({ v, c }: { v: number | null; c: Currency }) {
 
 function PricingBand() {
   const [k, setK] = useState<'people' | 'companies'>('people')
-  const [c, setC] = useState<Currency>('usd')
+  const state = usePricing()
+  const pricing = state.status === 'ok' ? state.pricing : undefined
+  const ladders = pricing?.ladders
+  const currencies = [...(ladders?.currencies ?? [])].sort(
+    (a, b) => ((CURRENCY_FIRST.indexOf(a) + 1 || 99) - (CURRENCY_FIRST.indexOf(b) + 1 || 99)) || a.localeCompare(b),
+  )
+  const [chosen, setC] = useState<string>()
+  const c = chosen && currencies.includes(chosen) ? chosen : currencies[0]
+  const ladder = ladders?.[k === 'people' ? 'personal' : 'business'] ?? []
   const group = useRef<HTMLDivElement>(null)
   const ind = useIndicator(group, k)
   return (
@@ -1013,7 +1033,10 @@ function PricingBand() {
         <h2 className="h2" id="p-h">
           Start free. <span className="pill">Seriously.</span>
         </h2>
-        <p className="lede">Three plans for people, three for companies, and one we build with you. While you’re in Sandbox, every plan costs nothing.</p>
+        <p className="lede">
+          Three plans for people, three for companies, and one we build with you.
+          {pricing?.labels?.[PLAN_SANDBOX] === 'sandbox' ? ' While you’re in Sandbox, every plan costs nothing.' : null}
+        </p>
         <div className="pbar">
           <div className="switch" role="group" aria-label="Plans for" ref={group}>
             <span className="ind" style={ind} />
@@ -1025,27 +1048,32 @@ function PricingBand() {
             </button>
           </div>
           <div className="cur" role="group" aria-label="Currency">
-            {(['usd', 'gbp', 'eur'] as const).map((cur) => (
-              <button key={cur} type="button" aria-pressed={c === cur} data-c={cur} onClick={() => setC(cur)}>
-                {SYM[cur]}
+            {currencies.map((cur) => (
+              <button key={cur} type="button" aria-pressed={c === cur} data-c={cur.toLowerCase()} onClick={() => setC(cur)}>
+                {currencySymbol(cur)}
               </button>
             ))}
           </div>
         </div>
+        {state.status === 'failed' || (pricing && !ladders) ? (
+          <p className="note">The plans could not be read from this deployment just now, so no plan is printed here.</p>
+        ) : null}
         <div className="cards" id="plans" key={`${k}-${c}`}>
-          {PLANS[k].map(([name, price, feats], i) => (
-            <div key={name} className={i === 0 ? 'pc hot' : 'pc'} data-plan={name}>
-              <small>{name}</small>
-              <span className="p">
-                <PriceText v={price ? price[c] : null} c={c} />
-              </span>
-              <ul>
-                {feats.map((f) => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {c
+            ? ladder.map((plan, i) => (
+                <div key={plan.id} className={i === 0 ? 'pc hot' : 'pc'} data-plan={plan.name}>
+                  <small>{plan.name}</small>
+                  <span className="p">
+                    <PriceText plan={plan} c={c} />
+                  </span>
+                  <ul>
+                    {planLines(plan, plan.by_contract ? undefined : ladder[i - 1], k === 'companies').map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            : null}
         </div>
       </div>
     </section>
