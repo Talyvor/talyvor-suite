@@ -237,7 +237,7 @@ func streamApp(t *testing.T, up *streamUpstream) (*app, *http.Cookie) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "stream-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()
@@ -739,7 +739,7 @@ func driveStreamWithMintBound(t *testing.T, lensURL string, bound time.Duration)
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "cred-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()

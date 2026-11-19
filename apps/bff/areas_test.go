@@ -56,7 +56,7 @@ func areasApp(t *testing.T, u *areasUpstream) (*app, *http.Cookie) {
 		trackBaseURL: u.srv.URL, trackGatewaySecret: testTrackSecret,
 		docsBaseURL: u.srv.URL, docsGatewaySecret: testDocsSecret,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "areas-sid", "user-areas", "areas@example.com", "u-areas")
 	s, _ := auth.sessions.get("areas-sid")
 	s.trackWorkspaceID = "track-ws-areas"

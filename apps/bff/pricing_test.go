@@ -75,7 +75,7 @@ func pricingApp(t *testing.T, status int) (*app, *string, map[string]int) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	a := newApp(cfg, newSessionOnlyAuthenticator(cfg))
+	a := newApp(cfg, newAuthenticator(cfg))
 	a.cfg.webDist = t.TempDir()
 	return a, &gotAuth, hits
 }

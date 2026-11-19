@@ -805,7 +805,7 @@ export function App() {
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
             {/* The two front doors, also OUTSIDE the gate — a signup page you must already be
-                signed in to read is not a signup page. Same mechanism (/auth/login), different
+                signed in to read is not a signup page. The same door (the phone number), different
                 words: see areas/auth/Entry.tsx. */}
             <Route path="/signup" element={<SignUp />} />
             {/* B59.8 — sign-up's step 3, where the identity provider sends a new workspace: a passkey or the phone. */}

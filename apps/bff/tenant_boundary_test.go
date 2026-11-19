@@ -137,7 +137,7 @@ func twoSessionApp(t *testing.T, up *tenantUpstream) (*app, *http.Cookie, *http.
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
 	cfg = withTestTenantCreds(cfg)
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()
 

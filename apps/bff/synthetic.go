@@ -28,7 +28,7 @@ import (
 // turn into, or create, a real account either.
 //
 // POST /auth/synthetic/mobile (B57.86) takes the same header and body and makes the same checks, and
-// answers as /auth/mobile/session does: {"token","expires_at"}, a Bearer session the phone app sends,
+// answers as the phone door does (phone_signin.go): {"token","expires_at"}, a Bearer session the phone app sends,
 // and no cookie. It needs no Origin (lens.go's originExemptPath): the key is the proof. Sent with
 // another site's Origin it is refused like any write (B50.36).
 //
@@ -65,7 +65,7 @@ func (a *app) handleSyntheticSignIn(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSyntheticMobileSignIn is B57.86: the same request and the same refusals as /auth/synthetic,
-// answered as /auth/mobile/session answers the phone — a Bearer session in the body, no cookie.
+// answered as the phone door answers the phone — a Bearer session in the body, no cookie.
 func (a *app) handleSyntheticMobileSignIn(w http.ResponseWriter, r *http.Request) {
 	s, ok := a.syntheticSession(w, r)
 	if !ok {

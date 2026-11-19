@@ -417,7 +417,7 @@ func TestMarketplacePayoutsConnectForwardsTheSessionsEmail(t *testing.T) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	a := newApp(cfg, newSessionOnlyAuthenticator(cfg))
+	a := newApp(cfg, newAuthenticator(cfg))
 	seedProvisionedSession(a.auth, "sid-owner", "sub-owner", "owner@example.com", "ws_owner")
 	a.auth.sessions.put("sid-synth", session{
 		sub: "synthetic:ws_synth", email: "ws_synth" + syntheticEmailDomain, expires: time.Now().Add(time.Hour),

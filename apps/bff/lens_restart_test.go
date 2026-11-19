@@ -141,7 +141,7 @@ func TestChatQuestionWaitsForLensRestartInsteadOf502(t *testing.T) {
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 		webDist: t.TempDir(),
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "chat-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 

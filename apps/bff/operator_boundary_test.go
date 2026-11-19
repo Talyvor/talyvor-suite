@@ -33,7 +33,7 @@ func operatorApp(t *testing.T, subs []string) (*app, *http.Cookie, *http.Cookie)
 		publicBaseURL: opOrigin, sessionTTL: time.Hour,
 		operatorSubs: subs,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "sid-op", "sub-operator", "op@example.com", "ws-op")
 	seedProvisionedSession(auth, "sid-user", "sub-ordinary", "user@example.com", "ws-user")
 	a := newApp(cfg, auth)

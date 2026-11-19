@@ -464,30 +464,22 @@ const PINS: Record<string, Pin> = {
   // A deployer following one of these is mid-deploy and checking a refusal before they trip it.
   // The fragment is the REFUSAL ITSELF: a claim that the BFF stops for a variable is worth
   // exactly the line that stops it, so deleting the refusal reds the runbook that promises it.
-  'deploy/README.md:385|apps/bff/main.go:175': {
+  'deploy/README.md:317|apps/bff/main.go:170': {
     kind: 'LIVE',
     fragment: 'TRACK_WORKSPACE_ID must not be set',
     why: 'the ~~TRACK_WORKSPACE_ID~~ row promises "the BFF now REFUSES TO START if this is set"; it cited 112, which is a closing brace',
   },
-  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go:169': {
+  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go:164': {
     kind: 'LIVE',
     fragment: 'LENS_PROVISION_SECRET is required',
     why: '"BFF requires LENS_PROVISION_SECRET … Refuses to start, names itself" — it cited 94, a comment line naming a test',
   },
-  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go:178': {
+  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go:173': {
     kind: 'LIVE',
     fragment: 'LENS_API_KEY must not be set',
     why: '"BFF refuses to boot if LENS_API_KEY is set" — it cited 96, the docsGatewaySecret field',
   },
-  // The one that was RIGHT, and it is a note about stale prose rather than about behaviour — so it
-  // is LIVE on the prose: the day someone rewrites that comment, the note stops being true and
-  // this reds instead of quietly outliving the thing it reports.
-  'deploy/FULL-STACK-DEPLOY.md:48|apps/bff/auth.go:14': {
-    kind: 'LIVE',
-    fragment: 'one configured workspace credential',
-    why: 'the "cosmetic, not blocking" note that auth.go still describes the old one-workspace model — the only in-repo runbook pointer that was accurate',
-  },
-  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:219': {
+  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:220': {
     kind: 'LIVE',
     fragment: '"/api/docs/spaces"',
     why: 'the Docs proxy mechanics are "same as the existing route"; it cited lens.go:74, which is /api/bonds — three more Docs routes were mounted above it',

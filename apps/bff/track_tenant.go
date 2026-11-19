@@ -129,7 +129,7 @@ func (a *app) trackWorkspaceFor(w http.ResponseWriter, r *http.Request) (string,
 	sid, s, ok := a.auth.sessionAndIDFrom(r)
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
-			"error": "authentication required — sign in at /auth/login"})
+			"error": "authentication required — sign in at /signin"})
 		return "", false
 	}
 	if s.trackWorkspaceID != "" {
