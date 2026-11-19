@@ -630,6 +630,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/alerts/channels", a.requireTenant(a.handleMoneyAlertChannels))        // B28.66, money_search.go
 	a.mux.HandleFunc("/api/money/alerts/channels/{id}", a.requireTenant(a.handleMoneyAlertChannel))    // B28.66, money_search.go
 	a.mux.HandleFunc("/api/money/alerts/deliveries", a.requireTenant(a.handleMoneyAlertDeliveries))    // B28.66, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance", a.requireTenant(a.handleMoneyLowBalance))               // B28.61, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance/alerts", a.requireTenant(a.handleMoneyLowBalanceAlerts))  // B28.61, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance/{id}", a.requireTenant(a.handleMoneyLowBalanceOne))       // B28.61, money_search.go
 	a.mux.HandleFunc("/api/money/budgets", a.requireTenant(a.handleMoneyBudgets))                      // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/budgets/{id}", a.requireTenant(a.handleMoneyBudget))                  // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/spending/subscriptions", a.requireTenant(a.handleMoneySubscriptions)) // B41.20, money_search.go

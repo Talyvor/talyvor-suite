@@ -24,7 +24,7 @@ describe('the chosen logo is the only logo (B57.79)', () => {
     }
   })
 
-  it('serves only the kit’s SVGs, byte for byte, in the web app and on the BFF’s pages', () => {
+  it('serves only the kit’s SVGs and small-logo PNGs, byte for byte, in the web app and on the BFF’s pages', () => {
     const copies = [
       ...readdirSync(at('apps/web/public/brand/logo')).map((f) => `apps/web/public/brand/logo/${f}`),
       ...readdirSync(at('apps/bff/brand')).map((f) => `apps/bff/brand/${f}`),
@@ -32,7 +32,9 @@ describe('the chosen logo is the only logo (B57.79)', () => {
     ]
     expect(copies.length).toBeGreaterThanOrEqual(15)
     for (const copy of copies) {
-      const source = resolve(KIT, 'svg', copy.split('/').pop()!)
+      // B64.11: the small logo's PNG exports, for where it shows under 240 px, are the kit's png/logo files.
+      const name = copy.split('/').pop()!
+      const source = resolve(KIT, name.endsWith('.png') ? 'png/logo' : 'svg', name)
       expect(existsSync(source), `${copy} is not a kit file`).toBe(true)
       expect(readFileSync(at(copy)).equals(readFileSync(source)), copy).toBe(true)
     }

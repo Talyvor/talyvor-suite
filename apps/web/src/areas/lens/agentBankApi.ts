@@ -509,6 +509,30 @@ export interface AlertDelivery {
 }
 
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
+/** B28.61 — Lens economy.BalanceThreshold (B28.334): the owner's low-balance alert for an agent's balance in a currency. */
+export interface BalanceThreshold {
+  id: string
+  agent_id: string
+  currency: string
+  threshold_minor: number
+  /** what the agent's open accounts in currency hold now */
+  balance_minor: number
+  /** false: the agent has no open account in currency, so nothing is checked */
+  has_account: boolean
+  below: boolean
+}
+
+/** B28.61 — Lens economy.LowBalanceAlert (B28.334): an hour an agent's balance was found below its threshold, one an hour. */
+export interface LowBalanceAlert {
+  id: string
+  agent_id: string
+  currency: string
+  hour_start: string
+  balance_minor: number
+  threshold_minor: number
+  created_at: string
+}
+
 export interface LimitAlert {
   id: string
   kind: 'budget' | 'card' | 'agent_limit'
@@ -1345,6 +1369,12 @@ export const agentBankApi = {
   addAlertChannel: (kind: AlertChannel['kind'], url: string) => send<AlertChannel>('POST', '/api/money/alerts/channels', { kind, url }),
   removeAlertChannel: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/alerts/channels/${e(id)}`),
   alertDeliveries: () => getJSON<{ deliveries: AlertDelivery[] | null }>('/api/money/alerts/deliveries', { deliveries: 'list' }),
+  // B28.61 — a low-balance alert for an agent's balance in a currency (Lens B28.334).
+  lowBalance: () => getJSON<{ thresholds: BalanceThreshold[] | null }>('/api/money/low-balance', { thresholds: 'list' }),
+  setLowBalance: (agent_id: string, currency: string, threshold_minor: number) =>
+    send<BalanceThreshold>('PUT', '/api/money/low-balance', { agent_id, currency, threshold_minor }),
+  removeLowBalance: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/low-balance/${e(id)}`),
+  lowBalanceAlerts: () => getJSON<{ alerts: LowBalanceAlert[] | null }>('/api/money/low-balance/alerts', { alerts: 'list' }),
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),

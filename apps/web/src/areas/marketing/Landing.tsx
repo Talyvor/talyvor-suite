@@ -4,6 +4,7 @@ import { useSignupProbe } from '../../lib/signupOpen'
 import { COMPANY_CONTACT, COMPANY_LINE } from '../../company'
 import SITE_CSS from './site.css?raw'
 import { formatMinor, usePricing, type LadderPlan } from './pricingApi'
+import { smallLogoSrc } from '@talyvor/ui'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). talyvor.com redirects here. It must render
 // with no session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so nothing here may
@@ -160,7 +161,7 @@ function Nav() {
     <nav className="nav" aria-label="Main">
       <div className="wrap">
         <a className="logo" href="#top" aria-label="Talyvor home">
-          <img src={`${MEDIA}/logo.ee7e151a.svg`} alt="Talyvor" />
+          <img {...smallLogoSrc('dark')} alt="Talyvor" width={240} height={76} />
         </a>
         <div className="links">
           <a href="#how">How it works</a>
@@ -1153,7 +1154,7 @@ function Footer() {
   return (
     <footer>
       <div className="wrap">
-        <img src={`${MEDIA}/logo.ee7e151a.svg`} alt="Talyvor" />
+        <img {...smallLogoSrc('dark')} alt="Talyvor" width={240} height={76} />
         <nav aria-label="Footer">
           <a href="#how">How it works</a>
           <a href="#try">Try it</a>

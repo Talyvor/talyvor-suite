@@ -1128,6 +1128,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/alerts/channels", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensAlertChannelBody",
   },
+  // B28.61 — a low-balance alert for an agent, set on the agent's page (Lens B28.334).
+  {
+    route: "PUT /v1/money/low-balance",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyLowBalance(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_low_balance_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/low-balance", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensBalanceThresholdBody",
+  },
   // B52.28 — a Scan agent's watch, set on Scan agents (Lens B52.27).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/scan-watches",

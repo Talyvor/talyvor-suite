@@ -54,7 +54,7 @@
 }
 @media (max-width: 400px) {
   .tv4 .nav .wrap { gap: 12px; }
-  .tv4 .nav .logo img { width: 112px; }
+  .tv4 .nav .logo img { width: 120px; }
   .tv4 .nav .btn { height: 40px; padding: 0 14px; font-size: 14px; }
   .tv4 .hero .ctas .btn { width: 100%; white-space: normal; text-align: center; }
   .tv4 .final .ctas .btn { width: 100%; }
@@ -337,7 +337,7 @@
 .tv4 .final .mail { margin-top: 22px; font-weight: 650; color: var(--fog); user-select: all; }
 .tv4 footer { border-top: 1px solid var(--line); padding-block: 36px max(36px, env(safe-area-inset-bottom, 0px)); color: var(--fog); font-size: 14px; }
 .tv4 footer .wrap { display: flex; flex-wrap: wrap; gap: 18px 30px; align-items: center; justify-content: space-between; }
-.tv4 footer img { width: 120px; display: block; }
+.tv4 footer img { width: 120px; height: auto; display: block; }
 .tv4 footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
 .tv4 footer a { text-decoration: none; }
 .tv4 footer a:hover { color: var(--snow); }
