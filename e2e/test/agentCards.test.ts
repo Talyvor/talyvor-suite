@@ -7,7 +7,8 @@ import { agentCards } from '../src/agentCards.ts'
 
 // B46.20 — agent-cards against the stub Lens, whose card desk holds a batch's total once on its approval as Lens's does
 // (selftest/stub-payees.ts): it passes on a Lens that holds once, and FAILs when approving again holds the total again.
-// The funding invoice is paid through the stub's own card checkout, as the pay page's browser would.
+// The funding invoice is paid through the stub's own card checkout, as the pay page's browser would. B17.512 — and it judges
+// "closing within 24 hours" on the stub's clock, which may run ahead of the runner's, and FAILs on cards that close in 25.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -24,11 +25,11 @@ afterEach(() => {
   stub = undefined
 })
 
-async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
+async function runAgainstStub(broken: string, aheadMs = 0): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
   const port = await freePort()
   const base = `http://127.0.0.1:${port}`
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
-    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'agent-cards', STUB_BREAK: broken },
+    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'agent-cards', STUB_BREAK: broken, STUB_CLOCK_AHEAD_MS: String(aheadMs) },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   await new Promise<void>((resolve, reject) => {
@@ -58,5 +59,17 @@ describe('agent-cards (B46.20)', () => {
     const { verdict } = await runAgainstStub('card-hold-twice')
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/approving the cards again held more: the agent's account went from 10000 to -30000 minor$/)
+  })
+
+  // B17.512 — the 24 hours are Lens's, read from its Date headers, not the runner's clock.
+  it("passes on a Lens whose clock runs 200 ms ahead of the runner's", async () => {
+    const { verdict } = await runAgainstStub('', 200)
+    expect(verdict).toMatchObject({ pass: true })
+  })
+
+  it('FAILs when the cards close in 25 hours', async () => {
+    const { verdict } = await runAgainstStub('card-life-25h')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/the British Airways card must be active, locked to British Airways, capped at 20000 GBP and closing within 24 hours/)
   })
 }, 60_000)
