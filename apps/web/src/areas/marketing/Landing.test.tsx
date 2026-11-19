@@ -69,6 +69,17 @@ describe('Landing', () => {
     expect(screen.getByText('It switches on with our launch partner, and early users go first.')).toBeInTheDocument()
   })
 
+  // B17.498 — the site-truth scenario reads every public page's banner and contentinfo for the site's one header and
+  // footer (B51.1): these are the addresses it looks for.
+  it('carries the site’s one header and one footer', () => {
+    render(<Landing />)
+    const hrefs = (el: HTMLElement) => within(el).getAllByRole('link').map((a) => a.getAttribute('href'))
+    const header = hrefs(screen.getByRole('banner'))
+    for (const h of ['/marketing', '/pricing', '/your-money', '/documentation', '/']) expect(header).toContain(h)
+    const footer = hrefs(screen.getByRole('contentinfo'))
+    for (const h of ['/pricing', '/your-money', '/documentation', '/privacy', '/terms', `mailto:${COMPANY_CONTACT}`]) expect(footer).toContain(h)
+  })
+
   it('offers the company address and line, the policies, and the AI Agents Directory badge as they give it', () => {
     render(<Landing />)
     expect(CONTACT_EMAIL).toBe(COMPANY_CONTACT)
@@ -107,7 +118,7 @@ describe('Landing', () => {
   // are the kit's small-logo PNGs on the night ground, the 240 px file at 1x and the 480 px file at 2x, never the SVG.
   it('shows the kit’s small-logo PNGs in the header and footer, 1x and 2x, never under 120 px', () => {
     const { container } = render(<Landing />)
-    for (const img of [container.querySelector('nav.nav .logo img')!, container.querySelector('footer img')!]) {
+    for (const img of [container.querySelector('.nav .logo img')!, container.querySelector('footer img')!]) {
       expect(img.getAttribute('src')).toBe('/brand/logo/talyvor-logo-small-on-dark-240.png')
       expect(img.getAttribute('srcset')).toBe('/brand/logo/talyvor-logo-small-on-dark-240.png 1x, /brand/logo/talyvor-logo-small-on-dark-480.png 2x')
       expect(img.getAttribute('alt')).toBe('Talyvor')
@@ -369,6 +380,22 @@ describe('Pricing on the page', () => {
     expect(live.container.querySelector('.price .lede')).toHaveTextContent(
       /^Three plans for people, three for companies, and one we build with you\.$/,
     )
+  })
+
+  it('labels the plans Live or Sandbox as Lens labels spending on Talyvor, and not at all while it serves no label', async () => {
+    serve({ spend_on_talyvor: 'sandbox' })
+    const sandbox = render(<Landing />)
+    await waitFor(() => expect(sandbox.container.querySelector('#pricing [data-status-label]')).not.toBeNull())
+    const chip = sandbox.container.querySelector('#pricing [data-status-label]')!
+    expect(chip).toHaveAttribute('data-status-label', 'sandbox')
+    expect(chip).toHaveAttribute('data-status-key', 'spend_on_talyvor')
+    expect(chip).toHaveTextContent('Sandbox')
+    cleanup()
+    vi.restoreAllMocks()
+    serve()
+    const none = render(<Landing />)
+    await waitFor(() => expect(none.container.querySelectorAll('#plans .pc')).toHaveLength(3))
+    expect(none.container.querySelector('[data-status-label]')).toBeNull()
   })
 
   it('types no price into the page source', () => {
