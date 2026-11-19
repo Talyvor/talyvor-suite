@@ -222,7 +222,8 @@ export function IdentityChecks({
     if (passed && waited.current) onPassed?.()
   }, [passed, onPassed])
   if (v.isError) return <p className="text-body text-ink-2">Your checks could not be read just now.</p>
-  if (v.isPending || type === null) return <p className="text-body text-ink-2">Reading…</p>
+  // B17.501 — a Business's company details are read too, so "Confirm who I am" never shows before its company form.
+  if (v.isPending || type === null || (type === 'business' && company.isPending)) return <p className="text-body text-ink-2">Reading…</p>
 
   const level = rank(v.data.level)
   const need = neededLevel(type)
