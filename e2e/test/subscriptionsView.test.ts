@@ -7,6 +7,7 @@ import type { ScenarioCtx, Verdict } from '../src/scenarios.ts'
 
 // B41.20 — subscriptions-view against the stub Lens (selftest/stub-bank.ts), the app's half left out: it passes on a Lens that
 // holds a monthly standing order and a renewing listing subscription billed once, and FAILs on one whose subscription does not renew.
+// B17.472 — on a workspace whose areas do not name the marketplace, only the standing order is played.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -23,10 +24,10 @@ afterEach(() => {
   stub = undefined
 })
 
-async function runOnStub(broken: string): Promise<Verdict> {
+async function runOnStub(broken: string, areas?: string): Promise<Verdict> {
   const port = await freePort()
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
-    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'subscriptions-view', STUB_BREAK: broken },
+    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'subscriptions-view', STUB_BREAK: broken, ...(areas === undefined ? {} : { STUB_AREAS: areas }) },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   await new Promise<void>((resolve, reject) => {
@@ -43,6 +44,13 @@ describe('subscriptions-view (B41.20)', () => {
     const verdict = await runOnStub('')
     expect(verdict.detail).toMatch(/^the standing order next pays .+, the subscription renews .+, billed once$/)
     expect(verdict.pass).toBe(true)
+  })
+
+  it('B17.472: plays the standing order alone on a workspace without the marketplace', async () => {
+    const verdict = await runOnStub('', '')
+    expect(verdict.detail).toMatch(/^the standing order next pays .+, and the marketplace is hidden on this workspace, so no listing subscription$/)
+    expect(verdict.pass).toBe(true)
+    expect(await runOnStub('', 'marketplace')).toMatchObject({ pass: true, detail: expect.stringMatching(/billed once$/) })
   })
 
   it('FAILs when a monthly subscription does not renew', async () => {

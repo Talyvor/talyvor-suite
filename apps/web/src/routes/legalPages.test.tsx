@@ -64,6 +64,8 @@ describe('the legal pages', () => {
     // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const end = screen.getByText(new RegExp(`^End of ${title}\\.`))
     expect(end).toHaveTextContent(`End of ${title}. Last updated ${long}. Back to the contents`)
+    // B17.480 — and it is the document's last line: nothing after it inside main.
+    expect(container.querySelector('main')?.textContent?.trim().endsWith('Back to the contents')).toBe(true)
     expect(screen.getByText(/Draft: needs legal review/)).toBeInTheDocument()
     // B27.38 — each says what Tare training keeps and why, in a paragraph marked as a draft.
     const tare = screen.getByRole('heading', { level: 2, name: /Tare training|Learning from your prose/ }).closest('section')!
