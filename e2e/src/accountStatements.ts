@@ -35,6 +35,36 @@ export async function bandBalance(band: Pick<Locator, 'locator'>): Promise<strin
   return ((await band.locator('dd').nth(3).locator('[data-money]').textContent()) ?? '').trim()
 }
 
+/** One CSV row's fields; a quoted field may hold commas and doubled quotes. */
+function fields(row: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let quoted = false
+  for (let i = 0; i < row.length; i++) {
+    const c = row[i]
+    if (quoted) {
+      if (c === '"' && row[i + 1] === '"') { cur += '"'; i++ } else if (c === '"') quoted = false
+      else cur += c
+    } else if (c === '"') quoted = true
+    else if (c === ',') { out.push(cur); cur = '' } else cur += c
+  }
+  out.push(cur)
+  return out
+}
+
+/** The closing balance Lens's statement CSV ends on: the last row, its kind "closing", read by the header's own column
+ * names. Lens adds columns after balance_after_minor (task, state), so the figure is found by name, not by position. */
+export function csvClosing(text: string): number | undefined {
+  const rows = text.trim().split(/\r?\n/)
+  if (rows.length < 2) return undefined
+  const head = fields(rows[0])
+  const last = fields(rows[rows.length - 1])
+  const kind = head.indexOf('kind')
+  const balance = head.indexOf('balance_after_minor')
+  if (kind < 0 || balance < 0 || last[kind] !== 'closing' || !/^-?\d+$/.test(last[balance] ?? '')) return undefined
+  return Number(last[balance])
+}
+
 export function accountStatements(): Scenario {
   return {
     id: 'account-statements',
@@ -90,7 +120,7 @@ export function accountStatements(): Scenario {
         const csv = await fromPage(page, `/api/money/accounts/${id}/statement?${period}&format=csv`)
         const closing = csv.text.trim().split('\n').at(-1) ?? ''
         ctx.evidence.push({ note: 'the CSV', answer: `${csv.status} ${csv.type} ${csv.text.slice(0, 400)}` })
-        if (csv.status !== 200 || !csv.type.startsWith('text/csv') || !closing.includes(',closing,') || !closing.endsWith(`,${st.closing_minor}`)) {
+        if (csv.status !== 200 || !csv.type.startsWith('text/csv') || csvClosing(csv.text) !== st.closing_minor) {
           return fail(`Download CSV must be Lens's file closing on ${st.closing_minor}; it answered ${csv.status} ${csv.type}, last line "${closing}"`)
         }
 
