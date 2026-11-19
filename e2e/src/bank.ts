@@ -1762,21 +1762,32 @@ export function agentPauseAll(seed: number): Scenario {
       }
       const err = await bank.pauseAll(`nightly check ${seed}`)
       if (err !== undefined) return fail(`Pause every agent was refused: ${err}`)
-      const spends0 = new Set((await spendRows(ctx)).map((x) => x.id))
-      for (const { a, key } of agents) {
-        const t = await agentAsks(ctx, key, sum(r).q, `${a.name}, every agent paused`)
-        if (t.ok) return fail(`with every agent paused, ${a.name} was served: "${t.value.text}"`)
-        if (t.status !== 403 || !/every agent in this workspace is paused/.test(t.error)) {
-          return fail(`${a.name} was refused, but not by the pause: ${t.status} ${t.error}`)
+      // B17.511 — every way out once paused starts them again: a pause left behind (the spend cap ended this as SKIP
+      // on 8 Oct) refused user 292's next three scenarios "every agent in this workspace is paused".
+      let pausedAll = true
+      try {
+        const spends0 = new Set((await spendRows(ctx)).map((x) => x.id))
+        for (const { a, key } of agents) {
+          const t = await agentAsks(ctx, key, sum(r).q, `${a.name}, every agent paused`)
+          if (t.ok) return fail(`with every agent paused, ${a.name} was served: "${t.value.text}"`)
+          if (t.status !== 403 || !/every agent in this workspace is paused/.test(t.error)) {
+            return fail(`${a.name} was refused, but not by the pause: ${t.status} ${t.error}`)
+          }
+        }
+        const paused = await bookOf(ctx)
+        const moved = agents.filter(({ a }) => agentIn(paused, a.id)?.balance_ulxc !== 500_000)
+        if (moved.length > 0 || (await spendRows(ctx)).some((x) => !spends0.has(x.id))) {
+          return fail(`paused, yet something was charged: ${moved.map(({ a }) => a.name).join(', ') || 'the ledger'} moved`)
+        }
+        const again = await bank.resumeAll()
+        if (again !== undefined) return fail(`Start every agent again was refused: ${again}`)
+        pausedAll = false
+      } finally {
+        if (pausedAll) {
+          const left = await bank.resumeAll().catch((e: unknown) => String(e))
+          ctx.evidence.push({ note: `every agent started again on the way out${left === undefined ? '' : `, which was refused: ${left}`}` })
         }
       }
-      const paused = await bookOf(ctx)
-      const moved = agents.filter(({ a }) => agentIn(paused, a.id)?.balance_ulxc !== 500_000)
-      if (moved.length > 0 || (await spendRows(ctx)).some((x) => !spends0.has(x.id))) {
-        return fail(`paused, yet something was charged: ${moved.map(({ a }) => a.name).join(', ') || 'the ledger'} moved`)
-      }
-      const again = await bank.resumeAll()
-      if (again !== undefined) return fail(`Start every agent again was refused: ${again}`)
       const { q, want } = sum(r)
       // B28.459 — past every stored answer, as rules.ts asks: "served" means the model answered. A wrong answer stored
       // once was replayed to every night's fresh workspace from the shared pool; the fresh answer replaces it.
