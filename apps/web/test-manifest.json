@@ -122,7 +122,7 @@
   "src/areas/lens/format.test.ts": 66,
   "src/areas/lens/Held.test.tsx": 7,
   "src/areas/lens/HeldCalls.test.tsx": 4,
-  "src/areas/lens/HelpAndAccount.test.tsx": 7,
+  "src/areas/lens/HelpAndAccount.test.tsx": 8,
   "src/areas/lens/Home.test.tsx": 27,
   "src/areas/lens/InstantTransfer.test.tsx": 16,
   "src/areas/lens/Invoices.test.tsx": 5,

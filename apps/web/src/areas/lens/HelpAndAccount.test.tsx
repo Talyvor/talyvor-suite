@@ -9,7 +9,7 @@ import { App, queryClient } from '../../App'
 const at = '2026-11-12T09:00:00Z'
 const req = (p: Record<string, unknown>) => ({ id: 1, kind: 'support', state: 'received', reference: '', message: '', answer: '', filed_at: at, updated_at: at, ...p })
 
-function mockBff(start: unknown[] = [], closure?: { balances: Record<string, number> }) {
+function mockBff(start: unknown[] = [], closure?: { balances: Record<string, number> }, readLags = false) {
   const posts: unknown[] = []
   let requests = start
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -18,7 +18,7 @@ function mockBff(start: unknown[] = [], closure?: { balances: Record<string, num
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url !== '/api/workspace/requests') return new Response('null', { status: 404 })
-    if (init?.method !== 'POST') return json({ requests })
+    if (init?.method !== 'POST') return json({ requests: readLags ? start : requests })
     const body = JSON.parse(String(init.body)) as { kind: string; message: string }
     posts.push(body)
     if (body.kind === 'account_closure' && closure) {
@@ -83,6 +83,16 @@ describe('help and complaints, closing the account, your data (B59.28)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Ask for a copy' }))
     await waitFor(() => expect(posts).toEqual([{ kind: 'data_export', message: '' }]))
+  })
+
+  // B17.499 — the copy asked for is listed from Lens's answer to the ask, even while a read of the list does not show it yet.
+  it('lists a copy asked for as A copy of your data, Received, before a read shows it', async () => {
+    mockBff([], undefined, true)
+    open('/settings/data')
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask for a copy' }))
+    const row = await screen.findByTestId('request-1')
+    expect(row.textContent).toContain('A copy of your data')
+    expect(row.textContent).toContain('Received')
   })
 
   // B57.139 — drawn as Pocket's w-card: the crumb back to Settings, the page's heading and its line, then what was
