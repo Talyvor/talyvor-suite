@@ -10,6 +10,8 @@ import { type BalanceThreshold, type CurrencyAccount, agentBankApi, refusalText 
 // accounts the owner sets the amount to be alerted below (Lens B28.334, PUT /api/money/low-balance); while the account
 // holds less, Lens writes one alert an hour, however often it is checked, and sends it to the alert channels. The card
 // lists this agent's latest alerts from GET /api/money/low-balance/alerts.
+// B57.201: drawn as Pocket draws a list the owner changes (w-budgets' Your budgets): a white card under its own heading,
+// a hairline between the accounts and between the alerts, and Remove the danger button named for what it removes.
 
 export const LOW_BALANCE_KEY = ['low-balance']
 const LOW_BALANCE_ALERTS_KEY = ['low-balance', 'alerts']
@@ -45,7 +47,7 @@ function AccountAlert({ agentId, account, threshold }: { agentId: string; accoun
   const testid = `low-balance-${account.currency}`
   if (threshold && !editing)
     return (
-      <div data-testid={testid}>
+      <div data-testid={testid} className="border-t border-line first:border-t-0">
         <Row
           wrap
           title={accountWords(account.currency)}
@@ -60,14 +62,21 @@ function AccountAlert({ agentId, account, threshold }: { agentId: string; accoun
               <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(true)}>
                 Change
               </Button>
-              <Button type="button" variant="outline" size="sm" disabled={remove.isPending} onClick={() => remove.mutate(threshold.id)}>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                aria-label={`Remove the low balance alert on the ${accountWords(account.currency)}`}
+                disabled={remove.isPending}
+                onClick={() => remove.mutate(threshold.id)}
+              >
                 Remove
               </Button>
             </span>
           }
         />
         {remove.isError ? (
-          <p role="alert" className="text-body text-ink-2">
+          <p role="alert" className="pb-2.5 text-body text-ink-2">
             {refusalText(remove.error)}
           </p>
         ) : null}
@@ -110,8 +119,8 @@ export function LowBalanceCard({ agent, accounts }: { agent: { id: string; name:
   const mine = (thresholds.data?.thresholds ?? []).filter((t) => t.agent_id === agent.id)
   const raised = (alerts.data?.alerts ?? []).filter((a) => a.agent_id === agent.id).slice(0, 5)
   return (
-    <Card className="grid gap-3" data-testid="agent-page-low-balance">
-      <Eyebrow>Low balance alert</Eyebrow>
+    <Card tone="white" className="grid gap-2" data-testid="agent-page-low-balance">
+      <h2 className="font-display text-reading font-bold text-ink">Low balance alert</h2>
       <p className="text-body text-ink-3">An alert goes to you once an hour while {agent.name}’s balance is below the amount you set.</p>
       {thresholds.isError ? (
         <div role="alert" className="grid justify-items-start gap-3">
@@ -132,16 +141,22 @@ export function LowBalanceCard({ agent, accounts }: { agent: { id: string; name:
         </div>
       )}
       {raised.length > 0 ? (
-        <div className="grid gap-1" data-testid="low-balance-alerts">
-          <span className="text-caption font-semibold text-ink-2">Latest alerts</span>
-          {raised.map((a) => (
-            <p key={a.id} className="text-caption text-ink-3" data-testid={`low-balance-alert-${a.id}`}>
-              <span className="font-figure text-ink-2">
-                <Money minor={a.balance_minor} currency={a.currency} />, below <Money minor={a.threshold_minor} currency={a.currency} />
-              </span>{' '}
-              · <span className="font-figure">{formatWhen(a.created_at)}</span>
-            </p>
-          ))}
+        <div className="mt-2" data-testid="low-balance-alerts">
+          <Eyebrow>Latest alerts</Eyebrow>
+          <div className="mt-1">
+            {raised.map((a) => (
+              <div key={a.id} className="border-t border-line first:border-t-0" data-testid={`low-balance-alert-${a.id}`}>
+                <Row
+                  title={
+                    <span className="font-figure">
+                      <Money minor={a.balance_minor} currency={a.currency} />, below <Money minor={a.threshold_minor} currency={a.currency} />
+                    </span>
+                  }
+                  line={<span className="font-figure">{formatWhen(a.created_at)}</span>}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </Card>
