@@ -54,13 +54,15 @@ const PlayIcon = () => (
 // ── The loops ────────────────────────────────────────────────────────────────────────────────────
 
 /** Each film starts on its own first frame (the poster), loads one at a time in page order, and runs only while on
- *  screen and in a visible tab. Reduced motion keeps the posters. B64.4: a film is fetched in full and plays from a
- *  blob, so it never stalls mid-loop; a failed fetch, or a blob the browser will not play, falls back to its file URL. */
+ *  screen and in a visible tab. Reduced motion keeps the posters, and switched on mid-visit stops every film.
+ *  B64.4: a film is fetched in full and plays from a blob, so it never stalls mid-loop; a failed fetch, or a blob the
+ *  browser will not play, falls back to its file URL. */
 function useLoops(root: React.RefObject<HTMLDivElement>) {
   useEffect(() => {
     const el = root.current
     if (!el) return
-    const REDUCE = reduceMotion()
+    const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : undefined
+    let REDUCE = !!motion?.matches
     const loops = [...el.querySelectorAll<HTMLVideoElement>('video[data-loop]')]
     const seen = new Map<HTMLVideoElement, boolean>()
     const small =
@@ -117,16 +119,33 @@ function useLoops(root: React.RefObject<HTMLDivElement>) {
       loops.forEach((v) => observer?.observe(v))
       document.addEventListener('visibilitychange', onVisibility)
     } else loops.forEach((v) => seen.set(v, true))
-    if (!REDUCE)
+    let loading = false
+    const loadAll = () => {
+      if (loading || REDUCE) return
+      loading = true
       void (async () => {
         for (const v of loops) {
           if (stopped) return
-          await load(v)
+          if (!v.dataset.ready) await load(v)
         }
       })()
+    }
+    // Each poster is its loop's first frame, so a loop put back to 0 shows its poster.
+    const onMotion = () => {
+      REDUCE = !!motion?.matches
+      if (!REDUCE) {
+        loops.forEach((v) => run(v, seen.get(v)))
+        return loadAll()
+      }
+      el.querySelectorAll('video').forEach((v) => v.pause())
+      loops.forEach((v) => (v.currentTime = 0))
+    }
+    motion?.addEventListener?.('change', onMotion)
+    loadAll()
     return () => {
       stopped = true
       observer?.disconnect()
+      motion?.removeEventListener?.('change', onMotion)
       document.removeEventListener('visibilitychange', onVisibility)
       loops.forEach((v) => v.pause())
       blobs.forEach((b) => URL.revokeObjectURL(b))
@@ -442,12 +461,12 @@ function HowTo({ playRef }: { playRef: React.MutableRefObject<(t: number | null)
   playRef.current = playFrom
   useEffect(() => {
     const el = film.current, v = vid.current
-    if (!el || !v || typeof IntersectionObserver !== 'function' || reduceMotion()) return
+    if (!el || !v || typeof IntersectionObserver !== 'function') return
     let once = false
     const io = new IntersectionObserver(
       (es) =>
         es.forEach((e) => {
-          if (e.isIntersecting && !once) {
+          if (e.isIntersecting && !once && !reduceMotion()) {
             once = true
             playFrom(null)
           } else if (!e.isIntersecting && !v.paused) v.pause()
@@ -556,7 +575,7 @@ function Penny() {
     () => () => {
       cancelAnimationFrame(frame.current)
       timers.current.forEach(clearTimeout)
-      document.documentElement.style.overflow = ''
+      document.documentElement.style.overflowY = ''
     },
     [],
   )
@@ -590,7 +609,8 @@ function Penny() {
 
   const open = (p: Pending) => {
     opener.current = document.activeElement as HTMLElement | null
-    document.documentElement.style.overflow = 'hidden'
+    // The vertical axis only: the overflow shorthand would take the page's overflow-x: clip with it on close.
+    document.documentElement.style.overflowY = 'hidden'
     setFaceid('off')
     setPending(p)
   }
@@ -598,7 +618,7 @@ function Penny() {
     if (pending) approveBtn.current?.focus({ preventScroll: true })
   }, [pending])
   const close = useCallback(() => {
-    document.documentElement.style.overflow = ''
+    document.documentElement.style.overflowY = ''
     setPending(null)
     setFaceid('off')
     busy.current = false
