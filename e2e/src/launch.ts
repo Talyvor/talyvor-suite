@@ -177,7 +177,7 @@ export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
   ...Object.fromEntries([
     'agent-analytics', 'agent-archive', 'agent-hourly-limit', 'agent-limit', 'agent-limit-boost', 'agent-model-limit', 'agent-pause-all',
     'agent-request-rate', 'agent-rules-unbypassable', 'first-agent', 'keys-unlisted', 'ledger-call-once', 'ledger-moves-at-once',
-    'sdk-wallet-quickstart', 'statement-reconciles', 'subscriptions-view', 'wallet-currency', 'wallet-home', 'wallet-onboarding',
+    'sdk-wallet-quickstart', 'statement-reconciles', 'wallet-currency', 'wallet-home', 'wallet-onboarding',
   ].map((id) => [id, NEEDS_A_MODEL])),
   ...Object.fromEntries([
     'agent-approval', 'agent-approval-push', 'agent-payee-daily-cap', 'agent-payee-lists', 'agent-runs-out-date', 'approvals-badge',
