@@ -9,8 +9,9 @@ import { App, queryClient } from '../../App'
 
 const MEANINGS = ['signed in', 'email and phone confirmed', 'identity checked', 'company checked']
 
-/** `start` is the record's checks before the page opens, newest first (B65.2). */
-function mockBff(start: Array<Record<string, unknown>> = []) {
+/** `start` is the record's checks before the page opens, newest first (B65.2). `business` makes the account a Business
+ *  whose company details answer only once `business` resolves (B17.501). */
+function mockBff(start: Array<Record<string, unknown>> = [], business?: Promise<void>) {
   const sent: Array<{ url: string; body: unknown }> = []
   const checks: Array<Record<string, unknown>> = [...start]
   const reached = () => checks.filter((c) => c.status === 'completed').length
@@ -28,7 +29,11 @@ function mockBff(start: Array<Record<string, unknown>> = []) {
     const method = init?.method ?? 'GET'
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
-    if (url === '/api/workspace/account') return json({ account_type: 'personal', money_kind: 'hybrid' })
+    if (url === '/api/workspace/account') return json({ account_type: business ? 'business' : 'personal', money_kind: 'hybrid' })
+    if (url === '/api/workspace/business' && business) {
+      await business
+      return json({ company_name: '', registration_number: '', country: '', people: [] })
+    }
     if (url === '/api/verification') return json(record())
     const m = /^\/api\/verification\/(contact|identity|company)$/.exec(url)
     if (m && method === 'POST') {
@@ -110,6 +115,25 @@ describe('the Verification screen', () => {
         },
       },
     ])
+  })
+
+  // B17.501 — the nightly found "Confirm who I am" on a Business's screen with no company form: the company details are
+  // read after the account, and answered later than the checks on a real network. The button waits for them.
+  it('shows a Business owner "Confirm who I am" only with the Company details form beside it', async () => {
+    let answer = () => {}
+    mockBff([], new Promise<void>((resolve) => (answer = resolve)))
+    window.history.pushState({}, '', '/settings/verification')
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Confirm who you are' })).toBeTruthy()
+    await screen.findByText('Reading…', { exact: false })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByRole('button', { name: 'Confirm who I am' })).toBeNull()
+
+    answer()
+    const confirm = await screen.findByRole('button', { name: 'Confirm who I am' })
+    expect(confirm).toBeTruthy()
+    expect(screen.getByRole('form', { name: 'Company details' })).toBeTruthy()
   })
 
   // B57.173 — drawn as Pocket's w-verification lays it out: one line under the title, and every check on the record
