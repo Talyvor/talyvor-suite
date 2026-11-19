@@ -57,6 +57,7 @@ import { WorkspaceLabel, useWorkspaceLabels } from '../../labels/workspace'
 import { PAY_OUT } from '../../labels/capabilities'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { PayToAPerson } from './PayPerson'
+import { ListFileDownload } from './ListFile'
 
 // Pay.tsx — B30.96: money out of an account. Saved payees outside Talyvor, each checked against its account by the account
 // partner (Lens B30.16); a payment to one, from the company's or an agent's account (B30.17), with an agent's requests that
@@ -1320,7 +1321,11 @@ function StandingOrders({
   return (
     <>
       <PocketCard tone="white">
-        <h2 className="font-display text-head font-bold text-ink">Standing orders</h2>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h2 className="font-display text-head font-bold text-ink">Standing orders</h2>
+          {/* B28.59 — every schedule in the workspace as Lens's CSV. */}
+          <ListFileDownload list="schedules" />
+        </div>
         {schedules.isError ? (
           <div className="mt-3">
             <Said ok={false}>{readFailure(schedules.error, 'Your standing orders')}</Said>

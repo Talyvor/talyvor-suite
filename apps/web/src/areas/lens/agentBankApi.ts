@@ -1068,6 +1068,25 @@ async function cardExportFile(from: string, through: string): Promise<Blob> {
   return res.blob()
 }
 
+/** B28.59 — a wallet list (the approvals, the schedules) as the CSV Lens writes for it (Lens B28.332): one row per item
+ *  of its JSON list, in the same order. A refusal carries Lens's sentence. */
+export type ListFile = 'approvals' | 'schedules'
+
+async function listFile(list: ListFile): Promise<Blob> {
+  const path = `/api/agents/${list}?format=csv`
+  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+  if (!res.ok) {
+    let sentence = ''
+    try {
+      sentence = ((await res.json()) as { error?: string }).error ?? ''
+    } catch {
+      // a body that is not JSON carries no sentence
+    }
+    throw new AgentBankError(res.status, path, sentence)
+  }
+  return res.blob()
+}
+
 /** B28.51 — what a statement page is read for: the lines of these kinds whose words hold q, any case. */
 export interface StatementSearch {
   kinds: readonly PostingKind[]
@@ -1259,6 +1278,7 @@ export const agentBankApi = {
   cardRefunds: async (): Promise<CardRefund[]> =>
     (await getSaid<{ card_refunds: CardRefund[] | null }>('/api/money/card-refunds')).card_refunds ?? [],
   cardExportFile,
+  listFile,
   /** B19.24 — the agent's test-mode card and every purchase on it; null when it has none (Lens answers 404). */
   card: async (id: string): Promise<{ card: AgentCard; authorizations: CardAuthorization[] | null } | null> => {
     try {
