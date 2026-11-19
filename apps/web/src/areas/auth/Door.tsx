@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Logo, cn, inlineLink } from '@talyvor/ui'
+import { Logo, cn } from '@talyvor/ui'
 import { Button, Icon, Input, pocketFocusRing } from '@talyvor/ui/pocket'
 import { StatusLabel } from '../../labels/StatusLabel'
 import {
