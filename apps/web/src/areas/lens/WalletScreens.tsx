@@ -29,6 +29,7 @@ import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
 import { TaskSays } from './PaymentProof'
+import { ListFileDownload } from './ListFile'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
@@ -274,10 +275,14 @@ function ApprovalsPage() {
           A request or payment waits here when it is above an agent’s approval amount. Approve it and the agent’s next identical request goes through,
           once; decline it and the request is refused, and asking again the same way is refused for 24 hours.
         </p>
-        {/* B57.43 — passkeys, the phone's key and notifications have their own page. */}
-        <PocketButton asChild variant="secondary">
-          <Link to="/settings/devices">Approvals and devices</Link>
-        </PocketButton>
+        <div className="flex flex-wrap items-start gap-2">
+          {/* B28.59 — every request, waiting and decided, as Lens's CSV. */}
+          <ListFileDownload list="approvals" />
+          {/* B57.43 — passkeys, the phone's key and notifications have their own page. */}
+          <PocketButton asChild variant="secondary">
+            <Link to="/settings/devices">Approvals and devices</Link>
+          </PocketButton>
+        </div>
       </div>
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <div className="grid min-w-0 gap-4 wide:col-span-7">
