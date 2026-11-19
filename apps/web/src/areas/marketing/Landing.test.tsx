@@ -413,3 +413,18 @@ describe('Orange boxes', () => {
     expect(css).toMatch(/\.tv4 \.pill \{[^}]*line-height: 1\.4;/)
   })
 })
+
+describe('The logo', () => {
+  // B17.497 — the brand-visual scenario counts a logo only as svg[data-brand] or img[data-brand="logo"] drawing a
+  // logo file; the nav and the footer draw the kit's small logo (B64.11), so both carry the attribute.
+  it('marks the nav and footer logo as the brand logo, a file that is served', () => {
+    const { container } = render(<Landing />)
+    const logos = Array.from(container.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
+    expect(logos.map((i) => i.closest('nav, footer')?.tagName)).toEqual(['NAV', 'FOOTER'])
+    for (const img of logos) {
+      const path = new URL(img.src, 'https://talyvor.com').pathname
+      expect(path).toMatch(/^\/brand\/logo\/talyvor-logo-small-on-dark-240\.png$/)
+      expect(existsSync(resolve(__dirname, '../../../public', path.slice(1)))).toBe(true)
+    }
+  })
+})
