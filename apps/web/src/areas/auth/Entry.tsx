@@ -60,7 +60,9 @@ function Streams() {
   return (
     <div
       className="pointer-events-none absolute right-full hidden select-none wide:block"
-      style={{ top: CARD_LOGO_MIDDLE, transform: 'translateY(-47.46%)' }}
+      // Its own width: hung off the card's left edge (right: 100%) it has no room to shrink into, and the image's
+      // max-width: 100% would fold it to nothing.
+      style={{ top: CARD_LOGO_MIDDLE, width: 440, transform: 'translateY(-47.46%)' }}
       aria-hidden="true"
       data-anchor="card-logo"
     >
@@ -80,9 +82,10 @@ function Streams() {
   )
 }
 
-/** The middle of the card's logo, from the card's top: the card's padding (p-8, 32 px) and half the 144 px small logo's
- *  height (Logo: 144 × 76 / 240, 46 px), which is taller than the Back button beside it (44 px). */
-const CARD_LOGO_MIDDLE = 32 + Math.round((144 * 76) / 240) / 2
+/** The middle of the card's logo drawing, from the card's top: the card's padding (p-8, 32 px), the logo's clear space
+ *  (Logo: half the arrow's height, ceil(144 × 168 / 2963.51) = 9 px) and half the 144 px small logo's height
+ *  (144 × 76 / 240 = 45.6 px). 63.8 px, measured the same in Chromium and WebKit. */
+const CARD_LOGO_MIDDLE = 32 + Math.ceil((144 * 168) / 2963.51) + (144 * 76) / 240 / 2
 
 /** The card every entry state is drawn in: pocket.css .authcard, white with its large shadow on the cloud page. */
 export function AuthCard({ children, className }: { children: React.ReactNode; className?: string }) {

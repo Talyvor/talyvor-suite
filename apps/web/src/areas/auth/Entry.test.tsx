@@ -299,10 +299,12 @@ describe('the sign-in page is Pocket’s auth card', () => {
         expect(img.closest('[aria-hidden="true"]')).not.toBeNull()
       }
       // B64.12 — the streams hang off the card, not the window: their right end on the card's left edge, at its logo's
-      // middle (32 px padding + half the 46 px logo), the drawing's meeting point (47.46% down) on that line.
+      // drawing's middle (32 px padding + 9 px clear space + half the 45.6 px logo), the art's meeting point (47.46% down)
+      // on that line.
       const art = streams[0].closest('[data-anchor="card-logo"]') as HTMLElement
       expect(art).toHaveClass('absolute', 'right-full')
-      expect(art.style.top).toBe('55px')
+      expect(art.style.top).toBe('63.8px')
+      expect(art.style.width).toBe('440px')
       expect(art.style.transform).toBe('translateY(-47.46%)')
       expect(art.parentElement!.querySelector(':scope > .shadow-pocket-lg')).toBe(h1.closest('.bg-page'))
       // One line system: from 840px the background's own lines across the top are not drawn.
