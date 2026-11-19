@@ -103,13 +103,29 @@ describe('Landing', () => {
     expect([img.getAttribute('width'), img.getAttribute('height')]).toEqual(['200', '50'])
   })
 
+  // B64.11 — the header's logo is 150 px (128 and 120 on small screens) and the footer's 120 px, all under 240, so they
+  // are the kit's small-logo PNGs on the night ground, the 240 px file at 1x and the 480 px file at 2x, never the SVG.
+  it('shows the kit’s small-logo PNGs in the header and footer, 1x and 2x, never under 120 px', () => {
+    const { container } = render(<Landing />)
+    for (const img of [container.querySelector('nav.nav .logo img')!, container.querySelector('footer img')!]) {
+      expect(img.getAttribute('src')).toBe('/brand/logo/talyvor-logo-small-on-dark-240.png')
+      expect(img.getAttribute('srcset')).toBe('/brand/logo/talyvor-logo-small-on-dark-240.png 1x, /brand/logo/talyvor-logo-small-on-dark-480.png 2x')
+      expect(img.getAttribute('alt')).toBe('Talyvor')
+    }
+    expect([...container.querySelectorAll('img')].filter((i) => /logo.*\.svg/.test(i.getAttribute('src') ?? ''))).toEqual([])
+    const site = readFileSync(resolve(__dirname, './site.css'), 'utf8')
+    const widths = [...site.matchAll(/\.tv4 (?:\.nav \.logo|footer) img \{[^}]*width: (\d+)px/g)].map((m) => Number(m[1]))
+    expect(widths).toEqual([150, 128, 120, 120])
+  })
+
   it('serves every film, poster and picture it names from the app’s own /site', () => {
     const { container } = render(<Landing />)
     const urls = [...container.querySelectorAll('video, img')].flatMap((el) =>
       ['src', 'poster', 'data-src', 'data-small'].map((a) => el.getAttribute(a)).filter((v): v is string => !!v),
     )
     expect(urls.length).toBeGreaterThanOrEqual(13)
-    const missing = urls.filter((u) => !u.startsWith('/site/') || !existsSync(resolve(__dirname, '../../../public', u.slice(1))))
+    // B64.11: the logo is the app's own small-logo PNG from /brand/logo.
+    const missing = urls.filter((u) => !/^\/(site|brand\/logo)\//.test(u) || !existsSync(resolve(__dirname, '../../../public', u.slice(1))))
     expect(missing).toEqual([])
   })
 

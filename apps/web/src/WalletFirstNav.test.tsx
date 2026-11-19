@@ -64,6 +64,11 @@ describe('the navigation is wallet-first (B28.7)', () => {
     // The logo leads, to Home; then every row is a link, and nothing in the sidebar folds.
     const links = Array.from(nav.querySelectorAll<HTMLAnchorElement>('a[href]'))
     expect(links[0].getAttribute('aria-label')).toBe('Talyvor, Home')
+    // B64.11 — the app header's logo is 144 px: the kit's small-logo PNGs, 1x and 2x, never the SVG.
+    expect([...links[0].querySelectorAll('img')].map((i) => [i.getAttribute('srcset'), i.getAttribute('alt')])).toEqual([
+      ['/brand/logo/talyvor-logo-small-on-light-240.png 1x, /brand/logo/talyvor-logo-small-on-light-480.png 2x', 'Talyvor'],
+      ['/brand/logo/talyvor-logo-small-on-dark-240.png 1x, /brand/logo/talyvor-logo-small-on-dark-480.png 2x', 'Talyvor'],
+    ])
     expect(links[0].getAttribute('href')).toBe('/')
     // B61.9 — then the account tile, which opens Your accounts over the page it is on.
     expect(links[1].getAttribute('aria-label')).toMatch(/^Switch account\. /)
