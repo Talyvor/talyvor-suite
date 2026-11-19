@@ -3,6 +3,7 @@ import { useDocumentTitle } from '../../documentTitle'
 import { useSignupProbe } from '../../lib/signupOpen'
 import { COMPANY_CONTACT, COMPANY_LINE } from '../../company'
 import SITE_CSS from './site.css?raw'
+import { formatMinor, usePricing, type LadderPlan } from './pricingApi'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). talyvor.com redirects here. It must render
 // with no session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so nothing here may
@@ -14,8 +15,8 @@ import SITE_CSS from './site.css?raw'
 // (site.css, scoped under .tv4) and its media, served from the app at /site/. Its script is ported to React
 // state, with the differences the site's rules make: every "Open your account" goes to /signup on this origin (B64.2),
 // the company line is company.ts's (B32), the footer links Privacy and Terms, and "Early access is open" shows only
-// while the sign-up gate says so. The loops play from their file URL; loading them whole into a blob first needs
-// media-src blob: in the CSP and is B64.4.
+// while the sign-up gate says so. B64.4: each loop is fetched whole and plays from a blob (useLoops), and every file
+// in /site is named by its own content so the BFF caches it a year.
 //
 // Rules that stay on (FOR-V7.md section 3): the Sandbox label in the demo and "Where we are" stay, no line says real
 // money is live, and the page never says LXC or that Talyvor is not a bank (Landing.test.tsx).
@@ -32,7 +33,8 @@ export function TealRule({ className = '' }: { className?: string }) {
   return <span className={`block h-0.5 w-8 bg-accent ${className}`} aria-hidden="true" />
 }
 
-/** Where the page's media is served from (apps/web/public/site, copied from the design's media/). */
+/** Where the page's media is served from (apps/web/public/site, copied from the design's media/). Each name carries the
+ *  first 8 hex of the file's sha256 (B64.4, Landing.test.tsx), so the BFF caches it a year: a new cut is a new name. */
 const MEDIA = '/site'
 const SIGNUP = '/signup'
 
@@ -52,24 +54,47 @@ const PlayIcon = () => (
 // ── The loops ────────────────────────────────────────────────────────────────────────────────────
 
 /** Each film starts on its own first frame (the poster), loads one at a time in page order, and runs only while on
- *  screen and in a visible tab. Reduced motion keeps the posters. */
+ *  screen and in a visible tab. Reduced motion keeps the posters, and switched on mid-visit stops every film.
+ *  B64.4: a film is fetched in full and plays from a blob, so it never stalls mid-loop; a failed fetch, or a blob the
+ *  browser will not play, falls back to its file URL. */
 function useLoops(root: React.RefObject<HTMLDivElement>) {
   useEffect(() => {
     const el = root.current
     if (!el) return
-    const REDUCE = reduceMotion()
+    const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : undefined
+    let REDUCE = !!motion?.matches
     const loops = [...el.querySelectorAll<HTMLVideoElement>('video[data-loop]')]
     const seen = new Map<HTMLVideoElement, boolean>()
     const small =
       (typeof matchMedia === 'function' && !matchMedia('(min-width: 768px)').matches) ||
       !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData
     let stopped = false
+    const blobs: string[] = []
     const run = (v: HTMLVideoElement, on: boolean | undefined) => {
       if (on && v.dataset.ready && !REDUCE && !document.hidden) v.play()?.catch(() => {})
       else v.pause()
     }
     const load = async (v: HTMLVideoElement) => {
-      v.src = (small && v.dataset.small) || v.dataset.src || ''
+      const url = (small && v.dataset.small) || v.dataset.src || ''
+      v.addEventListener(
+        'error',
+        () => {
+          if (v.src.startsWith('blob:')) v.src = url
+        },
+        { once: true },
+      )
+      let src = url
+      try {
+        const r = await fetch(url)
+        if (r.ok) {
+          src = URL.createObjectURL(await r.blob())
+          blobs.push(src)
+        }
+      } catch {
+        src = url // the file URL plays it, streamed
+      }
+      if (stopped) return
+      v.src = src
       await new Promise<void>((res) => {
         if (v.readyState >= 3) return res()
         v.addEventListener('canplaythrough', () => res(), { once: true })
@@ -94,18 +119,36 @@ function useLoops(root: React.RefObject<HTMLDivElement>) {
       loops.forEach((v) => observer?.observe(v))
       document.addEventListener('visibilitychange', onVisibility)
     } else loops.forEach((v) => seen.set(v, true))
-    if (!REDUCE)
+    let loading = false
+    const loadAll = () => {
+      if (loading || REDUCE) return
+      loading = true
       void (async () => {
         for (const v of loops) {
           if (stopped) return
-          await load(v)
+          if (!v.dataset.ready) await load(v)
         }
       })()
+    }
+    // Each poster is its loop's first frame, so a loop put back to 0 shows its poster.
+    const onMotion = () => {
+      REDUCE = !!motion?.matches
+      if (!REDUCE) {
+        loops.forEach((v) => run(v, seen.get(v)))
+        return loadAll()
+      }
+      el.querySelectorAll('video').forEach((v) => v.pause())
+      loops.forEach((v) => (v.currentTime = 0))
+    }
+    motion?.addEventListener?.('change', onMotion)
+    loadAll()
     return () => {
       stopped = true
       observer?.disconnect()
+      motion?.removeEventListener?.('change', onMotion)
       document.removeEventListener('visibilitychange', onVisibility)
       loops.forEach((v) => v.pause())
+      blobs.forEach((b) => URL.revokeObjectURL(b))
     }
   }, [root])
 }
@@ -117,7 +160,7 @@ function Nav() {
     <nav className="nav" aria-label="Main">
       <div className="wrap">
         <a className="logo" href="#top" aria-label="Talyvor home">
-          <img src={`${MEDIA}/logo.svg`} alt="Talyvor" />
+          <img src={`${MEDIA}/logo.ee7e151a.svg`} alt="Talyvor" />
         </a>
         <div className="links">
           <a href="#how">How it works</a>
@@ -174,9 +217,9 @@ function Hero({ onWatch }: { onWatch: () => void }) {
         <video
           className="film"
           data-loop
-          data-src={`${MEDIA}/hero-loop-1080.mp4`}
-          data-small={`${MEDIA}/hero-loop-720.mp4`}
-          poster={`${MEDIA}/hero-loop-poster.jpg`}
+          data-src={`${MEDIA}/hero-loop-1080.17564a42.mp4`}
+          data-small={`${MEDIA}/hero-loop-720.be13b400.mp4`}
+          poster={`${MEDIA}/hero-loop-poster.cf75267b.jpg`}
           muted
           loop
           playsInline
@@ -187,8 +230,8 @@ function Hero({ onWatch }: { onWatch: () => void }) {
           <div className="phone">
             <video
               data-loop
-              data-src={`${MEDIA}/approve-loop-hd.mp4`}
-              poster={`${MEDIA}/approve-loop-poster.jpg`}
+              data-src={`${MEDIA}/approve-loop-hd.0322c6fb.mp4`}
+              poster={`${MEDIA}/approve-loop-poster.2c32b32e.jpg`}
               muted
               loop
               playsInline
@@ -247,9 +290,9 @@ function Idea() {
     <section className="cine" aria-labelledby="g-h">
       <video
         data-loop
-        data-src={`${MEDIA}/give-it-loop-1080.mp4`}
-        data-small={`${MEDIA}/give-it-loop-720.mp4`}
-        poster={`${MEDIA}/give-it-loop-poster.jpg`}
+        data-src={`${MEDIA}/give-it-loop-1080.ae1d7901.mp4`}
+        data-small={`${MEDIA}/give-it-loop-720.0f1cf383.mp4`}
+        poster={`${MEDIA}/give-it-loop-poster.64b81cdb.jpg`}
         muted
         loop
         playsInline
@@ -418,12 +461,12 @@ function HowTo({ playRef }: { playRef: React.MutableRefObject<(t: number | null)
   playRef.current = playFrom
   useEffect(() => {
     const el = film.current, v = vid.current
-    if (!el || !v || typeof IntersectionObserver !== 'function' || reduceMotion()) return
+    if (!el || !v || typeof IntersectionObserver !== 'function') return
     let once = false
     const io = new IntersectionObserver(
       (es) =>
         es.forEach((e) => {
-          if (e.isIntersecting && !once) {
+          if (e.isIntersecting && !once && !reduceMotion()) {
             once = true
             playFrom(null)
           } else if (!e.isIntersecting && !v.paused) v.pause()
@@ -449,8 +492,8 @@ function HowTo({ playRef }: { playRef: React.MutableRefObject<(t: number | null)
             <video
               id="howvid"
               ref={vid}
-              src={`${MEDIA}/how-it-works.mp4`}
-              poster={`${MEDIA}/how-it-works-poster.jpg`}
+              src={`${MEDIA}/how-it-works.11b64358.mp4`}
+              poster={`${MEDIA}/how-it-works-poster.bd2e3ba7.jpg`}
               muted
               playsInline
               preload="metadata"
@@ -532,7 +575,7 @@ function Penny() {
     () => () => {
       cancelAnimationFrame(frame.current)
       timers.current.forEach(clearTimeout)
-      document.documentElement.style.overflow = ''
+      document.documentElement.style.overflowY = ''
     },
     [],
   )
@@ -566,7 +609,8 @@ function Penny() {
 
   const open = (p: Pending) => {
     opener.current = document.activeElement as HTMLElement | null
-    document.documentElement.style.overflow = 'hidden'
+    // The vertical axis only: the overflow shorthand would take the page's overflow-x: clip with it on close.
+    document.documentElement.style.overflowY = 'hidden'
     setFaceid('off')
     setPending(p)
   }
@@ -574,7 +618,7 @@ function Penny() {
     if (pending) approveBtn.current?.focus({ preventScroll: true })
   }, [pending])
   const close = useCallback(() => {
-    document.documentElement.style.overflow = ''
+    document.documentElement.style.overflowY = ''
     setPending(null)
     setFaceid('off')
     busy.current = false
@@ -948,31 +992,42 @@ function TheUsualWay() {
 
 // ── Pricing ──────────────────────────────────────────────────────────────────────────────────────
 
-type Currency = 'usd' | 'gbp' | 'eur'
-type Plan = [name: string, price: Record<Currency, number> | null, features: string[]]
-/** Nick's 15 Nov plans, as index.html draws them. B64.3 renders these from Lens's public plan table instead. */
-const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
-const PLANS: Record<'people' | 'companies', Plan[]> = {
-  people: [
-    ['Solo', { usd: 0, gbp: 0, eur: 0 }, ['3 agents', 'Your own account', 'A card for every agent']],
-    ['Crew', { usd: 3.99, gbp: 3.99, eur: 3.99 }, ['10 agents', 'Everything in Solo']],
-    ['Fleet', { usd: 9.99, gbp: 7.99, eur: 8.99 }, ['25 agents', 'Everything in Crew']],
-  ],
-  companies: [
-    ['Studio', { usd: 10, gbp: 10, eur: 10 }, ['3 agents', people(1), 'A statement for every agent']],
-    ['Company', { usd: 35, gbp: 35, eur: 35 }, ['25 agents', people(5), 'Everything in Studio']],
-    ['Group', { usd: 125, gbp: 125, eur: 125 }, ['Unlimited agents', people(25), 'Everything in Company']],
-    ['Custom', null, ['Built with you', 'By contract', CONTACT_EMAIL]],
-  ],
-}
-const SYM: Record<Currency, string> = { usd: '$', gbp: '£', eur: '€' }
+// B64.3 — the plans are Lens's two ladders, read from GET /api/pricing exactly as /pricing reads them (pricingApi.ts),
+// so the two pages cannot drift: every price, agent and people count, and the currencies, are the plan table's. Only
+// the words are here.
 
-function PriceText({ v, c }: { v: number | null; c: Currency }) {
-  if (v === null) return <>Let’s talk</>
-  if (v === 0) return <>Free</>
+/** The words index.html gives each plan under its counts. "Everything in" names the plan below it on the ladder. */
+const PLAN_LINES: Record<string, string[]> = {
+  personal_solo: ['Your own account', 'A card for every agent'],
+  business_studio: ['A statement for every agent'],
+}
+/** Dollars first, as index.html draws the switch, then pounds and euros, then any other currency Lens prices in. */
+const CURRENCY_FIRST = ['USD', 'GBP', 'EUR']
+const PLAN_SANDBOX = 'spend_on_talyvor'
+
+const people = (n: number) => (n < 0 ? 'Unlimited people' : `${n} ${n === 1 ? 'person' : 'people'}`)
+const agents = (n: number) => (n < 0 ? 'Unlimited agents' : `${n} agents`)
+
+function currencySymbol(c: string): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: c }).formatToParts(0).find((p) => p.type === 'currency')?.value ?? c
+}
+
+function planLines(plan: LadderPlan, below: LadderPlan | undefined, business: boolean): string[] {
+  if (plan.by_contract) return ['Built with you', 'By contract', CONTACT_EMAIL]
+  return [
+    agents(plan.agents),
+    ...(business ? [people(plan.people)] : []),
+    ...(below ? [`Everything in ${below.name}`] : (PLAN_LINES[plan.id] ?? [])),
+  ]
+}
+
+function PriceText({ plan, c }: { plan: LadderPlan; c: string }) {
+  const minor = plan.price_minor?.[c]
+  if (plan.by_contract || typeof minor !== 'number') return <>Let’s talk</>
+  if (minor === 0) return <>Free</>
   return (
     <>
-      {SYM[c] + (Number.isInteger(v) ? String(v) : v.toFixed(2))}
+      {formatMinor(minor, c)}
       <span> a month</span>
     </>
   )
@@ -980,7 +1035,15 @@ function PriceText({ v, c }: { v: number | null; c: Currency }) {
 
 function PricingBand() {
   const [k, setK] = useState<'people' | 'companies'>('people')
-  const [c, setC] = useState<Currency>('usd')
+  const state = usePricing()
+  const pricing = state.status === 'ok' ? state.pricing : undefined
+  const ladders = pricing?.ladders
+  const currencies = [...(ladders?.currencies ?? [])].sort(
+    (a, b) => ((CURRENCY_FIRST.indexOf(a) + 1 || 99) - (CURRENCY_FIRST.indexOf(b) + 1 || 99)) || a.localeCompare(b),
+  )
+  const [chosen, setC] = useState<string>()
+  const c = chosen && currencies.includes(chosen) ? chosen : currencies[0]
+  const ladder = ladders?.[k === 'people' ? 'personal' : 'business'] ?? []
   const group = useRef<HTMLDivElement>(null)
   const ind = useIndicator(group, k)
   return (
@@ -990,7 +1053,10 @@ function PricingBand() {
         <h2 className="h2" id="p-h">
           Start free. <span className="pill">Seriously.</span>
         </h2>
-        <p className="lede">Three plans for people, three for companies, and one we build with you. While you’re in Sandbox, every plan costs nothing.</p>
+        <p className="lede">
+          Three plans for people, three for companies, and one we build with you.
+          {pricing?.labels?.[PLAN_SANDBOX] === 'sandbox' ? ' While you’re in Sandbox, every plan costs nothing.' : null}
+        </p>
         <div className="pbar">
           <div className="switch" role="group" aria-label="Plans for" ref={group}>
             <span className="ind" style={ind} />
@@ -1002,27 +1068,32 @@ function PricingBand() {
             </button>
           </div>
           <div className="cur" role="group" aria-label="Currency">
-            {(['usd', 'gbp', 'eur'] as const).map((cur) => (
-              <button key={cur} type="button" aria-pressed={c === cur} data-c={cur} onClick={() => setC(cur)}>
-                {SYM[cur]}
+            {currencies.map((cur) => (
+              <button key={cur} type="button" aria-pressed={c === cur} data-c={cur.toLowerCase()} onClick={() => setC(cur)}>
+                {currencySymbol(cur)}
               </button>
             ))}
           </div>
         </div>
+        {state.status === 'failed' || (pricing && !ladders) ? (
+          <p className="note">The plans could not be read from this deployment just now, so no plan is printed here.</p>
+        ) : null}
         <div className="cards" id="plans" key={`${k}-${c}`}>
-          {PLANS[k].map(([name, price, feats], i) => (
-            <div key={name} className={i === 0 ? 'pc hot' : 'pc'} data-plan={name}>
-              <small>{name}</small>
-              <span className="p">
-                <PriceText v={price ? price[c] : null} c={c} />
-              </span>
-              <ul>
-                {feats.map((f) => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {c
+            ? ladder.map((plan, i) => (
+                <div key={plan.id} className={i === 0 ? 'pc hot' : 'pc'} data-plan={plan.name}>
+                  <small>{plan.name}</small>
+                  <span className="p">
+                    <PriceText plan={plan} c={c} />
+                  </span>
+                  <ul>
+                    {planLines(plan, plan.by_contract ? undefined : ladder[i - 1], k === 'companies').map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            : null}
         </div>
       </div>
     </section>
@@ -1082,7 +1153,7 @@ function Footer() {
   return (
     <footer>
       <div className="wrap">
-        <img src={`${MEDIA}/logo.svg`} alt="Talyvor" />
+        <img src={`${MEDIA}/logo.ee7e151a.svg`} alt="Talyvor" />
         <nav aria-label="Footer">
           <a href="#how">How it works</a>
           <a href="#try">Try it</a>
@@ -1093,7 +1164,7 @@ function Footer() {
         </nav>
         <span data-company-line>{COMPANY_LINE}</span>
         <a href="https://aiagentsdirectory.com/agent/talyvor" target="_blank" rel="noopener" title="Discover Talyvor on AI Agents Directory">
-          <img src={`${MEDIA}/aad-badge.svg`} alt="Talyvor - Featured on AI Agents Directory" width="200" height="50" style={{ width: 160, height: 'auto' }} />
+          <img src={`${MEDIA}/aad-badge.d703eba9.svg`} alt="Talyvor - Featured on AI Agents Directory" width="200" height="50" style={{ width: 160, height: 'auto' }} />
         </a>
       </div>
     </footer>

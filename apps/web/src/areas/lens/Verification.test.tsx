@@ -9,13 +9,15 @@ import { App, queryClient } from '../../App'
 
 const MEANINGS = ['signed in', 'email and phone confirmed', 'identity checked', 'company checked']
 
-function mockBff() {
+/** `start` is the record's checks before the page opens, newest first (B65.2). */
+function mockBff(start: Array<Record<string, unknown>> = []) {
   const sent: Array<{ url: string; body: unknown }> = []
-  const checks: Array<Record<string, unknown>> = []
+  const checks: Array<Record<string, unknown>> = [...start]
+  const reached = () => checks.filter((c) => c.status === 'completed').length
   const record = () => ({
     workspace_id: 'ws_1',
-    level: `L${checks.length}`,
-    meaning: MEANINGS[checks.length],
+    level: `L${reached()}`,
+    meaning: MEANINGS[reached()],
     live_level: 'L0',
     live_meaning: MEANINGS[0],
     checks: checks.length === 0 ? null : [...checks],
@@ -33,7 +35,7 @@ function mockBff() {
       const body = JSON.parse(String(init?.body))
       sent.push({ url, body })
       const level = ['contact', 'identity', 'company'].indexOf(m[1]) + 1
-      if (checks.length < level - 1) {
+      if (reached() < level - 1) {
         return json({ error: `economy: verification levels are reached in order: the ${MEANINGS[level]} check (L${level}) needs L${level - 1} — ${MEANINGS[level - 1]} — first; this workspace is at L${checks.length}` }, 409)
       }
       const check = { level: `L${level}`, subject: ['contact', 'person', 'company'][level - 1], method: 'test', test: true, status: 'completed', evidence_ref: `test_kyc_${level}`, detail: 'Persona: approved', started_at: '2026-10-08T09:00:00Z', checked_at: '2026-10-08T09:00:00Z' }
@@ -139,5 +141,21 @@ describe('the Verification screen', () => {
     expect(within(column).getByRole('heading', { name: 'The checks' })).toBeTruthy()
     expect(within(column).getByText('Every check on your record')).toBeTruthy()
     expect(within(column).getAllByTestId('verification-check')).toHaveLength(2)
+  })
+
+  it('a person check waiting for the identity partner opens its page from Verify your ID, with nothing to upload here (B65.2)', async () => {
+    const link = 'https://inquiry.withpersona.com/verify?code=one-time&redirect-uri=https%3A%2F%2Fapp.talyvor.com%2Fsettings%2Fverification'
+    mockBff([
+      { level: 'L2', subject: 'person', method: 'persona', test: true, status: 'pending', evidence_ref: 'inq_1', detail: 'Your ID check is waiting for you. Open the link to finish it.', link, started_at: '2026-11-18T09:01:00Z', checked_at: '2026-11-18T09:01:00Z' },
+      { level: 'L1', subject: 'contact', method: 'test', test: true, status: 'completed', evidence_ref: 'test_kyc_1', started_at: '2026-11-18T09:00:00Z', checked_at: '2026-11-18T09:00:00Z' },
+    ])
+    window.history.pushState({}, '', '/settings/verification')
+    render(<App />)
+    const step = await screen.findByRole('region', { name: 'Your ID document' })
+    expect(await within(step).findByRole('link', { name: 'Verify your ID' })).toHaveAttribute('href', link)
+    expect(within(screen.getByTestId('identity-person')).getByText('Not checked yet')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm who I am' })).toBeNull()
+    expect(document.querySelector('input[type="file"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('Persona:')
   })
 })

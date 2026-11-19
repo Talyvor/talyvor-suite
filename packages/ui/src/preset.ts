@@ -222,6 +222,8 @@ const preset = {
         // B57.7 — a balance card's amount (the reference's 44px, and 40px where cards sit side by side).
         'pocket-balance': ['2.75rem', { lineHeight: '1', letterSpacing: '-0.03em', fontWeight: '750' }],
         'pocket-balance-sm': ['2.5rem', { lineHeight: '1', letterSpacing: '-0.03em', fontWeight: '750' }],
+        // B57.184 — a one-question page's question (Pocket Live's .q, 30px), in the display face at the call site.
+        'pocket-question': ['1.875rem', { lineHeight: '1.12', letterSpacing: '-0.025em', fontWeight: '750' }],
 
         // ── DISPLAY: the marketing scale ──────────────────────────────────────────────────────
         //

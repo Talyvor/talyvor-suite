@@ -1,9 +1,10 @@
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App, queryClient } from './App'
+import { areaSource } from './lib/workspaceAreas'
 
 // B28.10 — Earnings became Royalties, under Statements. Driven through the real <App /> so the
 // sidebar, the route table and the old address are the ones a person meets.
@@ -66,5 +67,23 @@ describe('Royalties sits under Statements', () => {
       localStorage.removeItem('talyvor.had-session')
       ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = actEnv
     }
+  })
+
+  // B17.489 — Royalties is behind its area, which draws nothing until the workspace's areas are read. The redirect
+  // waits for that read, so a cold /earnings whose areas are slow (p95 4 s on the nightly) keeps Royalties drawn
+  // rather than redirecting into an empty main before the load event.
+  it('the old /earnings address keeps Royalties drawn while the areas are still being read', async () => {
+    areaSource.initial = undefined
+    let answer: (areas: string[]) => void = () => {}
+    areaSource.read = () => new Promise<string[]>((resolve) => (answer = resolve))
+    window.history.pushState({}, '', '/earnings')
+    const { container } = render(<App />)
+    expect(await screen.findByRole('heading', { level: 2, name: 'What your shared answers earned' })).toBeInTheDocument()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(window.location.pathname).toBe('/earnings')
+    expect(container.querySelector('main h2')?.textContent).toBe('What your shared answers earned')
+    answer(['gateway'])
+    await waitFor(() => expect(window.location.pathname).toBe('/statements/royalties'))
+    expect(await screen.findByRole('heading', { level: 2, name: 'What your shared answers earned' })).toBeInTheDocument()
   })
 })

@@ -188,6 +188,21 @@ describe('the Pay screen', () => {
     expect(within(screen.getByTestId('payee-payee_2')).getByText('Paying')).toBeTruthy()
   })
 
+  // B17.473 — a payee or a payment the one search opens (/money/pay#payee-<id>, #payment-<id>) is marked on its own row.
+  it('marks the payee and the payment row the address names', async () => {
+    const payments = [PAYMENT('mpay_1', 'payee_2', 'Kite Accounting', 1000, 'completed'), PAYMENT('mpay_2', 'payee_1', 'Acme Ltd', 500, 'completed')]
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd'), PAYEE('payee_2', 'Kite Accounting')], payments)
+    window.history.pushState({}, '', '/money/pay#payee-payee_2')
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByTestId('payee-payee_2').getAttribute('data-linked')).toBe('true'))
+    expect(screen.getByTestId('payee-payee_1').getAttribute('data-linked')).toBeNull()
+    cleanup()
+    window.history.pushState({}, '', '/money/pay#payment-mpay_1')
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByTestId('payment-mpay_1').getAttribute('data-linked')).toBe('true'))
+    expect(screen.getByTestId('payment-mpay_2').getAttribute('data-linked')).toBeNull()
+  })
+
   // B57.31 — pressing a saved payee pays it: To is filled, and the row says so.
   it('fills To when a saved payee is pressed', async () => {
     mockBff([], [], [PAYEE('payee_1', 'Acme Ltd'), PAYEE('payee_2', 'Kite Accounting')])

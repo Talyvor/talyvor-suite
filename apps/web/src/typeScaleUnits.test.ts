@@ -99,6 +99,8 @@ const CONSOLE_STEPS_PX: Record<string, number> = {
   'pocket-amount': 56,
   'pocket-balance': 44,
   'pocket-balance-sm': 40,
+  // B57.184 — a one-question page's question (Pocket Live's .q); rem from the start.
+  'pocket-question': 30,
 }
 
 /**

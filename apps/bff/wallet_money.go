@@ -16,7 +16,7 @@ import (
 //	PUT  /api/agents/{id}/handle        {handle}       the agent's address besides its wallet ID
 //	POST /api/agents/{id}/send          {to, amount_ulxc, memo}     to any agent on Talyvor
 //	POST /api/agents/{id}/requests      {from, amount_ulxc, memo}   ask any agent for credits
-//	GET  /api/agents/{id}/transfers                    what the agent sent and received
+//	GET  /api/agents/{id}/transfers                    what the agent sent and received (B28.59: ?format=csv as a CSV)
 //	GET  /api/wallets/requests                         the requests the workspace's agents made and were made
 //	POST /api/wallets/requests/{rid}/accept, …/decline
 //	POST /api/wallets/transfers/{tid}/refund           give back a transfer one of the workspace's agents received
@@ -136,7 +136,7 @@ func (a *app) handleAgentTransfers(w http.ResponseWriter, r *http.Request, t ten
 	if !ok {
 		return
 	}
-	a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
+	a.listRelay(w, r, t, lensWorkspacePath(t, suffix))
 }
 
 // handleMoneyRequests — GET /api/wallets/requests.

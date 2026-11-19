@@ -141,6 +141,12 @@ const HIDDEN: RegExp[] = process.env.STUB_HIDE_AREAS !== '1' ? [] : (() => {
   if (prefixes.length === 0) throw new Error(`STUB_HIDE_AREAS=1 needs STUB_LENS_SRC, a Lens checkout with internal/areas/areas.go (got "${src}")`)
   return prefixes.map((x) => new RegExp(`^${x.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{\}/g, '[^/]+')}(/|$)`))
 })()
+/**
+ * B17.472 — STUB_AREAS: the areas every workspace has (comma-separated, may be empty); with the hidden areas hidden, none.
+ * Otherwise the stub serves no areas route, as a Lens before B59.1.
+ */
+const AREAS: string[] | undefined =
+  process.env.STUB_AREAS !== undefined ? process.env.STUB_AREAS.split(',').filter((a) => a !== '') : HIDDEN.length > 0 ? [] : undefined
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 /** B61.51 — STUB_IDENTITY_GATE=on: the routes that move money, refused below the level (above). */
 const IDENTITY_GATE = process.env.STUB_IDENTITY_GATE === 'on'
@@ -1297,6 +1303,8 @@ createServer(async (req, res) => {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
       return void res.end('404 page not found\n')
     }
+    // B17.472 — Lens B59.1's read of a workspace's areas, where the stub has them (AREAS, above).
+    if (AREAS !== undefined && req.method === 'GET' && /^\/v1\/workspaces\/[^/]+\/areas$/.test(p)) return json(res, 200, { areas: AREAS })
     if (p === '/healthz') return json(res, 200, { status: broke('status-truth') ? 'degraded' : 'healthy', uptime_seconds: Math.floor(process.uptime()), version: 'stub' })
     // talyvor-lens B45.28, B45.29 — the AP2 key and outside agents' payment requests, on no credential (stub-trust-layer.ts).
     if (await bank.trustLayer.route(req, res, p, BASE)) return
