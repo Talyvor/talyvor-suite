@@ -22,7 +22,7 @@ import { useFiat } from './money'
 const PLAN_CAPABILITY = 'spend_on_talyvor'
 
 /** The Sandbox sentence, beside its label, while a plan costs nothing. */
-export const PLAN_SANDBOX_LINE = 'In Sandbox a plan costs nothing. The price is what it will cost when real money is live.'
+export const PLAN_SANDBOX_LINE = 'In Sandbox a plan costs nothing. The price is what it will cost once you leave Sandbox.'
 
 const countOf = (n: number, one: string, many: string) => (n < 0 ? `Unlimited ${many}` : `${formatLimit(n)} ${n === 1 ? one : many}`)
 const agentsOf = (n: number) => countOf(n, 'agent', 'agents')

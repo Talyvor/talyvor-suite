@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo, cn } from '@talyvor/ui'
@@ -602,6 +602,8 @@ function KeyChoices() {
 export function SignUpConfirm() {
   const me = useAuthMeReader()
   useDocumentTitle(SIGNUP_STEPS[3])
+  const navigate = useNavigate()
+  const openHome = useCallback(() => navigate('/', { replace: true }), [navigate])
   if (me.isLoading) return <SignUpFrame label={null}>{null}</SignUpFrame>
   if (me.data?.mode === 'oidc' && !me.data.authenticated) {
     return (
@@ -614,7 +616,10 @@ export function SignUpConfirm() {
     <SignUpFrame label={<WorkspaceStatus />}>
       <Stepper at={4} />
       <StepTitle id="signup-confirm">{SIGNUP_STEPS[3]}</StepTitle>
+      {/* B65.2 — the identity partner sends the person back here, and a pass after it opens Home */}
       <IdentityChecks
+        returnTo="signup"
+        onPassed={openHome}
         done={
           <Button asChild>
             <a href="/">{IDENTITY_WORDS.open}</a>

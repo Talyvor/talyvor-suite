@@ -208,11 +208,14 @@ export function LegalPage({
             {sections.length > 0 && <Contents titles={sections.map((s) => s.props.title)} />}
             {kids.slice(first).map((k) => (isSection(k) ? <Numbered key={k.key} n={sections.indexOf(k) + 1} section={k} /> : k))}
             <EndOf title={title} updated={updated} />
-            {/* B59.28 — where to ask for help, complain, close the account or ask for its data. */}
-            <HelpLinks className="mt-6" />
           </div>
         </div>
       </main>
+      {/* B59.28 — where to ask for help, complain, close the account or ask for its data. B17.480 — after main, so
+          "End of …" stays the document's last line. */}
+      <div className="mx-auto w-full max-w-4xl px-gutter pb-4">
+        <HelpLinks className="max-w-2xl" />
+      </div>
       <PublicFooter />
     </div>
   )

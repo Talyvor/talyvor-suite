@@ -1360,10 +1360,10 @@ export function socialPreview(): Scenario {
             `og:description="${meta('property', 'og:description')}" og:image="${image}" -> ${img?.status() ?? 'not fetched'} ${imgType}`,
         })
         const missing = [
-          title === 'Talyvor | the financial ecosystem for the AI agent economy' ? '' : '<title>',
+          title === 'Talyvor' ? '' : '<title>',
           tab === title ? '' : 'the tab title after the app ran',
           meta('name', 'description') === '' ? 'meta description' : '',
-          meta('property', 'og:title') === 'Talyvor | the financial ecosystem for the AI agent economy' ? '' : 'og:title',
+          meta('property', 'og:title') === 'Talyvor' ? '' : 'og:title',
           meta('property', 'og:description') === '' ? 'og:description' : '',
           img?.status() === 200 && imgType.startsWith('image/') ? '' : 'og:image that loads',
           meta('name', 'twitter:card') === 'summary_large_image' ? '' : 'twitter:card',
@@ -1497,13 +1497,30 @@ export function brandLogo(): Scenario {
   }
 }
 
-/** B28.2 — the front door leads with wallets: the hero a visitor reads first, the three product
- *  sections and the one pooling block, and no trace of the retired "toward zero" price curve. */
+/** What wallet-hero reads on /marketing, and each way it falls short. */
+export function walletHeroFaults({ h1, sections, text, footer }: { h1: string; sections: string[]; text: string; footer: string }): string[] {
+  // B17.478: version 4 of the front door (B64.1, design/website-2026-11-17-v4, Nick approved 17 Nov 2026) leads with
+  // the agent's own account and card under the owner's rules; it no longer lists the four things a wallet does.
+  return [
+    h1 === 'Your AI agent wants your card. Give it its own.' ? '' : `the hero (h1 reads "${h1}")`,
+    /its own account and its own card/i.test(text) ? '' : 'the hero line: its own account and its own card',
+    /anything outside them waits for your yes/i.test(text) ? '' : 'the rules line: anything outside them waits for your yes',
+    sections.some((s) => /stop lending your agent your card/i.test(s.replace(/\s+/g, ' '))) ? '' : 'the idea section heading',
+    // B59.5: Chat, the Marketplace and pooling are hidden areas, so the front door has no section for them.
+    ...[/console for your agents/i, /where agents spend/i, /repeated questions cost less/i]
+      .map((h) => (sections.some((s) => h.test(s)) ? `a hidden area's section ${h}` : '')),
+    /toward zero|ninety\s+days|near-zero/i.test(text) ? 'the price-curve claim is still there' : '',
+    /Talyvor Ltd · Registered in England and Wales/i.test(footer) ? '' : 'the footer line',
+  ].filter((m) => m !== '')
+}
+
+/** B28.2 — the front door leads with an agent's own account and card: the hero a visitor reads first and the idea
+ *  under it, no section for a hidden area, and no trace of the retired "toward zero" price curve. */
 export function walletHero(): Scenario {
   return {
     id: 'wallet-hero',
     owner: 'talyvor-suite',
-    items: ['B28.2', 'B17.256'],
+    items: ['B28.2', 'B17.256', 'B17.478'],
     title: 'the front door leads with a wallet for every agent, not pooling',
     run: async (ctx) => {
       const page = await ctx.app.tab('/marketing')
@@ -1513,22 +1530,9 @@ export function walletHero(): Scenario {
         const text = await page.locator('main').innerText()
         const footer = await page.locator('footer').innerText()
         ctx.evidence.push({ note: `h1="${h1}" h2=${JSON.stringify(sections)} footer="${footer.split('\n')[0]}"` })
-        // B17.256: positioning v2 (B44.4, Nicolai's words of 23 Oct) is the hero now; wallets lead what it lists,
-        // and the wallet section names the four things an agent's wallet does.
-        const missing = [
-          h1 === 'The financial ecosystem for the AI agent economy.' ? '' : `the hero (h1 reads "${h1}")`,
-          /where they do it safely: wallets and cards/i.test(text) ? '' : 'the wallet lead in the hero',
-          ...[/a budget of its own/i, /spending rules/i, /approvals/i, /a live statement/i]
-            .map((w) => (w.test(text) ? '' : `the wallet section's ${w}`)),
-          /rules before the money moves/i.test(sections.join('\n')) ? '' : 'the wallet section heading',
-          // B59.5: Chat, the Marketplace and pooling are hidden areas, so the front door has no section for them.
-          ...[/console for your agents/i, /where agents spend/i, /repeated questions cost less/i]
-            .map((h) => (sections.some((s) => h.test(s)) ? `a hidden area's section ${h}` : '')),
-          /toward zero|ninety\s+days|near-zero/i.test(text) ? 'the price-curve claim is still there' : '',
-          /Talyvor Ltd · the financial ecosystem for the AI agent economy/i.test(footer) ? '' : 'the footer line',
-        ].filter((m) => m !== '')
+        const missing = walletHeroFaults({ h1, sections, text, footer })
         return missing.length === 0
-          ? { pass: true, detail: 'leads with wallets; no chat, marketplace or pooling section; no price curve' }
+          ? { pass: true, detail: 'leads with an account and a card of its own; no chat, marketplace or pooling section; no price curve' }
           : { pass: false, detail: `/marketing: ${missing.join('; ')}` }
       } finally {
         await page.close()

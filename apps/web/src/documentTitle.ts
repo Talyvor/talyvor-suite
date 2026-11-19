@@ -10,9 +10,9 @@ export const BRAND = 'Talyvor'
  * B28.1: the front door's whole title, and the one `index.html` ships. ⚠ THAT IS NOT A DUPLICATE
  * THAT CAN DRIFT: a full page load paints the file's `<title>` before any JavaScript runs, so the
  * two are the same string at two instants of the same load. The test reads index.html and asserts
- * they are equal.
+ * they are equal. B64.8: website version 4 titles the front door with the brand alone.
  */
-export const HOME_TITLE = `${BRAND} | the financial ecosystem for the AI agent economy`
+export const HOME_TITLE = BRAND
 
 /**
  * `null` means "this surface has no name of its own" — the front door — and takes the brand

@@ -76,6 +76,12 @@ describe('a launch run (B61.1)', () => {
     expect(dollarsTyped(1, 0.1)).toBe('0.0000001')
   })
 
+  it('B17.495: leaves out statement-paging, whose agent credit statement B61.55 took off the agent page and Statements', () => {
+    const { journeys } = launchCut(night())
+    expect(journeys.flat().some((s) => s.id === 'statement-paging')).toBe(false)
+    expect(LAUNCH_CANNOT_PLAY['statement-paging']).toBe(LXC_PARKED)
+  })
+
   it('B61.56: names how many explorers explored, and which addresses are a hidden area\'s', () => {
     const { cut } = launchCut(night())
     expect(launchLine({ ...cut, explorers: { explored: 2, of: 3 } })).toMatch(/; 2 of 3 explorers explored the launch pages$/)

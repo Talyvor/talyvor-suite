@@ -1,0 +1,164 @@
+[
+ {
+  "route": "/signup/confirm?partner",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L2",
+      "subject": "person",
+      "method": "persona",
+      "test": true,
+      "status": "pending",
+      "evidence_ref": "inq_sample",
+      "detail": "Your ID check is waiting for you. Open the link to finish it.",
+      "link": "/signup/confirm?inquiry-id=inq_sample&status=completed",
+      "started_at": "2026-11-18T09:01:00Z",
+      "checked_at": "2026-11-18T09:01:00Z"
+     },
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_1",
+      "started_at": "2026-11-18T09:00:00Z",
+      "checked_at": "2026-11-18T09:00:00Z"
+     }
+    ]
+   }
+  },
+  "dark": false
+ },
+ {
+  "route": "/signup/confirm?partner",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L2",
+      "subject": "person",
+      "method": "persona",
+      "test": true,
+      "status": "pending",
+      "evidence_ref": "inq_sample",
+      "detail": "Your ID check is waiting for you. Open the link to finish it.",
+      "link": "/signup/confirm?inquiry-id=inq_sample&status=completed",
+      "started_at": "2026-11-18T09:01:00Z",
+      "checked_at": "2026-11-18T09:01:00Z"
+     },
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_1",
+      "started_at": "2026-11-18T09:00:00Z",
+      "checked_at": "2026-11-18T09:00:00Z"
+     }
+    ]
+   }
+  },
+  "dark": true
+ },
+ {
+  "route": "/signup/confirm?expired",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L2",
+      "subject": "person",
+      "method": "persona",
+      "test": true,
+      "status": "failed",
+      "evidence_ref": "inq_sample",
+      "detail": "Your ID check expired. Start it again.",
+      "started_at": "2026-11-18T09:01:00Z",
+      "checked_at": "2026-11-18T09:01:00Z"
+     },
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_1",
+      "started_at": "2026-11-18T09:00:00Z",
+      "checked_at": "2026-11-18T09:00:00Z"
+     }
+    ]
+   }
+  },
+  "dark": false
+ },
+ {
+  "route": "/signup/confirm?expired",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L2",
+      "subject": "person",
+      "method": "persona",
+      "test": true,
+      "status": "failed",
+      "evidence_ref": "inq_sample",
+      "detail": "Your ID check expired. Start it again.",
+      "started_at": "2026-11-18T09:01:00Z",
+      "checked_at": "2026-11-18T09:01:00Z"
+     },
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_1",
+      "started_at": "2026-11-18T09:00:00Z",
+      "checked_at": "2026-11-18T09:00:00Z"
+     }
+    ]
+   }
+  },
+  "dark": true
+ }
+]
