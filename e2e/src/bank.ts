@@ -65,6 +65,25 @@ async function outcome(done: Locator, scope: Locator): Promise<string | undefine
   return (await done.first().isVisible()) ? undefined : (await refused.first().innerText()).trim()
 }
 
+export type StatementType = 'csv' | 'json' | 'pdf' | 'journal'
+
+/** B17.513 — the Your data card's button names its file, as the web's downloadWords does: "Download JSON", "Download journal". */
+export const pastStatementsButton = (type: StatementType): string => (type === 'journal' ? 'Download journal' : `Download ${type.toUpperCase()}`)
+
+/** Settings › Your data › Your agents’ past statements, from `from` through `through` as `type`: the download. */
+export async function pastStatements(page: Pick<Page, 'goto' | 'url' | 'getByRole' | 'waitForEvent'>, from: string, through: string, type: StatementType) {
+  await page.goto(new URL('/settings/data', page.url()).toString())
+  const c = page.getByRole('heading', { name: 'Your agents’ past statements', exact: true }).locator('xpath=..')
+  await c.getByLabel('From', { exact: true }).fill(from)
+  await c.getByLabel('To', { exact: true }).fill(through)
+  await c.getByLabel('File type', { exact: true }).selectOption(type)
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
+    c.getByRole('button', { name: pastStatementsButton(type), exact: true }).click(),
+  ])
+  return download
+}
+
 /**
  * Agents (apps/web/src/areas/lens/Agents.tsx), in a tab of its own. B61.63 — Agents as it is drawn today: /agents is the
  * workspace's totals line, its list of agents and New agent; everything done to one agent is done on that agent's own page
@@ -534,17 +553,8 @@ export class AgentBankScreen {
    * B61.55 — every agent's statement from `from` through `through` (YYYY-MM-DD, the last day included) as `type`, from
    * Settings › Your data, where the agents' past statements download now their credit wallets are parked.
    */
-  private async pastStatements(from: string, through: string, type: 'csv' | 'json' | 'pdf' | 'journal') {
-    await this.page.goto(new URL('/settings/data', this.page.url()).toString())
-    const c = this.page.getByRole('heading', { name: 'Your agents’ past statements', exact: true }).locator('xpath=..')
-    await c.getByLabel('From', { exact: true }).fill(from)
-    await c.getByLabel('To', { exact: true }).fill(through)
-    await c.getByLabel('File type', { exact: true }).selectOption(type)
-    const [download] = await Promise.all([
-      this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
-      c.getByRole('button', { name: 'Download', exact: true }).click(),
-    ])
-    return download
+  private async pastStatements(from: string, through: string, type: StatementType) {
+    return pastStatements(this.page, from, through, type)
   }
 
   /** Downloads every agent's statement for this month as JSON (B61.55: under Your data); the file's name and text. */
