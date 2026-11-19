@@ -75,7 +75,7 @@ describe('low-balance alert on an agent’s page (B28.61)', () => {
     const row = await screen.findByTestId('low-balance-GBP')
     fireEvent.change(within(row).getByLabelText('Low balance amount, GBP'), { target: { value: '20' } })
     fireEvent.click(within(row).getByRole('button', { name: 'Save' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove the low balance alert on the Pound account' }))
 
     expect(await screen.findByLabelText('Low balance amount, GBP')).toBeTruthy()
     expect(sent[1]).toBe('DELETE /api/money/low-balance/bth_1 {}')
@@ -89,6 +89,19 @@ describe('low-balance alert on an agent’s page (B28.61)', () => {
     renderCard()
     expect(text(await screen.findByTestId('low-balance-alert-lba_2'))).toContain('£15.00, below £20.00')
     expect(screen.queryByTestId('low-balance-alert-lba_9')).toBeNull()
+  })
+
+  // B57.201 — drawn as Pocket draws a list the owner changes (w-budgets' Your budgets): a white card under its own
+  // heading, and Remove the danger button named for what it removes.
+  it('is drawn in Pocket: a heading, and Remove the danger button named for its account', async () => {
+    mockBff()
+    renderCard()
+    expect(await screen.findByRole('heading', { name: 'Low balance alert' })).toBeTruthy()
+    const row = await screen.findByTestId('low-balance-GBP')
+    fireEvent.change(within(row).getByLabelText('Low balance amount, GBP'), { target: { value: '20' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }))
+    const remove = await screen.findByRole('button', { name: 'Remove the low balance alert on the Pound account' })
+    expect(remove.className).toContain('text-danger')
   })
 
   it('says there is no balance to watch while the agent has no account', async () => {
