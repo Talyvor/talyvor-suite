@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo, cn } from '@talyvor/ui'
 import { Button, Field, Icon, Input, KindTile, PageBackground, Select, personalHues, pocketFocusRing } from '@talyvor/ui/pocket'
@@ -18,7 +18,7 @@ import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
 import { passkeysSupported, registerThisDevice } from '../lens/passkeys'
 import { showRecoveryCode } from '../lens/recoveryCodeStore'
 import { IdentityChecks } from '../lens/IdentityChecks'
-import { AccessLine, AlreadyIn, EntryFrame, PrivacyTerms, SignInCard } from './Entry'
+import { AccessLine, EntryFrame, PrivacyTerms, SignInCard, useReturnTo } from './Entry'
 import { DoorError, makeSignInKey, rememberPasskeyHere, signupAccount, takePasscode, thisBrowserName } from './doorApi'
 import { countryRefusal, useServedCountries } from './servedCountries'
 import {
@@ -399,14 +399,10 @@ export function SignUp() {
   const [refused, setRefused] = useState<string | null>(null)
   const authenticated = me.data?.authenticated === true
   const joining = authenticated && me.data?.signup_unfinished === true
-  useDocumentTitle(authenticated && !joining ? 'You’re signed in' : 'Create a workspace')
-  if (authenticated && !joining) {
-    return (
-      <EntryFrame>
-        <AlreadyIn />
-      </EntryFrame>
-    )
-  }
+  const returnTo = useReturnTo()
+  useDocumentTitle('Create a workspace')
+  // B64.12 — someone with a session goes straight in (to a same-site returnTo or Home), as on /signin.
+  if (authenticated && !joining) return <Navigate to={returnTo ?? '/'} replace />
   // B61.26 — a stranger: the door, drawn while /auth/me is still answering too, as most who open /signup are strangers.
   // A new number's session comes back here for steps 1 and 2.
   if (!joining && me.data?.mode !== 'disabled') {

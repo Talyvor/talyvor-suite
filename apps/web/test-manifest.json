@@ -2,7 +2,7 @@
   "src/AdminRemoved.test.tsx": 5,
   "src/aiRequestBodyRegister.test.ts": 33,
   "src/areas/auth/Door.test.tsx": 19,
-  "src/areas/auth/Entry.test.tsx": 16,
+  "src/areas/auth/Entry.test.tsx": 26,
   "src/areas/auth/SignUp.test.tsx": 23,
   "src/areas/auth/Welcome.test.tsx": 4,
   "src/areas/board/PublicBoard.test.tsx": 2,
