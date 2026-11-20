@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { cn } from '../lib/cn'
 import { pocketFocusRing } from './focus'
+import { play } from './motion'
 
 export interface ShellProps {
   /** The sidebar: the logo, the workspace, the rows and the foot. */
@@ -12,6 +13,8 @@ export interface ShellProps {
   drawer?: boolean
   /** B61.70 — the page's background (PageBackground), at the top of the content and running behind the top bar. */
   background?: React.ReactNode
+  /** B61.74 — the address of the page drawn in the content: a new one fades up 12 px over 300 ms. */
+  page?: string
   className?: string
 }
 
@@ -40,13 +43,22 @@ function usePageScroll(ref: React.RefObject<HTMLDivElement | null>): boolean {
  * and closed by Esc, the scrim or following one of its links. It is the same <aside> at every width, off-screen and
  * invisible (so nothing in it takes focus) until opened.
  */
-export function Shell({ sidebar, bar, children, drawer = false, background, className }: ShellProps) {
+export function Shell({ sidebar, bar, children, drawer = false, background, page, className }: ShellProps) {
   const [open, setOpen] = useState(false)
   const columnRef = useRef<HTMLDivElement | null>(null)
   const scrolled = usePageScroll(columnRef)
   const asideId = useId()
   const asideRef = useRef<HTMLElement | null>(null)
   const menuRef = useRef<HTMLButtonElement | null>(null)
+  const mainRef = useRef<HTMLElement | null>(null)
+  const shownPage = useRef(page)
+
+  // B61.74 — Pocket Live's move 2 on the web: the page arriving fades up; the first one is simply there.
+  useEffect(() => {
+    if (shownPage.current === page) return
+    shownPage.current = page
+    play(mainRef.current, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'translateY(0)' }], 'page-in', 'out')
+  }, [page])
 
   useEffect(() => {
     if (!open) return
@@ -116,7 +128,7 @@ export function Shell({ sidebar, bar, children, drawer = false, background, clas
           </button>
           {bar}
         </header>
-        <main className="relative flex-1 p-gutter">{children}</main>
+        <main ref={mainRef} className="relative flex-1 p-gutter">{children}</main>
       </div>
     </div>
   )

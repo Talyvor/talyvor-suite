@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Logo, cn, inlineLink } from '@talyvor/ui'
+import { Logo, cn } from '@talyvor/ui'
 import { Button, Icon, Input, pocketFocusRing } from '@talyvor/ui/pocket'
 import { StatusLabel } from '../../labels/StatusLabel'
 import {
   DoorError,
   DOOR_FAILED,
-  googleMove,
+  doorNav,
   holdPasscode,
   makeSignInKey,
   passkeyHere,
@@ -27,8 +27,8 @@ import {
 // Door.tsx — B61.26: the web's one door (REFERENCE Pocket Live, the phone's `su` steps, one question per page).
 //
 //   1. "What’s your phone number?" with the country picker, one field, one button. Above it, "Sign in with a passkey",
-//      offered first to anyone who has signed in on this browser before. Under it, while the move from Google runs,
-//      "Continue with Google", small, for existing accounts only; with BFF_GOOGLE_SIGNIN=off there is none.
+//      offered first to anyone who has signed in on this browser before. It is the only way in: Google sign-in is gone
+//      (B61.29).
 //   2. The code: six boxes; a paste or the browser's fill from the text lands in all six; "Send again" after 30 seconds.
 //      In Sandbox the code is on the screen, under the Sandbox label.
 //   3. A known number: the passcode. A new number: choose a passcode, typed twice, then sign-up's steps (SignUp.tsx).
@@ -60,12 +60,10 @@ export const DOOR_WORDS = {
   passkey: 'Sign in with a passkey',
   phoneTitle: 'What’s your phone number?',
   phoneLead: 'We text you a code to check it’s yours.',
-  moveLead: 'From now on you sign in with your phone number and a passcode. We text you a code to check it’s yours.',
   phoneLabel: 'Your phone number',
   phoneExample: '7700 900456',
   country: 'Country',
   phoneNeeded: 'Type your phone number.',
-  google: 'Continue with Google',
   codeTitle: 'Enter the code',
   sentTo: (shown: string) => `We sent it to ${shown}.`,
   sandboxCode: (code: string) => `In Sandbox no text is sent. Your code is ${code.slice(0, 3)} ${code.slice(3)}.`,
@@ -270,16 +268,12 @@ const SEND_AGAIN_AFTER = 30
 export interface DoorProps {
   /** Where a sign-in lands: the page the person was trying to reach, or Home. */
   returnTo?: string
-  /** 'move' is the one move from Google: the signed-in Google account takes a number and a passcode. */
-  mode?: 'door' | 'move'
-  /** Whether the BFF still offers Google sign-in (/auth/me's google_signin). */
-  google?: boolean
   /** What the door shows under its button, for a stranger (the access line on /signup). */
   foot?: React.ReactNode
 }
 
 /** The door, drawn in the auth card (Entry.tsx's EntryFrame, or AuthGate's card in place). */
-export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProps) {
+export function Door({ returnTo, foot }: DoorProps) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [step, setStep] = useState<Step>({ at: 'phone' })
@@ -317,8 +311,13 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
       setBusy(false)
     }
   }
-  /** Signed in: the session is new, so nothing read before it is kept, and the person goes where they were going. */
+  /** Signed in: the session is new, so nothing read before it is kept, and the person goes where they were going. An
+   *  assistant's Connect page (/oauth/) is the BFF's, not the app's, so it is a page load. */
   const land = async (to: string) => {
+    if (to.startsWith('/oauth/')) {
+      doorNav.leave(to)
+      return
+    }
     navigate(to, { replace: true })
     await qc.resetQueries()
   }
@@ -346,12 +345,6 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
 
   const finishWith = (check: string, passcode: string, join: boolean) =>
     run(async () => {
-      if (mode === 'move') {
-        await googleMove(check, passcode)
-        rememberSignedInHere()
-        await land(returnTo ?? '/')
-        return
-      }
       await signedIn(await (join ? phoneJoin(check, passcode) : phoneSignIn(check, passcode)), passcode)
     })
 
@@ -425,11 +418,7 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
             } else
               void run(async () => {
                 try {
-                  if (mode === 'move') {
-                    await googleMove(step.check, digits)
-                    rememberSignedInHere()
-                    await land(returnTo ?? '/')
-                  } else await signedIn(await phoneJoin(step.check, digits), digits)
+                  await signedIn(await phoneJoin(step.check, digits), digits)
                 } catch (err) {
                   // A passcode Lens will not take is chosen again; anything else stays on this step.
                   if (err instanceof DoorError && err.reason === 'weak_passcode') setStep({ at: 'choose', check: step.check })
@@ -472,11 +461,11 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
   }
 
   // The phone number: one field and one button. The passkey is the main action once this browser has signed in.
-  const keyFirst = mode === 'door' && canKey && signedInHere()
+  const keyFirst = canKey && signedInHere()
   return (
     <>
       <DoorTop sandbox={sandbox} />
-      {mode === 'door' && canKey ? (
+      {canKey ? (
         <Button
           variant={keyFirst ? 'primary' : 'outline'}
           size="lg"
@@ -502,7 +491,7 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
           if (digitsOf(national)) void sendCode()
         }}
       >
-        <Question title={DOOR_WORDS.phoneTitle} lead={mode === 'move' ? DOOR_WORDS.moveLead : DOOR_WORDS.phoneLead} />
+        <Question title={DOOR_WORDS.phoneTitle} lead={DOOR_WORDS.phoneLead} />
         <div className="grid gap-1.5">
           <label htmlFor="door-phone" className="sr-only">
             {DOOR_WORDS.phoneLabel}
@@ -535,11 +524,6 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
         </Button>
       </form>
       {foot}
-      {mode === 'door' && google ? (
-        <a href={returnTo ? `/auth/login?return_to=${encodeURIComponent(returnTo)}` : '/auth/login'} className={cn('text-caption font-semibold text-ink-3', inlineLink)}>
-          {DOOR_WORDS.google}
-        </a>
-      ) : null}
     </>
   )
 }

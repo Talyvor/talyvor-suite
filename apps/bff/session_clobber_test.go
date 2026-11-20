@@ -56,8 +56,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/coreos/go-oidc/v3/oidc"
 )
 
 // gate parks a fake upstream's handler inside the request, so a test can place a SECOND request
@@ -161,11 +159,7 @@ func newClobberEnv(t *testing.T) *clobberEnv {
 		trackBaseURL: track.URL, trackGatewaySecret: testTrackSecret,
 		docsBaseURL: "http://127.0.0.1:1", docsGatewaySecret: "gwsecret_docs",
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
-	// handleAuthUnavailable 503s when `verifier` is nil, so POST /auth/logout would never reach the
-	// store. Nothing here verifies an id_token — the verifier is never called — but the handler must
-	// be reachable for the logout test to be about the seam it is about rather than about a 503.
-	auth.verifier = oidc.NewVerifier(cfg.oidcIssuer, nil, &oidc.Config{ClientID: "test-client"})
+	auth := newAuthenticator(cfg)
 	env.app = newApp(cfg, auth)
 	env.app.cfg.webDist = t.TempDir()
 	return env

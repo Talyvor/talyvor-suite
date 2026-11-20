@@ -29,7 +29,7 @@ export interface Look {
   /** The page's scroll width and the viewport's: wider than the viewport scrolls sideways. */
   scroll: number
   client: number
-  /** Each drawn SVG logo on screen: an inline mark or wordmark, or a logo file ending .svg that loaded. */
+  /** Each drawn SVG logo on screen: an inline mark or wordmark, or a logo file (LOGO_FILE) that loaded. */
   logos: string[]
   /** Each element still drawing the old CSS tile: a non-SVG element posing as the Talyvor image. */
   tiles: string[]
@@ -43,6 +43,33 @@ export interface Look {
   /** How many elements outside the logo and a dark-scoped photograph paint bright Teal, and the first few. */
   brightCount: number
   bright: string[]
+}
+
+/** A logo file: one ending .svg, or the kit's small-logo PNG, which B64.11 shows wherever the logo is under 240 px
+ *  (Safari draws the SVG's glow soft there). B17.497: talyvor.com's header and footer and the app header draw it. */
+export const LOGO_FILE = /\.svg$|^\/brand\/logo\/talyvor-logo-small-on-(light|dark)-(240|480)\.png$/
+
+/** B17.401 — one logo the brand-logo scenario saw: its file, whether it loaded, and the plane behind it. */
+export interface ShownLogo {
+  src: string
+  loaded: boolean
+  plane: 'dark' | 'light'
+}
+
+/** A file of the chosen kit, and the version it is: its .svg drawings and B64.11's small-logo PNGs. */
+const KIT_LOGO = /^\/brand\/logo\/talyvor-[a-z-]+-on-(dark|light)(?:-(?:240|480))?\.(?:svg|png)$/
+
+/** The brand-logo oracle: each logo is a kit file in the version for the plane it sits on, and it loaded. The plane,
+ *  not the theme: talyvor.com's v4 header is #0F1013 in both themes, so its on-dark logo is right there in each. */
+export function logoFaults(path: string, theme: 'dark' | 'light', shown: ShownLogo[], old: string[] = []): string[] {
+  const faults: string[] = []
+  if (shown.length === 0) faults.push(`${path} ${theme} shows no logo`)
+  for (const l of shown) {
+    if (KIT_LOGO.exec(l.src)?.[1] !== l.plane) faults.push(`${path} ${theme} shows ${l.src} on a ${l.plane} plane`)
+    if (!l.loaded) faults.push(`${path} ${theme} ${l.src} did not load`)
+  }
+  if (old.length > 0) faults.push(`${path} still asks for ${old.join(', ')}`)
+  return faults
 }
 
 /** B29.15, B17.388 — the light canvas, as the browser computes Pocket's `page` #FFFFFF. */
@@ -62,8 +89,8 @@ export function brandFaults(l: Look, theme?: 'dark' | 'light'): string[] {
   return faults
 }
 
-/** Reads a view in the page. Self-contained: Playwright sends it to the browser as source. */
-function lookInPage(): Look {
+/** Reads a view in the page. Self-contained: Playwright sends it to the browser as source, so LOGO_FILE comes as its source. */
+function lookInPage(logoFile: string): Look {
   const AMBER = /rgba?\(240, 160, 48[,)]/
   const TEAL = /rgba?\(58, 214, 192[,)]/
   const TEAL_PROPS = ['color', 'background-color', 'border-top-color', 'border-bottom-color']
@@ -111,7 +138,7 @@ function lookInPage(): Look {
   const drawn = Array.from(document.querySelectorAll('svg[data-brand="mark"], svg[data-brand="wordmark"]'))
     .filter(onScreen).map((s) => `svg ${s.getAttribute('data-brand')}`)
   const files = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
-    .filter((i) => onScreen(i) && i.naturalWidth > 0 && new URL(i.currentSrc || i.src).pathname.endsWith('.svg'))
+    .filter((i) => onScreen(i) && i.naturalWidth > 0 && new RegExp(logoFile).test(new URL(i.currentSrc || i.src).pathname))
     .map((i) => new URL(i.currentSrc || i.src).pathname)
   return {
     scroll: document.documentElement.scrollWidth,
@@ -143,7 +170,7 @@ async function view(page: Page, url: string, theme: 'dark' | 'light'): Promise<{
     await Promise.all(Array.from(document.images).filter((i) => !i.complete && i.loading !== 'lazy')
       .map((i) => new Promise((r) => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }) })))
   })
-  return { look: await page.evaluate(lookInPage), note: stored !== theme ? ` (the page opened ${stored || 'unthemed'}; set to ${theme})` : '' }
+  return { look: await page.evaluate(lookInPage, LOGO_FILE.source), note: stored !== theme ? ` (the page opened ${stored || 'unthemed'}; set to ${theme})` : '' }
 }
 
 export function brandVisual(): Scenario {
@@ -180,7 +207,7 @@ export function brandVisual(): Scenario {
                 if (path === '/' && look.logos.length === 0 && await menu.isVisible()) {
                   await menu.click()
                   await page.getByRole('complementary', { name: 'Primary' }).waitFor({ state: 'visible', timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
-                  look = { ...look, logos: (await page.evaluate(lookInPage)).logos.map((l) => `${l} under Menu`) }
+                  look = { ...look, logos: (await page.evaluate(lookInPage, LOGO_FILE.source)).logos.map((l) => `${l} under Menu`) }
                   note += ' (the logo read with Menu open)'
                   await page.keyboard.press('Escape')
                 }
@@ -540,7 +567,7 @@ export function brandDocs(): Scenario {
                 await out.setViewportSize({ width, height })
                 await out.goto(pathToFileURL(saved).href)
                 await out.evaluate(async () => { await document.fonts.ready })
-                const look = await out.evaluate(lookInPage)
+                const look = await out.evaluate(lookInPage, LOGO_FILE.source)
                 const file = `docs-export-${width}-${theme}.jpg`
                 await out.screenshot({ path: join(dir, file), type: 'jpeg', quality: 80 })
                 const faults = exportBrandFaults(look, title, exported.text)

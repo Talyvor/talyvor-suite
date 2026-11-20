@@ -87,8 +87,6 @@ func minimalOIDC() map[string]string {
 		"BFF_AUTH_MODE":         "oidc",
 		"LENS_PROVISION_SECRET": "probe-secret",
 		"OIDC_ISSUER":           "https://idp.example.com",
-		"OIDC_CLIENT_ID":        "talyvor-suite",
-		"OIDC_CLIENT_SECRET":    "s3cret",
 		"BFF_PUBLIC_BASE_URL":   "https://app.talyvor.com",
 		"OIDC_ALLOWED_EMAILS":   "ng@example.com",
 	}

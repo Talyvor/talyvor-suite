@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { sameSitePath } from './Entry'
 import { pressEverything } from '../../test/pressEverything'
 
 // Entry.test.tsx — THE FRONT DOOR.
@@ -10,7 +11,7 @@ import { pressEverything } from '../../test/pressEverything'
 // stranger is told on /signup (the access line), and what an already-signed-in person is told. The history below is
 // why the words, and not the mechanism, are what these tests read.
 //
-// Sign up and sign in are ONE mechanism (the same OIDC round-trip at /auth/login) and must not
+// Sign up and sign in are ONE mechanism (the same door) and must not
 // be one page. The person reading them wants opposite reassurances:
 //
 //   A STRANGER needs to know what this is, that they can start, and what they will have when
@@ -122,15 +123,8 @@ describe('/signup and /signin are public routes', () => {
     }
   })
 
-  it('Google is offered small under the door only while the BFF still offers it', async () => {
+  it('B61.29 — no Google under the door, even if /auth/me still says google_signin', async () => {
     mockMe({ signup_open: true, google_signin: true })
-    at('/signin')
-    const google = await screen.findByRole('link', { name: 'Continue with Google' })
-    expect(google.getAttribute('href')).toMatch(/^\/auth\/login/)
-    cleanup()
-    queryClient.clear()
-    vi.restoreAllMocks()
-    mockMe({ signup_open: true })
     at('/signin')
     await screen.findByRole('heading', { level: 1 })
     expect(screen.queryByRole('link', { name: 'Continue with Google' })).toBeNull()
@@ -230,17 +224,64 @@ describe('what the page promises tracks the actual gate', () => {
 
 // ─── someone already signed in ──────────────────────────────────────────────
 
-describe('an already-signed-in person is not asked to sign up again', () => {
-  it('/signup tells them they are in, and points at the app', async () => {
+// B64.12 — "You're signed in, there is nothing to sign up for" was a dead end Nick reached from the website's "Open an
+// account". With a session both doors go straight in: to returnTo when it is a path on this site, Home otherwise.
+describe('an already-signed-in person goes straight in', () => {
+  const landsAt = async (path: string, expected: string) => {
     mockMe({ signup_open: true, authenticated: true })
+    at(path)
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe(expected))
+    expect(document.body.textContent ?? '').not.toMatch(/already has a Talyvor session|you[’']re signed in/i)
+    cleanup()
+    queryClient.clear()
+    vi.restoreAllMocks()
+  }
+
+  it.each(['/signup', '/signin'])('%s opens Home', async (door) => {
+    await landsAt(door, '/')
+  })
+
+  it.each(['/signup', '/signin'])('%s follows a returnTo on this site', async (door) => {
+    await landsAt(`${door}?returnTo=${encodeURIComponent('/money?tab=cards')}`, '/money?tab=cards')
+  })
+
+  it.each(['https://evil.example', '//evil.example', '/\\evil.example', 'javascript:alert(1)', '/\t/evil.example'])(
+    'a returnTo of %j opens Home',
+    async (to) => {
+      for (const door of ['/signup', '/signin']) await landsAt(`${door}?returnTo=${encodeURIComponent(to)}`, '/')
+    },
+  )
+
+  it('sameSitePath keeps a path on this site and nothing else', () => {
+    expect(sameSitePath('/agents/a1?x=1#y')).toBe('/agents/a1?x=1#y')
+    for (const bad of [null, undefined, '', 'money', 'https://evil.example', '//evil.example', '/\\evil.example', '\\/evil.example', 'javascript:alert(1)', '/\n/evil.example']) {
+      expect(sameSitePath(bad)).toBeNull()
+    }
+  })
+
+  it('someone whose account opens on /signup is not sent Home: their step goes on to the key', async () => {
+    // The join's session, on sign-up's steps; then the account opens and /auth/me answers a finished session while the
+    // page is still /signup. Only someone who ARRIVED signed in goes straight in.
+    mockMe({ signup_open: true, authenticated: true, signup_unfinished: true })
     at('/signup')
-    await waitFor(() =>
-      expect(screen.getByText(/already signed in|you[’']re signed in/i)).toBeInTheDocument(),
-    )
-    expect(screen.getByRole('link', { name: /open (the )?(app|talyvor)/i })).toHaveAttribute(
-      'href',
-      '/',
-    )
+    await screen.findByText(/Answers you get may be reused/)
+    vi.restoreAllMocks()
+    mockMe({ signup_open: true, authenticated: true })
+    await queryClient.refetchQueries({ queryKey: ['auth-me'] })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(window.location.pathname).toBe('/signup')
+  })
+
+  it('signed out, both doors still show their form; the gate’s card stays in place on the page asked for', async () => {
+    for (const path of ['/signup', '/signin', '/ledger']) {
+      mockMe({ signup_open: true })
+      at(path)
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument()
+      expect(window.location.pathname).toBe(path)
+      cleanup()
+      queryClient.clear()
+      vi.restoreAllMocks()
+    }
   })
 })
 
@@ -263,6 +304,19 @@ describe('the sign-in page is Pocket’s auth card', () => {
         expect(img).toHaveAttribute('alt', '')
         expect(img.closest('[aria-hidden="true"]')).not.toBeNull()
       }
+      // B64.12 — the streams hang off the card, not the window: their right end on the card's left edge, at its logo's
+      // drawing's middle (32 px padding + 9 px clear space + half the 45.6 px logo), the art's meeting point (47.46% down)
+      // on that line.
+      const art = streams[0].closest('[data-anchor="card-logo"]') as HTMLElement
+      expect(art).toHaveClass('absolute', 'right-full')
+      expect(art.style.top).toBe('63.8px')
+      expect(art.style.width).toBe('440px')
+      expect(art.style.transform).toBe('translateY(-47.46%)')
+      expect(art.parentElement!.querySelector(':scope > .shadow-pocket-lg')).toBe(h1.closest('.bg-page'))
+      // One line system: from 840px the background's own lines across the top are not drawn.
+      expect(container.querySelector('[data-background="streams"]')).toHaveClass('wide:[&_.pk-bg-streams]:hidden')
+      // The company line is centred to the card's width.
+      expect(screen.getByText(/TALYVOR LTD/)).toHaveClass('w-full', 'max-w-md', 'text-center')
       // The card: white, its large shadow, the sheet's corners; the kit's small logo in it, which goes to the website.
       const card = h1.closest('.bg-page')!
       expect(card).toHaveClass('shadow-pocket-lg', 'rounded-sheet')
@@ -289,10 +343,11 @@ describe('the sign-in page is Pocket’s auth card', () => {
 describe('every control on both pages does something', () => {
   it.each(['/signup', '/signin'])('%s', async (route) => {
     // B61.26 — the door is one field and one button (Continue waits, saying why, until a number is typed); the rest
-    // are the logo, Google while the move runs, Privacy and Terms.
-    const report = await pressEverything(route, { '/auth/me': { mode: 'oidc', authenticated: false, user: null, signup_open: true, google_signin: true } })
+    // are the logo, Privacy and Terms.
+    const report = await pressEverything(route, { '/auth/me': { mode: 'oidc', authenticated: false, user: null, signup_open: true } })
     expect(report.dead).toEqual([])
-    expect(report.pressed).toBeGreaterThan(3)
+    // The logo, Privacy and Terms: three, since B61.29 took Google away.
+    expect(report.pressed).toBeGreaterThanOrEqual(3)
   })
 })
 

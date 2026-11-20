@@ -1,7 +1,7 @@
 package main
 
 // phone_signin.go — B61.25: the front door by phone number, the passcode and the passkey (talyvor-lens B61.22, B61.23,
-// B61.24), the phone app's lock, and the one move from Google.
+// B61.24), and the phone app's lock. It is the only way in: Google sign-in is gone (B61.29).
 //
 //	POST /auth/phone/start   {phone}                          a texted code; in Sandbox the code itself, for the screen
 //	POST /auth/phone/finish  {phone, code}                    a right code: a check, and whether a person holds the number
@@ -17,7 +17,15 @@ package main
 //	POST /auth/lock          {state: closed|away}             the phone app says it closed or went away
 //	POST /auth/unlock/challenge {}                            a challenge for the phone's key (Face ID)
 //	POST /auth/unlock        {passcode} | {the key's answer}  the phone app's lock opens
-//	POST /auth/google/move   {check, passcode}                a Google sign-in takes a number and a passcode, once
+//
+// B61.105 — Settings, Security, for a person's session (talyvor-lens B61.23, B61.24, B61.81, B61.104):
+//
+//	GET  /auth/passkey/keys                                   the person's sign-in keys
+//	POST /auth/passkey/keys/remove {key_id, passcode?}        one removed, proved by the passcode or the session's key
+//	                                                          sign-in; Lens refuses the last way in
+//	POST /auth/passcode/change {old_passcode, passcode}       the passcode changed
+//	POST /auth/phone/change-number {check, passcode}          the new number's check (start and finish for it) and the
+//	                                                          passcode: the person's number becomes the new one
 //
 // LENS HOLDS EVERY RULE. The codes, the tickets, the passcode's hash and its wrong tries, and the keys live in Lens, on
 // the provision secret; the BFF passes the caller's address for Lens's limits and keeps only an opaque check id that
@@ -29,8 +37,8 @@ package main
 // status and the work are the same, and the time with them.
 //
 // A PERSON'S sub IS THE SAME EVERY WAY IN. A person who joined by phone has the identity Lens gave them
-// ("person:<id>") as their sub; a person who moved from Google keeps their Google sub, and Lens holds that identity for
-// them. So sign out everywhere, Connect's grants and everything else keyed by sub reach every session of the person
+// ("person:<id>") as their sub; a person who moved from Google (B61.25, until B61.29) keeps their Google sub, and Lens
+// holds that identity for them. So sign out everywhere, Connect's grants and everything else keyed by sub reach every session of the person
 // however they signed in, and identityOf turns a sub back into the identity POST /v1/provision is given.
 //
 // THE PHONE APP'S LOCK IS THE SERVER'S. A phone session of a person locks when the app says it closed, when it has
@@ -71,7 +79,10 @@ const (
 	lockPath                     = "/auth/lock"
 	unlockChallengePath          = "/auth/unlock/challenge"
 	unlockPath                   = "/auth/unlock"
-	googleMovePath               = "/auth/google/move"
+	passkeyKeysPath              = "/auth/passkey/keys"
+	passkeyKeyRemovePath         = "/auth/passkey/keys/remove"
+	passcodeChangePath           = "/auth/passcode/change"
+	phoneChangeNumberPath        = "/auth/phone/change-number"
 
 	// phoneLockAfter is how long a phone session may be away, or quiet, before it locks.
 	phoneLockAfter = 2 * time.Minute
@@ -108,6 +119,7 @@ func (c phoneCheck) expiresAt() time.Time { return c.expires }
 type lensPerson struct {
 	ID       string `json:"id"`
 	Identity string `json:"identity"`
+	Phone    string `json:"phone"`
 }
 
 // identityOf is the identity POST /v1/provision is given for sub: a person who joined by phone is their own identity,
@@ -236,8 +248,13 @@ func writeDoorFailure(w http.ResponseWriter, what string, err error) {
 // doorUnavailable answers for the door when it cannot work here: 404 with sign-in off, 503 without the provision
 // secret. True if it wrote a response.
 func (a *app) doorUnavailable(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
+	return a.doorUnavailableFor(w, r, http.MethodPost)
+}
+
+// doorUnavailableFor is doorUnavailable for a route answering method.
+func (a *app) doorUnavailableFor(w http.ResponseWriter, r *http.Request, method string) bool {
+	if r.Method != method {
+		methodNotAllowed(w, method)
 		return true
 	}
 	if a.cfg.authMode == authModeDisabled || a.auth == nil {
@@ -518,6 +535,7 @@ func (a *app) landPerson(w http.ResponseWriter, r *http.Request, p lensPerson, a
 		}
 		s.workspaceID, s.lensToken, s.lensTokenExp, s.cachePoolable = prov.WorkspaceID, prov.Token, parseExpiry(prov.ExpiresAt), prov.CachePoolable
 		a.lastAccounts.Store(p.Identity, prov.WorkspaceID)
+		s.trackWorkspaceID = a.signInProducts(r.Context(), s.sub, s.email)
 	}
 	out := map[string]any{"signed_in": true, "signup_unfinished": s.joining, "account_id": s.workspaceID}
 	for k, v := range extra {
@@ -746,6 +764,116 @@ func (a *app) handlePasskeyRegister(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, out)
 }
 
+// handlePasskeyKeys lists the person's sign-in keys, as Lens keeps them.
+func (a *app) handlePasskeyKeys(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailableFor(w, r, http.MethodGet) {
+		return
+	}
+	_, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var out map[string]any
+	if err := a.lensDoor(r.Context(), "/v1/auth/passkey/keys", map[string]string{"person_id": s.personID}, &out); err != nil {
+		writeDoorFailure(w, "key list", err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handlePasskeyKeyRemove removes one of the person's keys, proved as a new key is: the passcode, or the key sign-in
+// that opened this session. Lens refuses the last way in.
+func (a *app) handlePasskeyKeyRemove(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailable(w, r) {
+		return
+	}
+	sid, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		KeyID    string `json:"key_id"`
+		Passcode string `json:"passcode"`
+	}
+	if !a.decodeDoor(w, r, &in) {
+		return
+	}
+	body := map[string]any{"person_id": s.personID, "key_id": in.KeyID, "passcode": in.Passcode, "caller_address": waitlistClientIP(r)}
+	if in.Passcode == "" && s.keyTicket.ticket != "" && time.Now().Before(s.keyTicket.expires) {
+		body["key_ticket"] = s.keyTicket.ticket
+		a.auth.sessions.update(sid, func(cur session) session { cur.keyTicket = keyTicket{}; return cur })
+	}
+	if err := a.lensDoor(r.Context(), "/v1/auth/passkey/keys/remove", body, nil); err != nil {
+		writeDoorFailure(w, "key remove", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
+}
+
+// handlePasscodeChange changes the person's passcode: the old one, checked by Lens with its wrong tries, and the new.
+func (a *app) handlePasscodeChange(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailable(w, r) {
+		return
+	}
+	_, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		OldPasscode string `json:"old_passcode"`
+		Passcode    string `json:"passcode"`
+	}
+	if !a.decodeDoor(w, r, &in) {
+		return
+	}
+	if err := a.lensDoor(r.Context(), "/v1/auth/passcode/change", map[string]string{"person_id": s.personID,
+		"old_passcode": in.OldPasscode, "passcode": in.Passcode, "caller_address": waitlistClientIP(r)}, nil); err != nil {
+		writeDoorFailure(w, "passcode change", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"changed": true})
+}
+
+// handlePhoneChangeNumber moves the person onto a new number: its check, from the door's start and finish, and their
+// passcode. Every refusal leaves Lens's ticket unused, so the check is kept but for an ended ticket; the change spends it.
+func (a *app) handlePhoneChangeNumber(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailable(w, r) {
+		return
+	}
+	_, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Check    string `json:"check"`
+		Passcode string `json:"passcode"`
+	}
+	if !a.decodeDoor(w, r, &in) {
+		return
+	}
+	c, ok := a.takeCheck(w, in.Check)
+	if !ok {
+		return
+	}
+	var out struct {
+		MoveID string     `json:"move_id"`
+		Person lensPerson `json:"person"`
+	}
+	err := a.lensDoor(r.Context(), "/v1/auth/phone/change-number", map[string]string{"person_id": s.personID,
+		"ticket": c.ticket, "passcode": in.Passcode, "caller_address": waitlistClientIP(r)}, &out)
+	var refused doorRefusal
+	if err == nil || errors.As(err, &refused) && refused.body["reason"] == "ticket_ended" {
+		a.auth.endCheck(in.Check, c)
+	}
+	if err != nil {
+		writeDoorFailure(w, "number change", err)
+		return
+	}
+	log.Printf("bff: person changed their number (person=%s move=%s)", s.personID, out.MoveID)
+	writeJSON(w, http.StatusOK, map[string]any{"changed": true, "phone": out.Person.Phone})
+}
+
 // lockableSession is the phone app's session of a person, or a refusal written: 401 with no session, 409 for any
 // other session.
 func (a *app) lockableSession(w http.ResponseWriter, r *http.Request) (string, session, bool) {
@@ -851,57 +979,6 @@ func (a *app) handleUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleGoogleMove is the one move: a Google sign-in with no number yet confirms one and sets a passcode, and Lens's
-// person for that number holds the Google identity, so the same accounts open the new way. A person who moved
-// already, signing in with Google again, confirms their number and passcode the same way.
-func (a *app) handleGoogleMove(w http.ResponseWriter, r *http.Request) {
-	if a.googleOff(w) || a.doorUnavailable(w, r) {
-		return
-	}
-	sid, s, ok := a.auth.sessionAndIDFrom(r)
-	switch {
-	case !ok:
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in first"})
-		return
-	case s.synthetic || s.joining || strings.HasPrefix(s.sub, personIdentityPrefix):
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Only a Google sign-in moves."})
-		return
-	}
-	var in struct {
-		Check    string `json:"check"`
-		Passcode string `json:"passcode"`
-	}
-	if !a.decodeDoor(w, r, &in) {
-		return
-	}
-	c, ok := a.takeCheck(w, in.Check)
-	if !ok {
-		return
-	}
-	identity := a.identityOf(s.sub)
-	p, created, err := a.redeem(r.Context(), in.Check, c, identity, in.Passcode, waitlistClientIP(r))
-	if err == nil && p.Identity != identity {
-		err = errors.New("lens answered another identity")
-	}
-	if err != nil {
-		writeDoorFailure(w, "google move", err)
-		return
-	}
-	next := s
-	next.personID, next.lastSeen = p.ID, time.Now()
-	log.Printf("bff: google sign-in moved to a number (sub=%s person=%s created=%t)", s.sub, p.ID, created)
-	a.answerSession(w, r, sid, next, map[string]any{"moved": true, "account_id": s.workspaceID})
-}
-
-// googleOff answers 404 for a Google route while BFF_GOOGLE_SIGNIN=off (B61.29 turns it off). True if it wrote.
-func (a *app) googleOff(w http.ResponseWriter) bool {
-	if a.cfg.googleSignInOff {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such endpoint"})
-		return true
-	}
-	return false
 }
 
 // lockedOrJoining runs before the mux: a sign-up session reaches only sign-up's steps (403 otherwise), and a locked

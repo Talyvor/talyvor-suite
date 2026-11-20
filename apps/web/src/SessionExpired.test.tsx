@@ -86,11 +86,10 @@ describe('a 401 from Lens says the session expired, and how to fix it', () => {
     mockAllApi(401)
     at('/')
     await screen.findByText(/session (has )?expired|signed out/i)
-    // /auth/login rotates the session and re-provisions, which re-mints the workspace token —
-    // so this single click IS the fix. ("Sign out and back in" was the manual workaround; it
-    // is two steps for the same effect.)
+    // It ends the dead session and opens the door, whose sign-in re-mints the workspace token —
+    // so this single click IS the fix (B61.29: the door, now Google sign-in is gone).
     const action = screen.getByRole('link', { name: /sign in again|sign in/i })
-    expect(action.getAttribute('href')).toMatch(/^\/auth\/login/)
+    expect(action.getAttribute('href')).toMatch(/^\/signin\?return_to=/)
   })
 
   it('sends the person back where they were', async () => {

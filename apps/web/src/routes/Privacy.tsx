@@ -72,10 +72,10 @@ export function Privacy() {
         </p>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5 text-reading text-ink-2">
           <li>
-            <strong className="text-ink">Your identity.</strong> When you sign in with Google we
-            receive your account&rsquo;s subject identifier, email address and basic profile. We
-            keep the identifier and the email. We do not receive or store your Google password, and
-            we do not request access to anything else in your Google account.
+            <strong className="text-ink">Your identity.</strong> You sign in with your phone number.
+            We keep the number, a one-way hash of your passcode, and the public half of each passkey
+            you add; a passkey&rsquo;s private half stays on your device and never reaches us. If you
+            first signed in with Google, we keep the identifier and email address it gave us then.
           </li>
           <li>
             <strong className="text-ink">Usage and billing records.</strong> For each request: which
@@ -395,10 +395,6 @@ export function Privacy() {
           <li>
             <strong className="text-ink">An AI assistant you connect</strong> receives the answers to
             what it asks, and its provider with them, as described above.
-          </li>
-          <li>
-            <strong className="text-ink">Google</strong> receives the fact that you signed in. We
-            ask it only for your identifier, email and basic profile.
           </li>
           <li>
             <strong className="text-ink">Stripe</strong> handles payment. Your card details go to

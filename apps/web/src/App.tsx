@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { QueryCache, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
   BrowserRouter,
@@ -359,12 +359,15 @@ function NavDestination({
   label,
   icon,
   active,
+  marked,
   badge,
 }: {
   to: string
   label: string
   icon: PocketIconName
   active: boolean
+  /** B61.74 — the sliding marker is under this row, so the row draws no cloud of its own. */
+  marked: boolean
   /** B28.7 — a count beside the label (approvals waiting); nothing is drawn at zero or while unknown. */
   badge?: number | null
 }) {
@@ -376,8 +379,8 @@ function NavDestination({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-tile px-2.5 py-2 text-body font-semibold',
-        active ? 'bg-cloud text-ink' : 'text-ink-2',
+        'relative flex items-center gap-3 rounded-tile px-2.5 py-2 text-body font-semibold',
+        active ? cn('text-ink', !marked && 'bg-cloud') : 'text-ink-2',
         pocketFocusRing,
       )}
     >
@@ -397,6 +400,27 @@ function NavDestination({
   )
 }
 
+/**
+ * B61.74 — where the sidebar's marker sits: measured off the row that carries aria-current, after each move. It slides
+ * from the second place on (the first is simply there), and is not drawn while no row is selected or nothing has a size
+ * (then the selected row draws its own cloud, as before).
+ */
+function useNavMarker(pathname: string) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [at, setAt] = useState<{ y: number; h: number; moves: boolean } | null>(null)
+  useLayoutEffect(() => {
+    const row = ref.current?.querySelector<HTMLElement>('a[aria-current="page"]')
+    const h = row?.offsetHeight ?? 0
+    setAt((was) => (row && h > 0 ? { y: row.offsetTop, h, moves: was !== null } : null))
+  }, [pathname])
+  return {
+    ref,
+    placed: at !== null,
+    moves: at?.moves ?? false,
+    style: at ? { height: at.h, transform: `translateY(${at.y}px)` } : undefined,
+  }
+}
+
 /** A path owns itself and everything below it; `/` owns only itself. */
 const under = (pathname: string, ...paths: string[]) =>
   paths.some((p) => pathname === p || (p !== '/' && pathname.startsWith(`${p}/`)))
@@ -410,8 +434,9 @@ function Sidebar() {
   const workspaceLabel = !workspace.data?.name || workspace.data.name === workspace.data.id ? 'Your workspace' : workspace.data.name
   // B59.10 — the account's type and kind: its chip under the name.
   const account = useAccount()
+  const marker = useNavMarker(pathname)
   const item = (to: string, label: string, icon: PocketIconName, active: boolean, badge?: number | null) => (
-    <NavDestination to={to} label={label} icon={icon} active={active} badge={badge} />
+    <NavDestination to={to} label={label} icon={icon} active={active} marked={marker.placed} badge={badge} />
   )
   // B61.3 — the approved seven (launch-pack DESIGN.md W2) and nothing else: every page that left the sidebar opens from
   // the one it belongs to (Activity's and Pay's tabs, Settings' Plan and Developers rows), and ⌘K finds it there.
@@ -446,7 +471,18 @@ function Sidebar() {
           <PocketIcon name="chev" size={16} className="ml-auto shrink-0 rotate-90 text-ink-3" />
         </Link>
       )}
-      <div className="grid gap-0.5">
+      <div ref={marker.ref} className="relative grid gap-0.5">
+        {/* B61.74 — the selected row's cloud, one shape that slides to the entry you go to (Pocket Live's move 4). */}
+        <span
+          aria-hidden="true"
+          data-nav-marker=""
+          style={marker.style}
+          className={cn(
+            'absolute inset-x-0 top-0 rounded-tile bg-cloud',
+            marker.placed ? 'opacity-100' : 'opacity-0',
+            marker.moves && 'transition-transform duration-press-out ease-pop',
+          )}
+        />
         {item('/', 'Home', 'home', pathname === '/')}
         {item('/agents', 'Agents', 'agents', under(pathname, '/agents'))}
         {item('/cards', 'Cards', 'card', under(pathname, '/cards', '/money/card'))}
@@ -584,6 +620,7 @@ function ConsoleShell() {
     <div className="contents" data-design="pocket">
     <PocketShell
       drawer={chat}
+      page={pathname}
       background={<Background pathname={pathname} />}
       sidebar={<Sidebar />}
       bar={
@@ -805,7 +842,7 @@ export function App() {
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
             {/* The two front doors, also OUTSIDE the gate — a signup page you must already be
-                signed in to read is not a signup page. Same mechanism (/auth/login), different
+                signed in to read is not a signup page. The same door (the phone number), different
                 words: see areas/auth/Entry.tsx. */}
             <Route path="/signup" element={<SignUp />} />
             {/* B59.8 — sign-up's step 3, where the identity provider sends a new workspace: a passkey or the phone. */}

@@ -395,14 +395,12 @@ describe('a screen you are gated out of does not take the name of the page behin
    * is wrong for every state a surface reaches afterwards, not only for the next route.
    */
   it.each(['/signup', '/signin'])(
-    '%s titles the already-signed-in card by ITS heading, not the door',
+    '%s with a session goes straight to Home, titled Home (B64.12: no "You’re signed in" page between)',
     async (address) => {
-      // Same address, different screen: `AlreadyIn` renders when the browser has a session, and
-      // it is not the page the route is named after.
       mockBff({ mode: 'oidc', authenticated: true, user: { email: 'a@b.c' } })
       await at(address)
-      await waitFor(() => expect(document.title).not.toBe(SENTINEL))
-      expect(document.title).toBe(`You’re signed in | ${BRAND}`)
+      await waitFor(() => expect(document.title).toBe(`Home | ${BRAND}`))
+      expect(window.location.pathname).toBe('/')
     },
   )
 

@@ -36,18 +36,14 @@ trust this table.
 
 | Change | Verified at | Failure if ignored |
 |---|---|---|
-| BFF **requires** `LENS_PROVISION_SECRET` | `apps/bff/main.go:169` | Refuses to start, names itself |
-| BFF **refuses to boot** if `LENS_API_KEY` is set | `apps/bff/main.go:178` | Refuses to start, names itself |
+| BFF **requires** `LENS_PROVISION_SECRET` | `apps/bff/main.go:164` | Refuses to start, names itself |
+| BFF **refuses to boot** if `LENS_API_KEY` is set | `apps/bff/main.go:173` | Refuses to start, names itself |
 | BFF no longer reads `LENS_WORKSPACE_KEY` / `_ID` | absent from `apps/bff/*.go` | Silently ignored — they do nothing now |
 | Lens fails **closed** without `LENS_PROVISION_SECRET` | `cmd/lens/provision_handler.go` `mountProvisionRoute` returns early on `""` | Route not registered → provisioning 404 → **every login fails** |
 | Lens migration count is **derived, never quoted** | `ls migrations/*.sql \| wc -l` in the checkout | A number written here goes stale on the next merge and then STEP 2b fails for the wrong reason |
 | Track migrates by **subcommand** | `cmd/track/main.go:132` (`os.Args[1] == "migrate"`) | Empty schema, every call 500s |
 | Docs migrates **on boot**, fail-closed | `cmd/docs/main.go:162` `migrate.Apply` before serving | — (it self-applies; a failure is a boot failure) |
 | Track/Docs **reject published placeholder secrets** | `internal/config/config.go:137` in both | Refuses to boot |
-
-> **Note (cosmetic, not blocking):** `apps/bff/auth.go:14-15` still carries a
-> comment describing the old one-workspace model. It is stale prose, not
-> behaviour. Worth a follow-up; it changes nothing here.
 
 ---
 

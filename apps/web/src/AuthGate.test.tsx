@@ -49,15 +49,19 @@ afterEach(() => {
 
 describe('AuthGate', () => {
   it('renders the sign-in card (and not the app) when oidc mode has no session', async () => {
-    stubMe({ mode: 'oidc', authenticated: false, user: null, google_signin: true })
+    // What a BFF from before B61.29 answered: it is ignored.
+    stubMe({ mode: 'oidc', authenticated: false, user: null, google_signin: true } as AuthMe)
     renderGate()
-    // B61.26 — the card is the door: the phone number. While the move runs, Google is the small link under it.
+    // B61.26 — the card is the door: the phone number. B61.29 — and nothing else: Google sign-in is gone.
     expect(await screen.findByRole('heading', { name: 'What’s your phone number?' })).toBeInTheDocument()
-    const link = screen.getByRole('link', { name: 'Continue with Google' })
-    // The link must start the BFF's OIDC flow and return to the current path.
-    expect(link).toHaveAttribute('href', expect.stringContaining('/auth/login'))
-    expect(link).toHaveAttribute('href', expect.stringContaining('return_to='))
+    expect(screen.queryByRole('link', { name: 'Continue with Google' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('the-app')).not.toBeInTheDocument()
+  })
+
+  it('B61.29 — a live session opens the app; there is no move from Google to take first', async () => {
+    stubMe({ mode: 'oidc', authenticated: true, user: { sub: 'g1', email: 'maya@example.com' }, phone_needed: true } as AuthMe)
+    renderGate()
+    await waitFor(() => expect(screen.getByTestId('the-app')).toBeInTheDocument())
   })
 
   it('renders the app when the session is live', async () => {

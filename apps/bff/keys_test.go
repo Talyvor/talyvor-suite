@@ -92,7 +92,7 @@ func keysApp(t *testing.T, up *keysUpstream) (*app, *http.Cookie) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "keys-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()
@@ -272,7 +272,7 @@ func TestSpendMonthProxies(t *testing.T) {
 		lensBaseURL: upstream.URL, provisionSecret: testProvisionSecret,
 		authMode: authModeOIDC, sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "sm-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()
@@ -306,7 +306,7 @@ func TestMembersUsesTheSessionsTrackWorkspace(t *testing.T) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com", sessionTTL: time.Hour,
 		trackBaseURL: track.srv.URL, trackGatewaySecret: testTrackSecret,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "mb-sid", "u1", "ng@example.com", "u-test-workspace")
 	sess, _ := auth.sessions.get("mb-sid")
 	sess.trackWorkspaceID = "track-ws-7" // resolved at login by Track's bootstrap
@@ -501,7 +501,7 @@ func TestSavingsMonthProxies(t *testing.T) {
 		lensBaseURL: upstream.URL, provisionSecret: testProvisionSecret,
 		authMode: authModeOIDC, sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "sv-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()

@@ -17,10 +17,7 @@ import (
 // cookie) is what the tests use across it, so the new server's address does not matter.
 func (s *doorSuite) restart() {
 	s.t.Helper()
-	auth, err := newAuthenticator(s.t.Context(), s.app.cfg)
-	if err != nil {
-		s.t.Fatalf("newAuthenticator: %v", err)
-	}
+	auth := newAuthenticator(s.app.cfg)
 	s.app = newApp(s.app.cfg, auth)
 	s.ts = httptest.NewTLSServer(s.app)
 	s.t.Cleanup(s.ts.Close)

@@ -32,8 +32,7 @@ package main
 //
 // ── THE TWO RULES ARE TRACK'S, AND THEY BIND HARDER HERE ────────────────────
 //
-//  1. A DOCS FAILURE MUST NOT FAIL LOGIN (handleCallback logs and continues, asserted in
-//     docs_membersync_test.go). Track's version of this rule trades login availability against a
+//  1. A DOCS FAILURE MUST NOT FAIL LOGIN (signInProducts, auth.go, logs and continues). Track's version of this rule trades login availability against a
 //     product being unavailable; this one trades it against a few minutes of latency on one
 //     product. The trade is far more lopsided, so the rule is far less negotiable.
 //  2. IT MUST NOT BE CACHED IN THE SESSION, and here that is enforced by ABSENCE rather than by

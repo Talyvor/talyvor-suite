@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import type { KeyRecovery, Passkey } from './agentBankApi'
 import { forgetRecoveryCode } from './recoveryCodeStore'
+import { doorNav } from '../auth/doorApi'
 
 // B55.54 — the web's half of Lens's B55.48: the recovery code shown once, a key got back with it, and a recovery waiting
 // 72 hours shown on every page to everyone in the workspace, who can cancel it. The authenticator is stubbed (jsdom has
@@ -112,14 +113,18 @@ describe('Key recovery on the web (B55.54)', () => {
     expect(screen.queryByRole('dialog', { name: 'Save your recovery code' })).toBeNull()
   })
 
-  it('a sign-in too old to start a recovery links to a real sign-in, not the one the provider remembers (B50.49)', async () => {
+  it('a sign-in too old to start a recovery signs out and opens the door, so the next sign-in is real (B50.49, B61.29)', async () => {
     mockBff({ passkeys: [{ credential_id: 'old', name: 'iPhone', created_at: '2026-10-01T09:00:00Z', revoked_at: '2026-10-02T09:00:00Z' }] })
     window.history.pushState({}, '', '/settings/devices')
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Wait 72 hours' }))
 
+    const leave = vi.spyOn(doorNav, 'leave').mockImplementation(() => {})
     const again = await screen.findByRole('link', { name: 'Sign in again' })
-    expect(again).toHaveAttribute('href', '/auth/login?reauth=1&return_to=%2Fsettings%2Fdevices')
+    expect(again).toHaveAttribute('href', '/signin?return_to=%2Fsettings%2Fdevices')
+    fireEvent.click(again)
+    await waitFor(() => expect(leave).toHaveBeenCalledWith('/signin?return_to=%2Fsettings%2Fdevices'))
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([u, i]) => String(u) === '/auth/logout' && i?.method === 'POST')).toBe(true)
   })
 
   it('an approve control says every key was removed and offers the two ways back', async () => {

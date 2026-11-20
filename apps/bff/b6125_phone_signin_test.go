@@ -22,7 +22,8 @@ import (
 // doorPerson is one person in doorLens.
 type doorPerson struct {
 	id, identity, passcode string
-	device                 string // the device id of the phone's key, "" with none
+	device                 string   // the device id of the phone's key, "" with none
+	keys                   []string // B61.105: the ids of the sign-in keys kept for the person
 }
 
 // doorLens stands in for Lens's sign-in routes. Codes are 6 digits handed back as the Sandbox sender's; a ticket is
@@ -173,12 +174,16 @@ func newDoorLens(t *testing.T, rest *strangerLens) *doorLens {
 					}
 					dev, _ := in["device"].(map[string]any)
 					p.device, _ = dev["public_key"].(string)
+					id := "pky_" + strconv.Itoa(d.n)
+					p.keys = append(p.keys, id)
 					w.WriteHeader(http.StatusCreated)
-					_ = json.NewEncoder(w).Encode(map[string]any{"id": "pky_" + strconv.Itoa(d.n), "kind": "device"})
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "kind": "device"})
 					return
 				}
 			}
 			refuse(http.StatusNotFound, "no_person")
+		case "/v1/auth/passkey/keys", "/v1/auth/passkey/keys/remove", "/v1/auth/passcode/change", "/v1/auth/phone/change-number":
+			d.settings(w, r.URL.Path, str, refuse)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -480,71 +485,11 @@ func TestB6125_LockedPhoneSessionGets423UntilUnlocked(t *testing.T) {
 	}
 }
 
-func TestB6125_GoogleMovesOnceAndKeepsItsAccounts(t *testing.T) {
-	s := startDoorSuite(t, nil)
-	br := s.signUp("google-sub-7", "maya@example.org")
-	if _, out := s.get(br, "", "/auth/me"); out["phone_needed"] != true || out["google_signin"] != true {
-		t.Fatalf("a Google sign-in with no number: %v", out)
-	}
-	// The account each session is on, as Lens reads its token (the stranger suite's default answer names it).
-	on := func(br *http.Client) string {
-		_, out := s.get(br, "", "/api/earnings")
-		ws, _ := out["belongs_to"].(string)
-		if ws == "" {
-			t.Fatalf("no account read: %v", out)
-		}
-		return ws
-	}
-	before := on(br)
-	check, _ := s.confirm(br, "+447700900007")
-	if st, out, _ := s.post(br, "", "/auth/google/move", map[string]string{"check": check, "passcode": "418263"}); st != http.StatusOK || out["moved"] != true {
-		t.Fatalf("the move: %d %v", st, out)
-	}
-	if b := s.door.body("/v1/auth/phone/person"); b["identity"] != provisionIdentity(s.idp.srv.URL, "google-sub-7") {
-		t.Fatalf("the person was not given the Google identity: %v", b)
-	}
-	if _, out := s.get(br, "", "/auth/me"); out["phone_needed"] != false {
-		t.Fatalf("after the move: %v", out)
-	}
-	if after := on(br); after != before {
-		t.Fatalf("the move changed the account: %q → %q", before, after)
-	}
-	// From then the number, its code and the passcode open the same account, with no Google.
-	other := s.browser()
-	check, _ = s.confirm(other, "+447700900007")
-	if st, out, _ := s.post(other, "", "/auth/phone/signin", map[string]string{"check": check, "passcode": "418263"}); st != http.StatusOK {
-		t.Fatalf("the new way in: %d %v", st, out)
-	}
-	if got := on(other); got != before {
-		t.Fatalf("the new way in reached %q, Google's was %q", got, before)
-	}
-}
-
-func TestB6125_GoogleOffRemovesItsRoutes(t *testing.T) {
-	s := startDoorSuite(t, func(c *config) { c.googleSignInOff = true })
-	for _, rt := range []struct{ method, path string }{{http.MethodGet, "/auth/login"}, {http.MethodGet, "/auth/callback"},
-		{http.MethodPost, "/auth/mobile/session"}, {http.MethodPost, "/auth/google/move"}} {
-		req, _ := http.NewRequest(rt.method, s.ts.URL+rt.path, strings.NewReader(`{}`))
-		req.Header.Set("Origin", s.ts.URL)
-		resp, err := s.ts.Client().Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Errorf("%s %s with Google off: %d, want 404", rt.method, rt.path, resp.StatusCode)
-		}
-	}
-	if _, out := s.get(s.browser(), "", "/auth/me"); out["google_signin"] != false {
-		t.Fatalf("/auth/me with Google off: %v", out)
-	}
-}
-
 func TestB6125_DoorRefusesAnotherSite(t *testing.T) {
 	s := startDoorSuite(t, nil)
 	for _, path := range []string{"/auth/phone/start", "/auth/phone/finish", "/auth/phone/signin", "/auth/phone/join",
 		"/auth/signup/account", "/auth/passkey/challenge", "/auth/passkey/finish", "/auth/passkey/register/challenge",
-		"/auth/passkey/register", "/auth/lock", "/auth/unlock/challenge", "/auth/unlock", "/auth/google/move"} {
+		"/auth/passkey/register", "/auth/lock", "/auth/unlock/challenge", "/auth/unlock"} {
 		req, _ := http.NewRequest(http.MethodPost, s.ts.URL+path, strings.NewReader(`{"phone":"+447700900008"}`))
 		req.Header.Set("Origin", "https://evil.example")
 		req.Header.Set("Sec-Fetch-Site", "cross-site")

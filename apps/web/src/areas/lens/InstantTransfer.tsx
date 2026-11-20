@@ -578,6 +578,7 @@ function InstantTransferForm() {
         <p className="text-body text-ink-3">The amount in “They get” is the amount that arrives.</p>
       </PocketCard>
       <Dialog
+        position="panel"
         open={approvalID !== null}
         onClose={() => setApprovalID(null)}
         title="Approve this Instant transfer"

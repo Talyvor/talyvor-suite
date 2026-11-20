@@ -23,7 +23,7 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 	}
 	s, ok := a.auth.sessionFrom(r)
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /auth/login"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /signin"})
 		return
 	}
 	if a.oauth.db == nil {

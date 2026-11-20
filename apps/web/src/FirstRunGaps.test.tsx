@@ -84,9 +84,8 @@ describe('the marketing page offers a way in', () => {
   it('has a primary action that reaches the signup page, not only an email link', async () => {
     mockBff()
     at('/marketing')
-    // B64.1: version 4's "Open your account" and "Open an account" are the way in, and every one goes to /signup, not
-    // /auth/login directly: a stranger is told what this is and what happens next BEFORE being redirected to a third
-    // party. A mailto: or an in-app path is not a way in for someone with no session.
+    // B64.1: version 4's "Open your account" and "Open an account" are the way in, and every one goes to /signup: a stranger
+    // is told what this is and what happens next BEFORE the door. A mailto: or an in-app path is not a way in for someone with no session.
     const ctas = await screen.findAllByRole('link', { name: /open (your|an) account/i })
     expect(ctas.length).toBeGreaterThanOrEqual(4)
     expect(new Set(ctas.map((a) => a.getAttribute('href')))).toEqual(new Set(['/signup']))

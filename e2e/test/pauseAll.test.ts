@@ -47,7 +47,7 @@ function bankOf(base: string, lens: LensClient, user: SyntheticUser): AgentBankS
   } as unknown as AgentBankScreen
 }
 
-async function pauseAllTwice(stubBreak = 'pool-stale'): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
+async function startStub(stubBreak: string): Promise<{ base: string; lens: LensClient }> {
   const port = await freePort()
   const base = `http://127.0.0.1:${port}`
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
@@ -58,16 +58,22 @@ async function pauseAllTwice(stubBreak = 'pool-stale'): Promise<{ verdict: Verdi
     stub?.stdout?.on('data', (b: Buffer) => /stub lens on/.test(b.toString()) && resolve())
     stub?.on('exit', (code) => reject(new Error(`the stub exited ${code}`)))
   })
-  const lens = new LensClient(base, 'pause-key')
+  return { base, lens: new LensClient(base, 'pause-key') }
+}
+
+async function runOnce(base: string, lens: LensClient, user: SyntheticUser, capUSD = 1): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
+  vi.spyOn(AgentBankScreen, 'open').mockResolvedValue(bankOf(base, lens, user))
+  const evidence: Evidence[] = []
+  const env = { lens, judgeProvider: 'anthropic', judgeModel: 'claude-haiku-4-5', catalog: await lens.catalog(user),
+    cap: new SpendCap(capUSD), book: new ChargeBook(), usdPerLXC: await lens.usdPerLXC() }
+  const ctx = { app: { user }, env, evidence } as unknown as ScenarioCtx
+  return { verdict: await agentPauseAll(42).run(ctx), evidence }
+}
+
+async function pauseAllTwice(stubBreak = 'pool-stale'): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
+  const { base, lens } = await startStub(stubBreak)
   const users = await lens.createUsers(2)
-  const run = async (user: SyntheticUser) => {
-    vi.spyOn(AgentBankScreen, 'open').mockResolvedValue(bankOf(base, lens, user))
-    const evidence: Evidence[] = []
-    const env = { lens, judgeProvider: 'anthropic', judgeModel: 'claude-haiku-4-5', catalog: await lens.catalog(user),
-      cap: new SpendCap(1), book: new ChargeBook(), usdPerLXC: await lens.usdPerLXC() }
-    const ctx = { app: { user }, env, evidence } as unknown as ScenarioCtx
-    return { verdict: await agentPauseAll(42).run(ctx), evidence }
-  }
+  const run = (user: SyntheticUser) => runOnce(base, lens, user)
   await run(users[0]) // the night that stored the wrong answer
   return run(users[1])
 }
@@ -92,4 +98,15 @@ describe('agent-pause-all (B28.459)', () => {
     expect((await pauseAllTwice('pool-stale,request-id')).verdict).toMatchObject({ pass: false, detail: expect.stringMatching(/which Lens request served/) })
     expect(verdict).toMatchObject({ pass: true })
   }, 60_000)
+})
+
+// B17.511 — on 8 Oct the spend cap ended agent-pause-all as SKIP between Pause every agent and Start every agent again,
+// and user 292's workspace stayed paused for the next three scenarios. Whatever ends it once paused starts them again.
+describe('agent-pause-all leaves no pause behind (B17.511)', () => {
+  it('starts every agent again when the spend cap stops it while they are paused', async () => {
+    const { base, lens } = await startStub('')
+    const [user] = await lens.createUsers(1)
+    await expect(runOnce(base, lens, user, 1e-12)).rejects.toThrow(/spend cap/)
+    expect((await lens.agentBook(user)).all_paused_at).toBeUndefined()
+  }, 30_000)
 })
