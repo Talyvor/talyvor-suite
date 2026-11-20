@@ -142,7 +142,8 @@ describe('Approvals and devices (B57.43)', () => {
     open()
 
     expect(await screen.findByText('2 passkeys and your phone’s key are registered. You approve with one of them; nothing is approved without one.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1, name: 'Approvals and devices' }).closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
+    // B61.121 — it opens in the right panel over Settings, named by the panel's heading.
+    expect(screen.getByRole('heading', { name: 'Approvals and devices' }).closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
     expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
     const keys = screen.getByTestId('approval-keys')
     expect(keys).toHaveTextContent('This MacPasskey · added 14 Oct · last used 20 Oct')
@@ -153,11 +154,11 @@ describe('Approvals and devices (B57.43)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Remove “This Mac”?' })
     expect(dialog).toHaveTextContent('It can no longer approve anything.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove “This Mac”?' })).toBeNull())
     expect(sent).toEqual([])
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove This Mac' }))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove it' }))
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Remove “This Mac”?' })).getByRole('button', { name: 'Remove it' }))
     expect(await screen.findByText('Removed: This Mac')).toBeInTheDocument()
     expect(sent).toEqual([{ method: 'DELETE', url: '/api/agents/passkeys', body: { credential_id: 'cred_mac' } }])
     expect(get).not.toHaveBeenCalled()
@@ -190,7 +191,7 @@ describe('Approvals and devices (B57.43)', () => {
     open()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remove iPad' }))
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('dialog', { name: 'Remove “iPad”?' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove it' }))
     await waitFor(() => expect(dialog).toHaveTextContent('It is your last key. With none, nobody could approve, so add another first.'))
     expect(within(dialog).queryByRole('button', { name: 'Remove it' })).toBeNull()

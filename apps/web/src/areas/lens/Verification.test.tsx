@@ -145,7 +145,8 @@ describe('the Verification screen', () => {
 
     expect(await screen.findByRole('heading', { name: 'Confirm who you are' })).toBeTruthy()
     expect(await screen.findByTestId('identity-contact')).toBeTruthy()
-    const ledes = Array.from(document.querySelectorAll('main p')).filter((p) => /It takes a minute|never a copy of a document/.test(p.textContent ?? ''))
+    // B61.121 — Verification opens in the right panel over Settings.
+    const ledes = Array.from(document.querySelectorAll('[role="dialog"] p')).filter((p) => /It takes a minute|never a copy of a document/.test(p.textContent ?? ''))
     expect(ledes.map((p) => p.textContent)).toEqual([
       'Talyvor checks who you are before your account can move money. It takes a minute. Talyvor keeps what each check found, who checked it and when, never a copy of a document.',
     ])

@@ -47,8 +47,10 @@ export const PAY_TABS: Place = {
 
 const PLACES = [ACTIVITY_TABS, PAY_TABS]
 
-export function PlaceTabs() {
-  const { pathname } = useLocation()
+/** B61.121 — `pathname` is the page drawn, which is the page behind while one opens in the right panel. */
+export function PlaceTabs({ pathname: drawn }: { pathname?: string } = {}) {
+  const here = useLocation().pathname
+  const pathname = drawn ?? here
   const navigate = useNavigate()
   const { shows } = useAccount()
   const place = PLACES.find((p) => p.tabs.some((t) => t.to === pathname))

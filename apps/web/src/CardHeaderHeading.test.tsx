@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Card, CardHeader, MuNumeral } from '@talyvor/ui'
@@ -165,7 +165,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B57.43: one fewer, the Face ID and notifications card moved to Approvals and devices.
   // B57.22 — eight more (name and description, pay, schedules, top-up, key, credential, limit boost, archive) open from its Settings rows.
   '/agents/:id': 8, // 14 → 12 at B57.23: Would it pass? and the rules history moved to the agent's rules page; 12 → 11 at B57.111: its spend by day, model and destination is a Pocket card with its own heading; 11 → 10 at B61.14: the old view's Money card (its LXC and Move LXC) is not drawn; 10 → 8 at B61.55: nor its Statement for every agent and its credit Statement
-  '/agents/:id/rules': 0, // B57.23 drew it in Pocket
+  '/agents/:id/rules': 8, // B57.23 drew it in Pocket; 0 → 8 at B61.121: it opens in the right panel over the agent's page, which has 8
   '/agents': 0, // B57.19 drew /agents in Pocket: its cards are AgentCards, so today's card headers are on /agents/:id alone
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
@@ -238,6 +238,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
 beforeEach(mockBff)
 afterEach(() => {
   vi.restoreAllMocks()
+  cleanup()
   document.body.replaceChildren()
   // ⚠ THE SHARED CACHE, WHICH THIS FILE DID NOT CLEAR. App.tsx exports ONE queryClient, so without
   // this the second address in the loop is served the FIRST one's data. It did not matter while
@@ -302,6 +303,7 @@ describe('a card header is a section title, so it is a heading element', () => {
       const address = addressOf(route.path)
       await at(address)
       measured[address] = cardHeaderTitles(document.body).length
+      cleanup()
       document.body.replaceChildren()
     }
     const table = (t: Record<string, number>) =>
@@ -340,6 +342,7 @@ describe('a card header is a section title, so it is a heading element', () => {
     for (const route of CONSOLE_ROUTES) {
       await at(addressOf(route.path))
       found += cardHeaderTitles(document.body).length
+      cleanup()
       document.body.replaceChildren()
     }
     expect(

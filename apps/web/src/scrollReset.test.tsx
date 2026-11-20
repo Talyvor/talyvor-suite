@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
 import { App, CONSOLE_ROUTES, queryClient } from './App'
@@ -95,6 +95,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   queryClient.clear()
+  cleanup()
   document.body.replaceChildren()
 })
 
