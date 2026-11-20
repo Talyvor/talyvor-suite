@@ -39,6 +39,11 @@
 // B17.508 — and each card pays once (Lens B28.323): the issuer's second charge on a used card is declined. Its defect:
 //   card-pays-twice        — a used card's second charge is approved and writes a second card_charge
 //   card-life-25h          — B17.512: the cards are issued closing in 25 hours, not 24
+// B17.510 — and a card payment disputed (Lens B28.333, B59.24): POST /v1/money/card-disputes {payment_id, reason} keeps the
+// payment's one dispute, with the issuer; POST …/{id}/sandbox-outcome {won} decides it, a won one crediting the card's agent
+// account the payment once (card_dispute_won), the same outcome again moving nothing; GET …/card-disputes lists them. Its defects:
+//   dispute-won-uncredited — a won dispute credits nothing back
+//   dispute-won-twice      — the same won outcome again credits the payment again
 // B17.512 — the card desk keeps its own clock, STUB_CLOCK_AHEAD_MS ahead of the runner's (Lens's database clock is not the
 // testers' Mac's), and says it in each card answer's Date header, as Lens's server does.
 
@@ -133,6 +138,9 @@ interface StubCardBatch { id: string; workspace_id: string; agent_id: string; id
 interface StubBudget { id: string; agent_id: string; category: string; period: string; amount_minor: number; currency: string; timezone: string }
 /** A card charge the issuer made and Lens approved (economy card_charge, with B53.1's details). */
 interface StubCharge { entry_id: string; agent_id: string; merchant: string; mcc: string; country: string; amount_minor: number; currency: string; created_at: string }
+/** B17.510 — a card payment's dispute and where it stands (economy.CardDispute). */
+interface StubCardDispute { id: string; partner: string; payment_id: string; workspace_id: string; agent_id: string; card_id: string; merchant: string
+  amount_minor: number; currency: string; reason: string; status: string; credited_minor: number; decided_at?: string; created_at: string }
 interface StubLimitAlert { id: string; kind: string; subject: string; agent_id?: string; category?: string; period: string; period_start: string; percent: number
   spent_minor: number; limit_minor: number; currency: string; created_at: string }
 interface StubAlertChannel { id: string; kind: string; url: string; created_at: string }
@@ -200,6 +208,9 @@ export class PayeeDesk {
   private readonly merchantCategories = new Map<string, Map<string, string>>()
   /** B53.14 — each workspace's card charges. */
   private readonly charges = new Map<string, StubCharge[]>()
+  /** B17.510 — the approved card payments, by the issuer's authorization id, and each workspace's disputes of them. */
+  private readonly cardPayments = new Map<string, { ws: string; agent_id: string; card_id: string; merchant: string; amount_minor: number; currency: string }>()
+  private readonly disputes = new Map<string, StubCardDispute[]>()
   /** B53.16 — each workspace's payday and income, its notice settings and the plan notices raised, by subject. */
   private readonly incomes = new Map<string, { payday: number; amount_minor: number; currency: string; payer: string; set_at: string }>()
   private readonly noticeSettings = new Map<string, unknown>()
@@ -275,6 +286,7 @@ export class PayeeDesk {
     if (await this.payoutRoute(req, res, ws, path, list)) return true
     if (await this.billRoute(req, res, ws, path, list)) return true
     if (await this.cardRoute(req, res, ws, path, '')) return true
+    if (await this.disputeRoute(req, res, ws, path)) return true
     if (await this.budgetRoute(req, res, ws, path)) return true
     if (await this.coachRoute(req, res, ws, path)) return true
     if (await this.planRoute(req, res, ws, path)) return true
@@ -520,7 +532,46 @@ export class PayeeDesk {
     }
     this.charges.set(ws, [...(this.charges.get(ws) ?? []), { entry_id: `me_${randomUUID()}`, agent_id: batch.agent_id, merchant: card.merchant, ...d,
       amount_minor: amount, currency: batch.currency, created_at: new Date().toISOString() }])
+    this.cardPayments.set(authorization, { ws, agent_id: batch.agent_id, card_id: card.id, merchant: card.merchant, amount_minor: amount, currency: batch.currency })
     return [200, { authorization_id: authorization, approved: true, reason: '', ...d, channel: 'online', wallet: 'none' }]
+  }
+
+  /** B17.510 — the card disputes (Lens B59.24): a payment's one dispute, and the Sandbox's outcome of it. */
+  private async disputeRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    if (!path.startsWith('/v1/money/card-disputes')) return false
+    const list = this.disputes.get(ws) ?? []
+    if (path === '/v1/money/card-disputes' && req.method === 'GET') return this.json(res, 200, { card_disputes: [...list].reverse() }), true
+    if (path === '/v1/money/card-disputes' && req.method === 'POST') {
+      const b = await this.body<{ payment_id?: string; reason?: string }>(req)
+      const reason = (b.reason ?? '').split(/\s+/).filter(Boolean).join(' ')
+      if ((b.payment_id ?? '') === '') return this.json(res, 400, { error: 'body must be {"payment_id", "reason"}' }), true
+      if (reason === '' || reason.length > 500) return this.json(res, 400, { error: 'economy: invalid card dispute: give a reason of up to 500 characters' }), true
+      const p = this.cardPayments.get(b.payment_id ?? '')
+      if (p === undefined || p.ws !== ws) return this.json(res, 400, { error: `economy: invalid card dispute: no card payment "${b.payment_id}" in this workspace` }), true
+      const had = list.find((x) => x.payment_id === b.payment_id)
+      if (had !== undefined) return this.json(res, 201, had), true
+      const d: StubCardDispute = { id: `cdsp_${randomUUID()}`, partner: 'sandbox', payment_id: b.payment_id ?? '', workspace_id: ws, agent_id: p.agent_id, card_id: p.card_id,
+        merchant: p.merchant, amount_minor: p.amount_minor, currency: p.currency, reason, status: 'with_issuer', credited_minor: 0, created_at: new Date().toISOString() }
+      this.disputes.set(ws, [...list, d])
+      return this.json(res, 201, d), true
+    }
+    const m = /^\/v1\/money\/card-disputes\/([^/]+)\/sandbox-outcome$/.exec(path)
+    if (m === null || req.method !== 'POST') return false
+    const d = list.find((x) => x.id === m[1])
+    if (d === undefined) return this.json(res, 404, { error: 'economy: no such card dispute' }), true
+    const { won } = await this.body<{ won?: boolean }>(req)
+    if (typeof won !== 'boolean') return this.json(res, 400, { error: 'body must be {"won": true | false}' }), true
+    const status = won ? 'won' : 'lost'
+    if (d.status === status && !(won && this.broken('dispute-won-twice'))) return this.json(res, 200, d), true
+    if (d.status !== status && d.status !== 'with_issuer') return this.json(res, 409, { error: `economy: the card dispute is already decided: it was ${d.status}` }), true
+    const credit = won && !this.broken('dispute-won-uncredited') ? d.amount_minor : 0
+    const to = (this.accounts.get(ws) ?? []).find((a) => a.purpose === 'agent' && a.agent_id === d.agent_id && a.currency === d.currency)
+    if (to !== undefined) {
+      to.test_minor += credit
+      to.balance_minor += credit
+    }
+    Object.assign(d, { status, credited_minor: credit, decided_at: new Date().toISOString() })
+    return this.json(res, 200, d), true
   }
 
   /** B53.14 — spending, what was unusual, and the Coach (Lens B53.3, B53.5, B53.6). */
