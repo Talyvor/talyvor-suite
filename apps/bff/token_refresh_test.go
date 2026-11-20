@@ -110,7 +110,7 @@ func refreshApp(t *testing.T, exp time.Time) (*app, *refreshUpstream, *http.Cook
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: 12 * time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()
 

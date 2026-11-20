@@ -809,6 +809,12 @@ const BY_PATH: Record<string, unknown> = {
         percent: 50, spent_minor: 25_000, limit_minor: 50_000, currency: 'GBP', created_at: '2026-09-20T08:00:00Z' },
     ],
   },
+  '/api/money/low-balance': {
+    thresholds: [{ id: 'bth_1', agent_id: 'agt_research', currency: 'USD', threshold_minor: 50_000, balance_minor: 40_000, has_account: true, below: true }],
+  },
+  '/api/money/low-balance/alerts': {
+    alerts: [{ id: 'lba_1', agent_id: 'agt_research', currency: 'USD', hour_start: '2026-10-05T08:00:00Z', balance_minor: 40_000, threshold_minor: 50_000, created_at: '2026-10-05T08:01:00Z' }],
+  },
   '/api/money/alerts/channels': {
     channels: [
       { id: 'ach_1', kind: 'push', created_at: '2026-09-18T09:00:00Z' },

@@ -7,7 +7,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
 import { fail } from './bank.ts'
 import type { Scenario } from './scenarios.ts'
 import { call, said } from './settings.ts'
@@ -28,6 +28,42 @@ async function fromPage(page: Page, path: string): Promise<{ status: number; typ
 }
 
 const day = (d: Date) => d.toISOString().slice(0, 10)
+
+/** The band's Balance now: its figure alone. Under each figure the band names the currency ("GBP"), as the design's band
+ * puts a second line under each figure, so the figure is read from its <Money> ([data-money]), not the whole <dd>. */
+export async function bandBalance(band: Pick<Locator, 'locator'>): Promise<string> {
+  return ((await band.locator('dd').nth(3).locator('[data-money]').textContent()) ?? '').trim()
+}
+
+/** One CSV row's fields; a quoted field may hold commas and doubled quotes. */
+function fields(row: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let quoted = false
+  for (let i = 0; i < row.length; i++) {
+    const c = row[i]
+    if (quoted) {
+      if (c === '"' && row[i + 1] === '"') { cur += '"'; i++ } else if (c === '"') quoted = false
+      else cur += c
+    } else if (c === '"') quoted = true
+    else if (c === ',') { out.push(cur); cur = '' } else cur += c
+  }
+  out.push(cur)
+  return out
+}
+
+/** The closing balance Lens's statement CSV ends on: the last row, its kind "closing", read by the header's own column
+ * names. Lens adds columns after balance_after_minor (task, state), so the figure is found by name, not by position. */
+export function csvClosing(text: string): number | undefined {
+  const rows = text.trim().split(/\r?\n/)
+  if (rows.length < 2) return undefined
+  const head = fields(rows[0])
+  const last = fields(rows[rows.length - 1])
+  const kind = head.indexOf('kind')
+  const balance = head.indexOf('balance_after_minor')
+  if (kind < 0 || balance < 0 || last[kind] !== 'closing' || !/^-?\d+$/.test(last[balance] ?? '')) return undefined
+  return Number(last[balance])
+}
 
 export function accountStatements(): Scenario {
   return {
@@ -84,7 +120,7 @@ export function accountStatements(): Scenario {
         const csv = await fromPage(page, `/api/money/accounts/${id}/statement?${period}&format=csv`)
         const closing = csv.text.trim().split('\n').at(-1) ?? ''
         ctx.evidence.push({ note: 'the CSV', answer: `${csv.status} ${csv.type} ${csv.text.slice(0, 400)}` })
-        if (csv.status !== 200 || !csv.type.startsWith('text/csv') || !closing.includes(',closing,') || !closing.endsWith(`,${st.closing_minor}`)) {
+        if (csv.status !== 200 || !csv.type.startsWith('text/csv') || csvClosing(csv.text) !== st.closing_minor) {
           return fail(`Download CSV must be Lens's file closing on ${st.closing_minor}; it answered ${csv.status} ${csv.type}, last line "${closing}"`)
         }
 
@@ -94,7 +130,7 @@ export function accountStatements(): Scenario {
         const band = page.locator('[data-testid="account-statement-band"]')
         if (!(await band.waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false))) return fail("Statements must show the company GBP account's band; it does not")
         if ((await tab.getAttribute('aria-selected')) !== 'true') return fail('the Company · GBP tab must be the one open')
-        const balance = ((await band.locator('dd').nth(3).textContent()) ?? '').trim()
+        const balance = await bandBalance(band)
         const want = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(st.closing_minor / 100)
         ctx.evidence.push({ note: 'the band', answer: ((await band.textContent()) ?? '').replace(/\s+/g, ' ') })
         if (balance !== want) return fail(`the band's Balance must read ${want}; it reads "${balance}"`)

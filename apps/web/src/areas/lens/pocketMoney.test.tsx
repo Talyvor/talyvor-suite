@@ -188,6 +188,8 @@ const NOT_YET = [
   'areas/lens/format.ts',
   'areas/lens/rulePickers.tsx',
   'areas/lens/topupApi.ts',
+  // B64.3: the marketing page prints the plan table's prices in index.html's own type, rendered bare like /pricing.
+  'areas/marketing/Landing.tsx',
   'areas/marketing/PricingPlans.tsx',
   'areas/marketing/pricingApi.ts',
   'areas/marketplace/EarningsList.tsx',

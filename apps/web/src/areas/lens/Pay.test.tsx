@@ -188,6 +188,21 @@ describe('the Pay screen', () => {
     expect(within(screen.getByTestId('payee-payee_2')).getByText('Paying')).toBeTruthy()
   })
 
+  // B17.473 — a payee or a payment the one search opens (/money/pay#payee-<id>, #payment-<id>) is marked on its own row.
+  it('marks the payee and the payment row the address names', async () => {
+    const payments = [PAYMENT('mpay_1', 'payee_2', 'Kite Accounting', 1000, 'completed'), PAYMENT('mpay_2', 'payee_1', 'Acme Ltd', 500, 'completed')]
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd'), PAYEE('payee_2', 'Kite Accounting')], payments)
+    window.history.pushState({}, '', '/money/pay#payee-payee_2')
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByTestId('payee-payee_2').getAttribute('data-linked')).toBe('true'))
+    expect(screen.getByTestId('payee-payee_1').getAttribute('data-linked')).toBeNull()
+    cleanup()
+    window.history.pushState({}, '', '/money/pay#payment-mpay_1')
+    render(<App />)
+    await vi.waitFor(() => expect(screen.getByTestId('payment-mpay_1').getAttribute('data-linked')).toBe('true'))
+    expect(screen.getByTestId('payment-mpay_2').getAttribute('data-linked')).toBeNull()
+  })
+
   // B57.31 — pressing a saved payee pays it: To is filled, and the row says so.
   it('fills To when a saved payee is pressed', async () => {
     mockBff([], [], [PAYEE('payee_1', 'Acme Ltd'), PAYEE('payee_2', 'Kite Accounting')])
@@ -944,6 +959,10 @@ describe('the fee line under the amount (B61.116)', () => {
       )
     })
   }
+  // B57.188 — drawn as w-pay draws its review rows (Pocket's Facts): each a label and its figure.
+  function rows(line: HTMLElement) {
+    return Array.from(line.querySelectorAll('dl > div')).map((r) => [r.querySelector('dt')?.textContent, r.querySelector('dd')?.textContent])
+  }
   async function payForm() {
     window.history.pushState({}, '', '/money/pay#payee-payee_1')
     render(<App />)
@@ -956,7 +975,9 @@ describe('the fee line under the amount (B61.116)', () => {
     mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
     withPlan(3)
     const form = await payForm()
-    expect((await within(form).findByTestId('pay-fee')).textContent).toBe('Free. You have 3 free payments left this month.')
+    const line = await within(form).findByTestId('pay-fee')
+    expect(rows(line)).toEqual([['Fee', '£0.00']])
+    expect(within(line).getByText('Free. You have 3 free payments left this month.')).toBeTruthy()
     expect(form.textContent).not.toMatch(/Total/)
   })
 
@@ -964,7 +985,11 @@ describe('the fee line under the amount (B61.116)', () => {
     mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
     withPlan(0)
     const form = await payForm()
-    expect((await within(form).findByTestId('pay-fee')).textContent).toBe('Fee £0.20 · Total £20.20')
+    const line = await within(form).findByTestId('pay-fee')
+    expect(rows(line)).toEqual([
+      ['Fee', '£0.20'],
+      ['Total', '£20.20'],
+    ])
   })
 
   it('says nothing about a fee when the plan has no limit', async () => {

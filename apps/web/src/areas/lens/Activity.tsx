@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { cn, inlineLink } from '@talyvor/ui'
-import { Card, Chip, Field, Icon, Input, Money, RoomBadge, Row, Select, pocketFocusRing, type ChipTone, type IconName } from '@talyvor/ui/pocket'
+import { Card, Chip, Field, Icon, Input, Money, RoomBadge, Row, Select, Shapes, pocketFocusRing, useLanded, type ChipTone, type IconName } from '@talyvor/ui/pocket'
 import { BOOK_KEY, dayAfter, readFailure } from './AgentBank'
 import { lineWhen } from './AgentStatement'
 import { accountOwner, kindWords } from './AccountStatement'
@@ -137,6 +137,11 @@ export function ActivityScreen() {
   const [state, setState] = useState('')
   const [q, setQ] = useState('')
   const now = new Date()
+  // B61.75 — a payment that arrives after the first read drops into the list with a tint that fades.
+  const landed = useLanded(
+    rows.map((r) => r.key),
+    !pending && !read.error,
+  )
   const owners = [...new Set(accounts.map((a) => (a.purpose === 'agent' && a.agent_id ? a.agent_id : 'company')))]
   const states = [...new Set(rows.map((r) => r.state))]
   const words = q.trim().toLowerCase()
@@ -189,7 +194,9 @@ export function ActivityScreen() {
       {read.error ? (
         <p className="text-body text-ink-2">{readFailure(read.error, 'Your payments')}</p>
       ) : pending && rows.length === 0 ? (
-        <p className="text-body text-ink-3">Reading…</p>
+        <Card tone="white">
+          <Shapes rows={5} />
+        </Card>
       ) : rows.length === 0 ? (
         <p className="text-body text-ink-2">
           No payments yet. Payments in on{' '}
@@ -208,7 +215,7 @@ export function ActivityScreen() {
         <Card tone="white">
           <ul className="divide-y divide-line" data-testid="activity">
             {shown.map((r) => (
-              <li key={r.key}>
+              <li key={r.key} className={cn(landed(r.key) && 'animate-land')} data-landed={landed(r.key) ? '' : undefined}>
                 <Link to={r.href} data-testid="activity-row" className={cn('block rounded-control', pocketFocusRing)}>
                   <Row
                     className="border-t-0"

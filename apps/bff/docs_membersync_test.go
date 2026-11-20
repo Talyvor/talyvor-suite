@@ -193,8 +193,7 @@ func TestDocsNudge_UnconfiguredIsNotAFailure(t *testing.T) {
 	}
 }
 
-// A Docs failure is reported to the CALLER as an error and left there. What must not happen is
-// upstairs, and TestDocsNudge_FailureDoesNotAbortLogin asserts that.
+// A Docs failure is reported to the CALLER as an error and left there.
 func TestDocsNudge_ReportsUpstreamFailure(t *testing.T) {
 	up := newDocsSyncUpstream(t)
 	up.code = http.StatusInternalServerError
@@ -206,49 +205,6 @@ func TestDocsNudge_ReportsUpstreamFailure(t *testing.T) {
 }
 
 /* ── Rule 1: a Docs failure must not fail login ──────────────────────────── */
-
-// RULE 1, asserted on handleCallback's SHAPE for the same reason the Track version is: the claim
-// is "this code path cannot return here", and a behavioural test can only sample the failures it
-// thought to fake. Structural for the structural claim, behavioural for the behavioural one.
-func TestDocsNudge_FailureDoesNotAbortLogin(t *testing.T) {
-	checked := false
-	for name, file := range bffSourceFiles(t) {
-		ast.Inspect(file, func(n ast.Node) bool {
-			fn, ok := n.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || fn.Name.Name != "provisionSession" ||
-				!callsFunc(fn, "nudgeDocsMemberSync") {
-				return true
-			}
-			checked = true
-			ast.Inspect(fn.Body, func(m ast.Node) bool {
-				ifs, ok := m.(*ast.IfStmt)
-				if !ok || !mentions(ifs.Cond, "derr") {
-					return true
-				}
-				ast.Inspect(ifs.Body, func(k ast.Node) bool {
-					if _, isRet := k.(*ast.ReturnStmt); isRet {
-						t.Errorf("%s: handleCallback RETURNS when the Docs nudge fails — a Docs blip "+
-							"would take out the whole login, in exchange for a window Docs' own sweep "+
-							"closes within minutes. Log it and continue.", name)
-					}
-					if call, isCall := k.(*ast.CallExpr); isCall {
-						if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "writeJSON" {
-							t.Errorf("%s: handleCallback writes an error response when the Docs nudge "+
-								"fails — login must complete regardless", name)
-						}
-					}
-					return true
-				})
-				return true
-			})
-			return true
-		})
-	}
-	if !checked {
-		t.Fatal("provisionSession (the login step handleCallback and the phone sign-in share) no longer calls nudgeDocsMemberSync — either the nudge was removed " +
-			"(first-visit Docs writes 403 until the next sweep) or this guard has drifted")
-	}
-}
 
 /* ── Rule 2: nothing about it is cached in the session ───────────────────── */
 

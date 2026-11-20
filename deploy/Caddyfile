@@ -24,10 +24,11 @@
 #                                                    scopes the __Host- cookie.
 # The BFF refuses to start if that posture is inconsistent (see loadConfig).
 
-# The apex 301s to the app host. Assumes talyvor.com's DNS points at this
-# server — which is what makes the redirect work.
+# The apex 301s to the website on the app host. Assumes talyvor.com's DNS points at this
+# server — which is what makes the redirect work. B64.8: the query rides along ({?query} is
+# empty when there is none), so a link's utm_ tags reach /marketing.
 talyvor.com {
-	redir https://app.talyvor.com{uri} 301
+	redir https://app.talyvor.com/marketing{?query} 301
 }
 
 app.talyvor.com {

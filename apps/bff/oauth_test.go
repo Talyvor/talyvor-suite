@@ -21,7 +21,7 @@ func oauthApp(t *testing.T) (*app, *http.Cookie) {
 	t.Helper()
 	cfg := config{lensBaseURL: "http://127.0.0.1:1", provisionSecret: testProvisionSecret,
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com", publicBaseURL: oauthOrigin, sessionTTL: time.Hour}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "sid-ada", "sub-ada", "ada@example.com", "ws-ada")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()
@@ -69,7 +69,7 @@ func connect(t *testing.T, a *app, ck *http.Cookie, clientID string) map[string]
 
 	// Signed out, the person is sent to sign in and brought back here.
 	out := serve(a, "GET", "/oauth/authorize?"+q.Encode(), "", "", nil, nil)
-	if out.Code != http.StatusFound || !strings.HasPrefix(out.Header().Get("Location"), "/auth/login?return_to=%2Foauth%2Fauthorize") {
+	if out.Code != http.StatusFound || !strings.HasPrefix(out.Header().Get("Location"), "/signin?return_to=%2Foauth%2Fauthorize") {
 		t.Fatalf("signed out: %d %s", out.Code, out.Header().Get("Location"))
 	}
 

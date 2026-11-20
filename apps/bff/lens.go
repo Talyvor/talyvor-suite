@@ -101,16 +101,13 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/connect/agent-ceiling", a.oauthOn(a.requireTenant(a.handleAgentCeiling))) // B52.6 — mcp_agents.go
 	a.mux.HandleFunc("/.well-known/openai-apps-challenge", a.handleOpenAIAppsChallenge)              // B52.8 — connect_directory.go
 
-	// The auth surface. Registered in every mode: in disabled mode the login
-	// machinery answers an explicit 404 (not a silent SPA fallback) and /auth/me
-	// reports the mode so the UI can tell the difference.
-	a.mux.HandleFunc("/auth/login", a.handleLogin)
-	a.mux.HandleFunc("/auth/callback", a.handleCallback)
+	// The auth surface. Registered in every mode: in disabled mode sign-in answers
+	// an explicit 404 (not a silent SPA fallback) and /auth/me reports the mode so
+	// the UI can tell the difference. Google sign-in is gone (B61.29).
 	a.mux.HandleFunc("/auth/logout", a.handleLogout)
 	a.mux.HandleFunc("/auth/logout-everywhere", a.handleLogoutEverywhere) // B52.9 — signout_everywhere.go
 	a.mux.HandleFunc("/auth/me", a.handleMe)
-	a.mux.HandleFunc("/auth/mobile/session", a.handleMobileSession)
-	// B61.25 — the door by phone number, the passcode and the passkey; the phone app's lock; the move from Google.
+	// B61.25 — the door by phone number, the passcode and the passkey; the phone app's lock.
 	// See phone_signin.go.
 	a.mux.HandleFunc("/auth/phone/start", a.doorPerIP(a.handlePhoneStart))
 	a.mux.HandleFunc("/auth/phone/finish", a.doorPerIP(a.handlePhoneFinish))
@@ -124,7 +121,6 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/auth/lock", a.handleLock)
 	a.mux.HandleFunc("/auth/unlock/challenge", a.doorPerIP(a.handleUnlockChallenge))
 	a.mux.HandleFunc("/auth/unlock", a.doorPerIP(a.handleUnlock))
-	a.mux.HandleFunc("/auth/google/move", a.doorPerIP(a.handleGoogleMove))
 	// B61.93 — Settings, Privacy: the session's own person's Talyvor name and who can find them. See people_finding.go.
 	a.mux.HandleFunc("/api/people/finding", a.handlePeopleFinding)
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY
@@ -132,6 +128,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/auth/synthetic", a.handleSyntheticSignIn)
 	// B57.86 — the same, for the phone app: a Bearer session instead of a cookie.
 	a.mux.HandleFunc("/auth/synthetic/mobile", a.handleSyntheticMobileSignIn)
+	// Any other /auth/ path is no route. Google sign-in's (/auth/login, /auth/callback, /auth/mobile/session,
+	// /auth/google/move) are gone (B61.29): a stale link to one answers 404, never the app's page.
+	a.mux.HandleFunc("/auth/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such endpoint"})
+	})
 
 	// /api/version is one of the TWO /api/ routes with no session gate. It reports which commit this
 	// binary was built from and which bundle it is serving, and it is deliberately readable
@@ -632,6 +633,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/alerts/channels", a.requireTenant(a.handleMoneyAlertChannels))        // B28.66, money_search.go
 	a.mux.HandleFunc("/api/money/alerts/channels/{id}", a.requireTenant(a.handleMoneyAlertChannel))    // B28.66, money_search.go
 	a.mux.HandleFunc("/api/money/alerts/deliveries", a.requireTenant(a.handleMoneyAlertDeliveries))    // B28.66, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance", a.requireTenant(a.handleMoneyLowBalance))               // B28.61, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance/alerts", a.requireTenant(a.handleMoneyLowBalanceAlerts))  // B28.61, money_search.go
+	a.mux.HandleFunc("/api/money/low-balance/{id}", a.requireTenant(a.handleMoneyLowBalanceOne))       // B28.61, money_search.go
 	a.mux.HandleFunc("/api/money/budgets", a.requireTenant(a.handleMoneyBudgets))                      // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/budgets/{id}", a.requireTenant(a.handleMoneyBudget))                  // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/spending/subscriptions", a.requireTenant(a.handleMoneySubscriptions)) // B41.20, money_search.go
@@ -981,7 +985,6 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Origin exemption is not a pass on authenticating the caller.
 func originExemptPath(path string) bool {
 	return oauthMachinePath(path) ||
-		path == mobileSessionPath || // the phone app; the ID token is its proof
 		path == syntheticMobilePath || // the phone harness; the operator key is its proof, and no cookie is read or set
 		phoneDoorPath(path) // B61.25: the phone app before it has a session; the code, the passcode or the key is its proof
 }
@@ -1347,7 +1350,7 @@ func (a *app) forwardProductWith(w http.ResponseWriter, r *http.Request, product
 	sess, ok := a.auth.sessionFrom(r)
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
-			"error": "authentication required — sign in at /auth/login"})
+			"error": "authentication required — sign in at /signin"})
 		return
 	}
 	u := baseURL + upstreamPath
@@ -1665,6 +1668,8 @@ func (a *app) spaHandler() http.Handler {
 		if st, err := os.Stat(full); err == nil && !st.IsDir() {
 			if isUnhashedBundleFile(clean) {
 				setMustRevalidate(w)
+			} else if hashedSiteMedia.MatchString(clean) {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
 			fs.ServeHTTP(w, r)
 			return

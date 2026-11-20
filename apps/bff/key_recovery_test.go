@@ -44,7 +44,7 @@ func newRecoveryApp(t *testing.T, signedInAt time.Time) (*app, *recoveryLens) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: testPublicOrigin, sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	auth.sessions.put("rc-sid", session{
 		sub: "u1", email: "ng@example.com", expires: time.Now().Add(time.Hour),
 		workspaceID: "ws_rc", lensToken: "jwt-for-ws_rc", signedInAt: signedInAt,

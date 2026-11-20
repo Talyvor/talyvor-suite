@@ -320,21 +320,19 @@ pnpm dev        # vite proxies /api and /auth → 127.0.0.1:8787
 `disabled` means what it says: no authentication, so the BFF hard-refuses any
 non-loopback bind (unchanged from inc2).
 
-**Authenticated (any OIDC provider — Keycloak, Authentik, Dex, Clerk-as-IdP):**
+**Signed in (by phone number, passcode and passkey; Google sign-in is gone, B61.29):**
 
 ```
 BFF_AUTH_MODE=oidc \
-OIDC_ISSUER=https://your-idp.example.com \
-OIDC_CLIENT_ID=talyvor-suite OIDC_CLIENT_SECRET=… \
-OIDC_ALLOWED_EMAILS=you@example.com \
+OIDC_ISSUER=https://accounts.example.com \
+OIDC_ALLOWED_EMAILS='*' \
 BFF_PUBLIC_BASE_URL=http://127.0.0.1:8787 \
-LENS_WORKSPACE_KEY=tlv_ws_… LENS_WORKSPACE_ID=… go run .
+LENS_PROVISION_SECRET=… go run .
 ```
 
-Register `BFF_PUBLIC_BASE_URL` + `/auth/callback` as the client's redirect URI
-at the IdP. The browser holds one `__Host-` session cookie; tokens and the
-Lens key never leave the BFF. For the production posture behind Caddy on
-`app.talyvor.com`, see `deploy/README.md`.
+`BFF_AUTH_MODE=oidc` turns sign-in on (the name is historical); `OIDC_ISSUER` is only the namespace existing people's
+identities were made under, and nothing is fetched from it. The browser holds one `__Host-` session cookie; tokens and
+the Lens key never leave the BFF. For the production posture behind Caddy on `app.talyvor.com`, see `deploy/README.md`.
 
 Optional product upstreams (oidc mode only — the BFF forwards the identity it
 authenticated): `TRACK_BASE_URL` + `TRACK_GATEWAY_SECRET`, and `DOCS_BASE_URL`

@@ -145,6 +145,10 @@
 //   invoice-refund-paid — an invoice's bill reads a refunded use paid, and counts it in the total
 //   invoice-by-month    — the bill read for an invoice holds the calendar month's uses, not the invoice's
 //   invoice-total-off   — an invoice's gross leaves its tax out
+//
+// B17.509 adds every wallet list as a CSV (talyvor-lens B28.332): ?format=csv on the approvals, the schedules and an agent's
+// transfers answers the same list as name.csv, one row per item under a header of its fields. Its defect:
+//   list-csv-short — the CSV leaves out the list's last item
 
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -580,6 +584,17 @@ export class Bank {
     this.launch = new LaunchDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, id) => {
       const a = this.agents.get(id)
       return a === undefined || a.ws !== ws ? undefined : a.rules.may_instant_transfer === true
+    }, (ws) => this.payees.accountsOf(ws), (ws, agentID, ulxc, fingerprint, newPayee, memo) => {
+      // B61.67 — a send judged as Lens judges it: to an account the agent never sent one to it waits for the owner's approval
+      // whatever its rules allow, and once that is approved one send of the same goes through; else its rules judge it.
+      const a = this.agents.get(agentID)
+      if (a === undefined || a.ws !== ws) return { status: 404, error: 'economy: no such agent in this workspace' }
+      if (!newPayee) return this.broken('instant-above-sent') ? undefined : this.judge(a, ulxc, { payment: true, fingerprint, memo })
+      const ok = this.approvals.find((x) => x.agent_id === a.id && x.fingerprint === fingerprint && x.status === 'approved')
+      if (ok !== undefined) return (ok.status = 'used'), undefined
+      const filed: Approval = { id: id('apr_'), ws, agent_id: a.id, amount_ulxc: ulxc, model: '', status: 'pending', created_at: new Date().toISOString(), fingerprint, memo }
+      this.approvals.unshift(filed)
+      return { status: 403, error: `economy: this Instant transfer is to an account the agent has never sent one to — approval ${filed.id} must be approved by the workspace's owner before it is sent again` }
     })
     this.payees = new PayeeDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
@@ -1553,6 +1568,22 @@ export class Bank {
   }
 
   /**
+   * B17.509 — a wallet list as Lens answers it (talyvor-lens list_csv.go): its JSON under `key`, or with ?format=csv the same
+   * items as name.csv, one row each under a header of their fields, a nested object's fields prefixed with its name.
+   */
+  private list(res: ServerResponse, url: URL, name: string, key: string, items: object[]): true {
+    if (url.searchParams.get('format')?.toLowerCase() !== 'csv') return this.d.json(res, 200, { [key]: items }), true
+    const flat = (x: object, prefix = ''): [string, string][] => Object.entries(x).flatMap(([k, v]): [string, string][] =>
+      v !== null && typeof v === 'object' ? flat(v as object, `${prefix}${k}_`) : [[`${prefix}${k}`, v === undefined || v === null ? '' : String(v)]])
+    const rows = (this.broken('list-csv-short') ? items.slice(0, -1) : items).map((x) => new Map(flat(x)))
+    const cols = [...new Set(rows.flatMap((r) => [...r.keys()]))]
+    const cell = (v: string) => /[",\r\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}.csv"` })
+    res.end([cols, ...rows.map((r) => cols.map((c) => r.get(c) ?? ''))].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n')
+    return true
+  }
+
+  /**
    * B28.32 — the agent's rules with its boosts in force now laid over them, as Lens's agentRulesInForce reads them: a
    * boost raises its limit only while the rules leave it where it was, and from its time on it is not read.
    */
@@ -2107,7 +2138,7 @@ export class Bank {
   }
 
   /** The routes of money between owners (B22) under /v1/workspaces/{ws}; true when `rest` was one. */
-  private async walletRoute(req: IncomingMessage, res: ServerResponse, ws: BankWorkspace, rest: string): Promise<boolean> {
+  private async walletRoute(req: IncomingMessage, res: ServerResponse, ws: BankWorkspace, rest: string, url: URL): Promise<boolean> {
     const { json } = this.d
     const method = req.method ?? 'GET'
     const now = new Date().toISOString()
@@ -2205,7 +2236,7 @@ export class Bank {
       return false
     }
     if (rest === '/agents/schedules' && method === 'GET') {
-      return json(res, 200, { schedules: this.schedules.filter((x) => x.ws === ws.id).map(({ ws: _w, runs: _r, ...x }) => x) }), true
+      return this.list(res, url, 'schedules', 'schedules', this.schedules.filter((x) => x.ws === ws.id).map(({ ws: _w, runs: _r, ...x }) => x))
     }
     if ((m = /^\/agents\/([^/]+)\/pots\/([^/]+)\/(in|out)$/.exec(rest)) !== null && method === 'POST') {
       const a = this.agents.get(m[1])
@@ -2239,17 +2270,17 @@ export class Bank {
   }
 
   /** An agent's own route of money between owners: send, request, transfers, loans, escrow, pots, schedules, cash-out, card. */
-  private async agentWalletRoute(req: IncomingMessage, res: ServerResponse, ws: BankWorkspace, a: Agent, action: string): Promise<boolean> {
+  private async agentWalletRoute(req: IncomingMessage, res: ServerResponse, ws: BankWorkspace, a: Agent, action: string, url: URL): Promise<boolean> {
     const { json } = this.d
     const method = req.method ?? 'GET'
     const now = new Date().toISOString()
     const answer = (x: object | { status: number; error: string }, ok = 200) => 'error' in x && 'status' in x ? json(res, x.status as number, { error: x.error }) : json(res, ok, x)
     if (action === '/transfers' && method === 'GET') {
       // B28.299: what gave each back, and whether this agent may still give back one it received.
-      return json(res, 200, { transfers: this.transfers.filter((t) => t.from_agent_id === a.id || t.to_agent_id === a.id).map((t) => {
+      return this.list(res, url, 'transfers', 'transfers', this.transfers.filter((t) => t.from_agent_id === a.id || t.to_agent_id === a.id).map((t) => {
         const refunded_by = this.transfers.find((x) => x.refund_of === t.id)?.id
         return { ...t, ...(refunded_by ? { refunded_by } : {}), ...(t.to_agent_id === a.id && !t.refund_of && !t.loan_id && !refunded_by ? { refundable: true } : {}) }
-      }) }), true
+      }))
     }
     if (action === '/send' && method === 'POST') {
       const b = await this.body<{ to?: string; amount_ulxc?: number; memo?: string }>(req)
@@ -2405,7 +2436,7 @@ export class Bank {
       return json(res, 200, { wallets: assets.map((asset) => this.walletOf(ws.id, '', asset)) }), true
     }
     if (rest === '/agents/approvals') {
-      return json(res, 200, { approvals: this.approvals.filter((a) => a.ws === ws.id).map(({ fingerprint: _f, ws: _w, ...a }) => a) }), true
+      return this.list(res, url, 'approvals', 'approvals', this.approvals.filter((a) => a.ws === ws.id).map(({ fingerprint: _f, ws: _w, ...a }) => a))
     }
     // B45.28 — what proves an approval, and the owner letting an approver agent approve another's requests, signed.
     if ((m = /^\/agents\/approvals\/([^/]+)\/evidence$/.exec(rest)) !== null && method === 'GET') {
@@ -2519,7 +2550,7 @@ export class Bank {
           .filter(([k]) => count(k) > 0).map(([k, one, many]) => `${count(k)} ${count(k) === 1 ? one : many}`).concat(spent > 0 ? [`spent yesterday ${spent / 1e6} LXC`] : []).join(', ') + '.'
       return json(res, 200, { at: at.toISOString(), day_start: day(-1), day_end: day(0), items, spent_yesterday: spent > 0 ? [{ currency: 'LXC', amount: spent }] : [], quiet, line }), true
     }
-    if (await this.walletRoute(req, res, ws, rest)) return true
+    if (await this.walletRoute(req, res, ws, rest, url)) return true
     // B28.84 — registering a passkey and the challenge each approval is signed over (Lens B19.16).
     const challenge = () => randomBytes(32).toString('base64url')
     if (rest === '/agents/passkeys/challenge' && method === 'POST') {
@@ -2847,7 +2878,7 @@ export class Bank {
         }
         return json(res, 200, { agent_id: a.id, paused: action === '/pause' }), true
       }
-      if (await this.agentWalletRoute(req, res, ws, a, action)) return true
+      if (await this.agentWalletRoute(req, res, ws, a, action, url)) return true
       // B34.4 — an automatic top-up (tick() fills it), a handle, a simulated portfolio.
       if (action === '/topup' && method === 'GET') return (a.topup === undefined ? json(res, 404, { error: 'the agent has no automatic top-up' }) : json(res, 200, { agent_id: a.id, ...a.topup })), true
       if (action === '/topup' && method === 'PUT') {

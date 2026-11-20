@@ -567,7 +567,7 @@ func (a *app) oauthAuthorizeAsk(w http.ResponseWriter, r *http.Request) {
 
 	s, ok := a.auth.sessionFrom(r)
 	if !ok {
-		http.Redirect(w, r, "/auth/login?return_to="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+		http.Redirect(w, r, "/signin?return_to="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 		return
 	}
 	id, err := randomToken()

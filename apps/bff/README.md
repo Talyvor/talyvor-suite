@@ -1,10 +1,11 @@
 # apps/bff — the Talyvor suite backend-for-frontend
 
-A small Go service (stdlib plus `go-oidc` + `x/oauth2`). Three jobs:
+A small Go service. Three jobs:
 
-1. **Authenticate the browser.** `BFF_AUTH_MODE=oidc` runs an authorization-code + PKCE flow
-   against any standards-compliant provider, and hands back an opaque `__Host-talyvor_session`
-   cookie. Tokens and upstream credentials stay server-side. `BFF_AUTH_MODE=disabled` is the
+1. **Sign people in.** `BFF_AUTH_MODE=oidc` (the name is historical) turns sign-in on: a phone
+   number, a texted code, a passcode and a passkey (`phone_signin.go`), and hands back an opaque
+   `__Host-talyvor_session` cookie (a Bearer token to the phone app). Google sign-in is gone
+   (B61.29). Tokens and upstream credentials stay server-side. `BFF_AUTH_MODE=disabled` is the
    no-auth dev posture — loopback bind only. **There is no default mode**: silence refuses to
    start, because a default would decide an authentication question by omission.
 2. **Hold the upstream credentials server-side. They never reach the browser.** They are attached
@@ -36,8 +37,8 @@ All of it is in `loadConfig` (`main.go`), so a refusal happens before anything b
 - `LENS_BASE_URL` neither https nor loopback — credentials ride every request to it.
 - `disabled` mode on a non-loopback bind. In `oidc` mode a non-loopback bind is permitted **only**
   with an https `BFF_PUBLIC_BASE_URL`, the origin the Secure `__Host-` cookie needs.
-- `oidc` mode missing any of `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`,
-  `BFF_PUBLIC_BASE_URL`, or `OIDC_ALLOWED_EMAILS` (authorisation must be stated; `*` states it).
+- `oidc` mode missing any of `OIDC_ISSUER`, `BFF_PUBLIC_BASE_URL`, or `OIDC_ALLOWED_EMAILS`
+  (whether sign-up is open must be stated; `*` states it).
 - Track or Docs configured with only half its pair, or in `disabled` mode — the BFF forwards an
   identity it authenticated, and there is none to forward without auth.
 
@@ -70,17 +71,13 @@ without.
 | `TRACK_WORKSPACE_ID` | — | must **not** be set (boot refusal) |
 | `WEB_DIST` | `../web/dist` | built app to serve; missing ⇒ warning, not refusal |
 | `BFF_PUBLIC_BASE_URL` | — | `oidc`: browser-facing origin, bare, no path |
-| `OIDC_ISSUER` | — | `oidc`: discovery base URL |
-| `OIDC_CLIENT_ID` | — | `oidc` |
-| `OIDC_CLIENT_SECRET` | — | `oidc`: confidential client; PKCE is on top, not instead |
-| `BFF_GOOGLE_SIGNIN` | (on) | B61.25: `off` removes Google sign-in — `/auth/login`, `/auth/callback`, `/auth/mobile/session` and `/auth/google/move` answer 404 and `/auth/me` says `google_signin: false` |
-| `OIDC_MOBILE_CLIENT_IDS` | (empty) | `oidc`: the phone app's client ids, comma-separated; its ID token is traded at `POST /auth/mobile/session` for a Bearer session. Empty: that route answers 404 |
-| `OIDC_ALLOWED_EMAILS` | — | `oidc`: comma-separated, or `*` for any authenticated identity |
+| `OIDC_ISSUER` | — | `oidc`: the namespace the identities of people who first signed in with Google were made under; Lens keys their accounts by it, so it keeps its value. Nothing is fetched from it (B61.29) |
+| `OIDC_ALLOWED_EMAILS` | — | `oidc`: `*` reports sign-up as open (`/auth/me`'s `signup_open`); a comma-separated list reports it closed |
 | `BFF_SESSION_TTL` | `12h` | absolute session lifetime; sessions are in-memory |
 | `BFF_DATABASE_URL` | (unset) | Postgres for assistant sign-ins (Talyvor Connect): clients, codes, grants and hashed tokens survive a restart; unset keeps them in memory |
 | `BFF_CONNECT_REGISTER_PER_IP_HOUR` | `10` | Talyvor Connect (B52.3): client registrations per IP per hour, which also caps the unused clients one address holds; over it is 429 with Retry-After |
 | `BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE` | `60` | Connect: `/oauth/authorize` requests per IP per minute |
-| `BFF_PHONE_DOOR_PER_IP_MINUTE` | `60` | B61.25: requests per IP per minute to each sign-in route of the phone door (`/auth/phone/*`, `/auth/passkey/challenge`, `/auth/passkey/finish`, `/auth/unlock*`, `/auth/google/move`), beside Lens's own limits on texts and passcode tries |
+| `BFF_PHONE_DOOR_PER_IP_MINUTE` | `60` | B61.25: requests per IP per minute to each sign-in route of the phone door (`/auth/phone/*`, `/auth/passkey/challenge`, `/auth/passkey/finish`, `/auth/unlock*`), beside Lens's own limits on texts and passcode tries |
 | `BFF_CONNECT_TOKEN_PER_IP_MINUTE` | `60` | Connect: `/oauth/token` requests per IP per minute |
 | `BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE` | `10` | Connect: refreshes per connection per minute |
 | `BFF_CONNECT_MCP_PER_IP_MINUTE` | `600` | Connect: `/mcp` requests per IP per minute |

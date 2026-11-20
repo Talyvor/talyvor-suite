@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ActivityScreen } from './Activity'
@@ -51,9 +51,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function show(at = '/activity') {
+function show(at = '/activity', client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[at]}>
         <AppMoney>
           <Routes>
@@ -163,6 +163,41 @@ describe('Activity, every payment in and out', () => {
     lines = {}
     show()
     expect(await screen.findByText(/^No payments yet\./)).toBeTruthy()
+  })
+})
+
+// B61.75 — Pocket Live: loading draws grey shapes of the list and never a figure; a payment that arrives after the
+// first read drops into the list with its tangerine tint, and the rows read first do not.
+describe('Activity while it reads, and when a payment arrives', () => {
+  it('draws shapes and no figure while it reads', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() => new Promise<Response>(() => {}))
+    show()
+    const shapes = await screen.findByRole('status')
+    expect(shapes.querySelectorAll('[aria-hidden="true"] .animate-shimmer').length).toBeGreaterThan(0)
+    expect(document.querySelector('[data-money]')).toBeNull()
+    expect(screen.queryByTestId('activity')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/[$£€]\s?\d/)
+  })
+
+  it('lands a payment that arrives, and not the ones read first', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    show('/activity', client)
+    await waitFor(async () => expect((await rows()).length).toBe(3))
+    expect(document.querySelectorAll('[data-landed]')).toHaveLength(0)
+
+    lines = {
+      ...lines,
+      acct_usd: statement('acct_usd', 'USD', [
+        ...COMPANY.lines,
+        { entry_id: 'ent_in', line: 1, at: '2026-11-13T09:00:00Z', kind: 'payment_in', amount_minor: 120_000, funding: 'test', counterparty: 'Northwind Ltd', memo: 'Invoice 14', balance_after_minor: 0 },
+      ]),
+    }
+    await act(() => client.invalidateQueries({ queryKey: ['money-account-statement'] }))
+    await waitFor(async () => expect((await rows()).length).toBe(4))
+    const landed = document.querySelectorAll('[data-landed]')
+    expect(landed).toHaveLength(1)
+    expect(landed[0].textContent).toContain('Northwind Ltd')
+    expect(landed[0].className).toContain('animate-land')
   })
 })
 

@@ -1,7 +1,7 @@
 package main
 
 // phone_signin.go — B61.25: the front door by phone number, the passcode and the passkey (talyvor-lens B61.22, B61.23,
-// B61.24), the phone app's lock, and the one move from Google.
+// B61.24), and the phone app's lock. It is the only way in: Google sign-in is gone (B61.29).
 //
 //	POST /auth/phone/start   {phone}                          a texted code; in Sandbox the code itself, for the screen
 //	POST /auth/phone/finish  {phone, code}                    a right code: a check, and whether a person holds the number
@@ -17,7 +17,6 @@ package main
 //	POST /auth/lock          {state: closed|away}             the phone app says it closed or went away
 //	POST /auth/unlock/challenge {}                            a challenge for the phone's key (Face ID)
 //	POST /auth/unlock        {passcode} | {the key's answer}  the phone app's lock opens
-//	POST /auth/google/move   {check, passcode}                a Google sign-in takes a number and a passcode, once
 //
 // LENS HOLDS EVERY RULE. The codes, the tickets, the passcode's hash and its wrong tries, and the keys live in Lens, on
 // the provision secret; the BFF passes the caller's address for Lens's limits and keeps only an opaque check id that
@@ -29,8 +28,8 @@ package main
 // status and the work are the same, and the time with them.
 //
 // A PERSON'S sub IS THE SAME EVERY WAY IN. A person who joined by phone has the identity Lens gave them
-// ("person:<id>") as their sub; a person who moved from Google keeps their Google sub, and Lens holds that identity for
-// them. So sign out everywhere, Connect's grants and everything else keyed by sub reach every session of the person
+// ("person:<id>") as their sub; a person who moved from Google (B61.25, until B61.29) keeps their Google sub, and Lens
+// holds that identity for them. So sign out everywhere, Connect's grants and everything else keyed by sub reach every session of the person
 // however they signed in, and identityOf turns a sub back into the identity POST /v1/provision is given.
 //
 // THE PHONE APP'S LOCK IS THE SERVER'S. A phone session of a person locks when the app says it closed, when it has
@@ -71,7 +70,6 @@ const (
 	lockPath                     = "/auth/lock"
 	unlockChallengePath          = "/auth/unlock/challenge"
 	unlockPath                   = "/auth/unlock"
-	googleMovePath               = "/auth/google/move"
 
 	// phoneLockAfter is how long a phone session may be away, or quiet, before it locks.
 	phoneLockAfter = 2 * time.Minute
@@ -519,6 +517,7 @@ func (a *app) landPerson(w http.ResponseWriter, r *http.Request, p lensPerson, a
 		}
 		s.workspaceID, s.lensToken, s.lensTokenExp, s.cachePoolable = prov.WorkspaceID, prov.Token, parseExpiry(prov.ExpiresAt), prov.CachePoolable
 		a.lastAccounts.Store(p.Identity, prov.WorkspaceID)
+		s.trackWorkspaceID = a.signInProducts(r.Context(), s.sub, s.email)
 	}
 	out := map[string]any{"signed_in": true, "signup_unfinished": s.joining, "account_id": s.workspaceID}
 	for k, v := range extra {
@@ -852,57 +851,6 @@ func (a *app) handleUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleGoogleMove is the one move: a Google sign-in with no number yet confirms one and sets a passcode, and Lens's
-// person for that number holds the Google identity, so the same accounts open the new way. A person who moved
-// already, signing in with Google again, confirms their number and passcode the same way.
-func (a *app) handleGoogleMove(w http.ResponseWriter, r *http.Request) {
-	if a.googleOff(w) || a.doorUnavailable(w, r) {
-		return
-	}
-	sid, s, ok := a.auth.sessionAndIDFrom(r)
-	switch {
-	case !ok:
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in first"})
-		return
-	case s.synthetic || s.joining || strings.HasPrefix(s.sub, personIdentityPrefix):
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Only a Google sign-in moves."})
-		return
-	}
-	var in struct {
-		Check    string `json:"check"`
-		Passcode string `json:"passcode"`
-	}
-	if !a.decodeDoor(w, r, &in) {
-		return
-	}
-	c, ok := a.takeCheck(w, in.Check)
-	if !ok {
-		return
-	}
-	identity := a.identityOf(s.sub)
-	p, created, err := a.redeem(r.Context(), in.Check, c, identity, in.Passcode, waitlistClientIP(r))
-	if err == nil && p.Identity != identity {
-		err = errors.New("lens answered another identity")
-	}
-	if err != nil {
-		writeDoorFailure(w, "google move", err)
-		return
-	}
-	next := s
-	next.personID, next.lastSeen = p.ID, time.Now()
-	log.Printf("bff: google sign-in moved to a number (sub=%s person=%s created=%t)", s.sub, p.ID, created)
-	a.answerSession(w, r, sid, next, map[string]any{"moved": true, "account_id": s.workspaceID})
-}
-
-// googleOff answers 404 for a Google route while BFF_GOOGLE_SIGNIN=off (B61.29 turns it off). True if it wrote.
-func (a *app) googleOff(w http.ResponseWriter) bool {
-	if a.cfg.googleSignInOff {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such endpoint"})
-		return true
-	}
-	return false
 }
 
 // lockedOrJoining runs before the mux: a sign-up session reaches only sign-up's steps (403 otherwise), and a locked

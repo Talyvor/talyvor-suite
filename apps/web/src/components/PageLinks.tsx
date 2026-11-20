@@ -5,7 +5,7 @@ import { cn } from '@talyvor/ui'
 import { getJSONArray } from '../lib/api'
 import { useAuthMeReader } from '../lib/authMe'
 import { useWorkspaceAreas } from '../lib/workspaceAreas'
-import { PLAN_KEY, WORKSPACE_NAME_KEY, agentBankApi, readWorkspacePlan, useAccount } from '../areas/lens/agentBankApi'
+import { WORKSPACE_NAME_KEY, agentBankApi, useAccount } from '../areas/lens/agentBankApi'
 import type { RosterMember } from '../areas/lens/Members'
 
 /**
@@ -119,15 +119,13 @@ export function useSettingsLinks(): SettingsLink[] {
     queryFn: () => getJSONArray<{ id: string }>('/api/members'),
     enabled: team,
   })
-  // B61.59 — the plan Lens has the account on, by its name (Solo, Crew, Fleet, Studio, Company, Group or Custom).
-  const plan = useQuery({ queryKey: PLAN_KEY, queryFn: readWorkspacePlan, retry: false }).data?.name
   const links: PageLink[] = [
     // B57.43 — the keys that approve, first, as w-settings draws it.
     { to: '/settings/devices', title: 'Approvals and devices', line: 'Your passkeys, your phone, and notifications' },
     { to: '/settings/connect', title: 'Connect your AI', line: 'Use Talyvor from Claude, ChatGPT and others' },
     ...(team ? [{ to: '/members', title: 'Members', line: roster.data ? people(roster.data.length) : undefined }] : []),
-    // B61.3 — Billing and Plans, as one row.
-    { to: '/billing', title: 'Plan', line: plan },
+    // B61.3 — Billing and Plans, as one row. B57.171 — in Pocket Live's w-settings words; the plan's name is on its page.
+    { to: '/billing', title: 'Plan', line: 'What you have and what it costs' },
     ...(business ? [{ to: '/settings/company', title: 'Company details', line: 'Company name, number and country, and the people with control' }] : []),
     { to: '/settings/verification', title: 'Verification', line: 'What Talyvor has checked about you' },
     // B55.28 — where the workspace is paid its earnings.
@@ -139,8 +137,8 @@ export function useSettingsLinks(): SettingsLink[] {
     { to: '/settings/data', title: 'Your data', line: 'A copy of your data, or ask for it to be deleted' },
     { to: '/settings/close', title: 'Close this account', line: 'What must be empty first, and asking to close' },
     ...(operator ? [{ to: '/operator', title: 'Talyvor operators', line: 'Workspaces, tax, compliance and the review queue. Shown only to Talyvor’s operators' }] : []),
-    // B61.3 — Connect an agent and API keys, as one row at the end, for a Business only.
-    ...(business ? [{ to: '/setup', title: 'Developers', line: 'Connect an agent, and API keys' }] : []),
+    // B61.3 — Connect an agent and API keys, as one row at the end, for a Business only. B57.171 — w-settings' words.
+    ...(business ? [{ to: '/setup', title: 'Developer tools', line: 'API keys, connect an agent' }] : []),
   ]
   return links.filter((l) => areas.shows(l.to)).map((l) => ({ ...l, icon: SETTINGS_ICON[l.to] ?? 'settings' }))
 }

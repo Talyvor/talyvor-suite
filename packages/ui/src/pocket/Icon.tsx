@@ -103,6 +103,20 @@ const ICONS = {
   ),
   plus: <path d="M12 5v14M5 12h14" />,
   chev: <path d="M10 7l5 5-5 5" />,
+  // B57.184 — the door's Back, the country picker's globe and the Sandbox note's bubble (Pocket Live's back, globe, help).
+  back: <path d="M15 5 8 12l7 7" />,
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.5 2.3 3.5 5.3 3.5 8.5s-1 6.2-3.5 8.5c-2.5-2.3-3.5-5.3-3.5-8.5s1-6.2 3.5-8.5z" />
+    </>
+  ),
+  message: (
+    <>
+      <path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h10a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 17 17h-5l-4.5 3.5V17H7a2.5 2.5 0 0 1-2.5-2.5z" />
+      <path d="M9 9.5h6M9 12.5h3.5" />
+    </>
+  ),
   faceid: (
     <>
       <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />

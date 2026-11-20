@@ -57,6 +57,7 @@ import { WorkspaceLabel, useWorkspaceLabels } from '../../labels/workspace'
 import { PAY_OUT } from '../../labels/capabilities'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { PayToAPerson } from './PayPerson'
+import { ListFileDownload } from './ListFile'
 
 // Pay.tsx — B30.96: money out of an account. Saved payees outside Talyvor, each checked against its account by the account
 // partner (Lens B30.16); a payment to one, from the company's or an agent's account (B30.17), with an agent's requests that
@@ -507,21 +508,20 @@ function PayForm({
           </Field>
         </div>
         {fee !== undefined && !(fee.free && fee.left < 0) ? (
-          <p className="text-body text-ink-3" data-testid="pay-fee">
+          // B57.188 — drawn as w-pay draws its review rows: the fee, then the total in bold once there is an amount.
+          <div className="grid gap-2" data-testid="pay-fee">
+            <Facts
+              facts={[
+                { label: 'Fee', value: formatMinor(fee.free ? 0 : fee.fee_minor, currency) },
+                ...(!fee.free && minor !== null
+                  ? [{ label: <span className="font-semibold text-ink">Total</span>, value: formatMinor(minor + fee.fee_minor, currency) }]
+                  : []),
+              ]}
+            />
             {fee.free ? (
-              `Free. You have ${fee.left} free ${fee.left === 1 ? 'payment' : 'payments'} left this month.`
-            ) : (
-              <>
-                Fee <span className="font-figure">{formatMinor(fee.fee_minor, currency)}</span>
-                {minor !== null ? (
-                  <>
-                    {' '}
-                    · Total <span className="font-figure">{formatMinor(minor + fee.fee_minor, currency)}</span>
-                  </>
-                ) : null}
-              </>
-            )}
-          </p>
+              <p className="text-body text-ink-3">{`Free. You have ${fee.left} free ${fee.left === 1 ? 'payment' : 'payments'} left this month.`}</p>
+            ) : null}
+          </div>
         ) : null}
         <Field label="Reference">
           <PocketInput aria-label="Reference" placeholder="What the payee sees" className="font-sans" value={reference} onChange={(e) => setReference(e.target.value)} />
@@ -689,7 +689,7 @@ function PaymentsOut({ payments, waiting }: { payments: UseQueryResult<{ payment
           {sent.map((p) => {
             const s = paymentStatus(p.status)
             return (
-              <li key={p.id} id={`payment-${p.id}`} data-testid={`payment-${p.id}`}>
+              <LinkedItem key={p.id} id={`payment-${p.id}`} data-testid={`payment-${p.id}`}>
                 <PocketRow
                   wrap
                   leading={<RoomBadge icon={<Icon name={p.status === 'completed' ? 'check' : p.status === 'failed' || p.status === 'returned' ? 'x' : 'send'} />} />}
@@ -702,7 +702,7 @@ function PaymentsOut({ payments, waiting }: { payments: UseQueryResult<{ payment
                   }
                   action={<Chip tone={s.tone}>{s.text}</Chip>}
                 />
-              </li>
+              </LinkedItem>
             )
           })}
         </ul>
@@ -784,7 +784,7 @@ function SavedPayees({
           const c = CHECK[p.check] ?? { text: 'Name not checked', tone: 'plain' as ChipTone }
           const last = lastPaid(p.id, sent)
           return (
-            <li key={p.id} className="grid gap-2 border-t border-line py-2.5 first:border-t-0" data-testid={`payee-${p.id}`}>
+            <LinkedItem key={p.id} id={`payee-${p.id}`} className="grid gap-2 border-t border-line py-2.5 first:border-t-0" data-testid={`payee-${p.id}`}>
               <Link
                 to={{ hash: `payee-${p.id}` }}
                 onClick={() => onPick(p.id)}
@@ -849,7 +849,7 @@ function SavedPayees({
                   {p.notice}
                 </p>
               ) : null}
-            </li>
+            </LinkedItem>
           )
         })}
       </ul>
@@ -1321,7 +1321,11 @@ function StandingOrders({
   return (
     <>
       <PocketCard tone="white">
-        <h2 className="font-display text-head font-bold text-ink">Standing orders</h2>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h2 className="font-display text-head font-bold text-ink">Standing orders</h2>
+          {/* B28.59 — every schedule in the workspace as Lens's CSV. */}
+          <ListFileDownload list="schedules" />
+        </div>
         {schedules.isError ? (
           <div className="mt-3">
             <Said ok={false}>{readFailure(schedules.error, 'Your standing orders')}</Said>

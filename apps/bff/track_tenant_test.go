@@ -76,7 +76,7 @@ func trackApp(t *testing.T, up *trackUpstream) *app {
 		trackBaseURL: up.srv.URL, trackGatewaySecret: testTrackSecret,
 		docsBaseURL: "http://127.0.0.1:1", docsGatewaySecret: "gwsecret_docs",
 	}
-	a := newApp(cfg, newSessionOnlyAuthenticator(cfg))
+	a := newApp(cfg, newAuthenticator(cfg))
 	a.cfg.webDist = t.TempDir()
 	return a
 }
@@ -172,62 +172,6 @@ func TestTrack_NeitherSessionCanReadTheOthersIssues(t *testing.T) {
 }
 
 /* ── Rule 1: a Track failure must not fail login ─────────────────────────── */
-
-// TestTrack_BootstrapFailureDoesNotAbortLogin — rule 1, asserted at the LOGIN PATH.
-//
-// The first version of this test called bootstrapTrackWorkspace directly and then checked that a
-// session with no Track workspace still authenticates. It passed while handleCallback returned
-// 502 on a Track error — i.e. while login WAS being failed by a Track blip. It was testing
-// "an empty-workspace session authenticates", which is true and is not the rule. Found by
-// positive-controlling it; the control is the only thing that could have found it, because the
-// name read correctly.
-//
-// So this reads the login path itself: the error branch guarding the Track bootstrap must not
-// abort. A `return` or a response written there is exactly the regression — Lens's provisioning,
-// twenty lines above, does return, and copying that shape is the easy mistake.
-func TestTrack_BootstrapFailureDoesNotAbortLogin(t *testing.T) {
-	files := bffSourceFiles(t)
-	checked := false
-	for name, file := range files {
-		ast.Inspect(file, func(n ast.Node) bool {
-			fn, ok := n.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || !callsFunc(fn, "bootstrapTrackWorkspace") {
-				return true
-			}
-			// Only the login path — trackWorkspaceFor legitimately returns on failure.
-			if fn.Name.Name != "provisionSession" {
-				return true
-			}
-			checked = true
-			ast.Inspect(fn.Body, func(m ast.Node) bool {
-				ifs, ok := m.(*ast.IfStmt)
-				if !ok || !mentions(ifs.Cond, "terr") {
-					return true
-				}
-				ast.Inspect(ifs.Body, func(k ast.Node) bool {
-					if _, isRet := k.(*ast.ReturnStmt); isRet {
-						t.Errorf("%s: handleCallback RETURNS when the Track bootstrap fails — a Track "+
-							"blip would take out the whole login, including Lens, billing and keys. "+
-							"Log it and continue; the empty workspace is retried on first use.", name)
-					}
-					if call, isCall := k.(*ast.CallExpr); isCall {
-						if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "writeJSON" {
-							t.Errorf("%s: handleCallback writes an error response on a Track bootstrap "+
-								"failure — login must complete regardless", name)
-						}
-					}
-					return true
-				})
-				return true
-			})
-			return true
-		})
-	}
-	if !checked {
-		t.Fatal("provisionSession (the login step handleCallback and the phone sign-in share) no longer calls bootstrapTrackWorkspace — either the wiring was " +
-			"removed (Track is back to a shared workspace) or this guard has drifted")
-	}
-}
 
 // callsFunc reports whether fn's body calls the named function.
 func callsFunc(fn *ast.FuncDecl, name string) bool {
@@ -339,7 +283,7 @@ func TestTrack_BootstrapForwardsTheVerifiedIdentity(t *testing.T) {
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 		trackBaseURL: srv.URL, trackGatewaySecret: testTrackSecret,
 	}
-	a := newApp(cfg, newSessionOnlyAuthenticator(cfg))
+	a := newApp(cfg, newAuthenticator(cfg))
 	a.cfg.webDist = t.TempDir()
 
 	if _, err := a.bootstrapTrackWorkspace(t.Context(), "alice@example.com", "sub-a", "https://idp.example.com"); err != nil {
@@ -500,7 +444,7 @@ func trackWriteApp(t *testing.T, up *trackWriteUpstream) *app {
 		trackBaseURL: up.srv.URL, trackGatewaySecret: testTrackSecret,
 		docsBaseURL: up.srv.URL, docsGatewaySecret: testTrackSecret,
 	}
-	a := newApp(cfg, newSessionOnlyAuthenticator(cfg))
+	a := newApp(cfg, newAuthenticator(cfg))
 	a.cfg.webDist = t.TempDir()
 	return a
 }

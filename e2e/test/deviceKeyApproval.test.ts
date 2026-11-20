@@ -7,6 +7,7 @@ import { deviceKeyApproval } from '../src/deviceKeyApproval.ts'
 
 // B40.28 — device-key-approval against the stub Lens (selftest/stub-device-keys.ts), which verifies a device's signature as
 // Lens does: it passes on a Lens that refuses a revoked key, and FAILs when a revoked device's signature is accepted.
+// B17.509 — and whose lists download as CSV as Lens's do (B28.332): it FAILs when a CSV leaves out the list's last item.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -45,6 +46,13 @@ describe('device-key-approval (B40.28)', () => {
     const { verdict, evidence } = await runAgainstStub('')
     expect(verdict).toMatchObject({ pass: true })
     expect(evidence.find((e) => e.note === 'the owner approves with the revoked device key')?.answer).toMatch(/^refused 403: /)
+    expect(verdict.detail).toMatch(/; as CSV the approvals 2 rows and .*'s transfers \d+ rows, each its JSON list$/)
+  })
+
+  it("FAILs when a list's CSV leaves out its last item", async () => {
+    const { verdict } = await runAgainstStub('list-csv-short')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^the approvals' CSV has 1 rows \(\S+\); its JSON list has 2 items/)
   })
 
   it("FAILs when a revoked device's signature is accepted", async () => {

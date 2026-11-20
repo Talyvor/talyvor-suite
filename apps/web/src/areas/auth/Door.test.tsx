@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { doorNav } from './doorApi'
 
 // Door.test.tsx — B61.26: the web's door. The phone number, the code, the passcode (a known number) or a passcode
 // chosen twice (a new one), "Sign in with a passkey", "Sign in faster next time", and each refusal in Lens's words.
@@ -331,24 +332,37 @@ describe('the passkey', () => {
   })
 })
 
-describe('the one move from Google', () => {
-  it('a Google sign-in with no number yet confirms one and chooses a passcode, then the app opens', async () => {
-    const sent = mockDoor(
-      { '/auth/phone/start': START, '/auth/phone/finish': fresh, '/auth/google/move': () => ({ body: { moved: true, account_id: 'ws_1' } }) },
-      { mode: 'oidc', authenticated: true, user: { sub: 'g1', email: 'maya@example.com' }, phone_needed: true, google_signin: true },
-    )
-    at('/agents')
+describe('B61.29 — Google sign-in is gone', () => {
+  it('the door offers no Google, whatever /auth/me says', async () => {
+    mockDoor({}, { mode: 'oidc', authenticated: false, user: null, signup_open: true, google_signin: true })
+    at('/signin')
     await screen.findByRole('heading', { level: 1, name: 'What’s your phone number?' })
-    expect(screen.getByText('From now on you sign in with your phone number and a passcode. We text you a code to check it’s yours.')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Continue with Google' })).toBeNull()
+    expect(screen.queryByText('Continue with Google')).toBeNull()
+    expect(document.querySelector('a[href^="/auth/login"]')).toBeNull()
+  })
+
+  it('a sign-in that started at an assistant’s Connect page goes back to it, as a page load', async () => {
+    const leave = vi.spyOn(doorNav, 'leave').mockImplementation(() => {})
+    mockDoor({ '/auth/phone/start': START, '/auth/phone/finish': known, '/auth/phone/signin': SIGNED })
+    const connect = '/oauth/authorize?client_id=c1&state=s1'
+    at(`/signin?return_to=${encodeURIComponent(connect)}`)
     await throughPhone()
     paste('The code', '482913')
-    await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
+    await screen.findByRole('heading', { level: 1, name: 'Enter your passcode' })
     typeDigits('Passcode', '135790')
-    await screen.findByRole('heading', { level: 1, name: 'Type it again' })
+    await waitFor(() => expect(leave).toHaveBeenCalledWith(connect))
+  })
+
+  it('a return_to that leaves the app is not followed', async () => {
+    const leave = vi.spyOn(doorNav, 'leave').mockImplementation(() => {})
+    mockDoor({ '/auth/phone/start': START, '/auth/phone/finish': known, '/auth/phone/signin': SIGNED })
+    at(`/signin?return_to=${encodeURIComponent('//evil.example/oauth/authorize')}`)
+    await throughPhone()
+    paste('The code', '482913')
+    await screen.findByRole('heading', { level: 1, name: 'Enter your passcode' })
     typeDigits('Passcode', '135790')
-    await waitFor(() => expect(sent.filter((x) => x.url === '/auth/google/move').map((x) => x.body)).toEqual([{ check: 'chk_1', passcode: '135790' }]))
-    expect(sent.some((x) => x.url === '/auth/phone/join')).toBe(false)
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    expect(leave).not.toHaveBeenCalled()
   })
 })
 
@@ -404,5 +418,47 @@ describe('sign-up’s key step, for a person who joined by phone', () => {
     const approvals = sent.find((x) => x.url === '/api/agents/passkeys')!
     expect(signIn.body).toMatchObject({ passcode: '135790', passkey: { credential_id: 'BQUF' } })
     expect(approvals.body).toMatchObject({ credential_id: 'BQUF', public_key: 'BwcH' })
+  })
+})
+
+// B57.184 — the door in Pocket: Pocket Live's phone `su0`, `su1`, `su2` and `lock`, one question per page in the auth card.
+describe('the door, drawn as Pocket Live’s su steps', () => {
+  it('asks the question in the 30px display step, with the globe and the calling code as the country picker’s face', async () => {
+    mockDoor()
+    at('/signin')
+    const title = await screen.findByRole('heading', { level: 1, name: 'What’s your phone number?' })
+    expect(title).toHaveClass('text-pocket-question')
+    const face = screen.getByTestId('door-country')
+    expect(face).toHaveTextContent(/^\+44$/)
+    expect(face.querySelector('svg[data-icon="globe"]')).not.toBeNull()
+    // The field is named for a screen reader, and shows the reference's example number instead of a visible label.
+    expect(screen.getByText('Your phone number')).toHaveClass('sr-only')
+    expect(screen.getByLabelText('Your phone number')).toHaveAttribute('placeholder', '7700 900456')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Country' }), { target: { value: 'MD' } })
+    expect(face).toHaveTextContent(/^\+373$/)
+  })
+
+  it('puts Back and the Sandbox label across the top, and the Sandbox code in a note', async () => {
+    mockDoor({ '/auth/phone/start': START })
+    at('/signin')
+    await throughPhone()
+    const top = screen.getByTestId('door-top')
+    expect(within(top).getByText('Sandbox')).toBeInTheDocument()
+    expect(screen.getByText('In Sandbox no text is sent. Your code is 482 913.').closest('[data-door-note]')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Use another number' })).toBeNull()
+    fireEvent.click(within(top).getByRole('button', { name: 'Back' }))
+    await screen.findByRole('heading', { level: 1, name: 'What’s your phone number?' })
+  })
+
+  it('goes Back from "Type it again" to "Choose a passcode"', async () => {
+    mockDoor({ '/auth/phone/start': START, '/auth/phone/finish': fresh })
+    at('/signin')
+    await throughPhone()
+    paste('The code', '482913')
+    await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
+    paste('Passcode', '271828')
+    await screen.findByRole('heading', { level: 1, name: 'Type it again' })
+    fireEvent.click(within(screen.getByTestId('door-top')).getByRole('button', { name: 'Back' }))
+    await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
   })
 })

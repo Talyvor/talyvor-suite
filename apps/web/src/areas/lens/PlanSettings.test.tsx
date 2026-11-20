@@ -115,6 +115,16 @@ describe('Settings, Plan', () => {
     expect(screen.getByTestId('plan-sandbox-line')).toHaveTextContent(PLAN_SANDBOX_LINE)
   })
 
+  // B17.488 — LAUNCH-PACK.md section 4: "Nothing in the copy says real money is live". The e2e scenario
+  // sandbox-label-every-screen read /billing's Sandbox line as saying it.
+  it('never says real money is live, even in its Sandbox line', async () => {
+    mockBff(PERSONAL)
+    renderPlan()
+    await ladderNames()
+    expect(document.body.textContent).not.toMatch(/\breal money (?:moves|is moving|is live)\b/i)
+    expect(document.body.textContent).not.toMatch(/\btest[\s-]money\b/i)
+  })
+
   it('shows a Business account Studio, Company, Group and Custom, which opens an email to talk to us', async () => {
     mockBff(BUSINESS)
     renderPlan()

@@ -106,7 +106,7 @@ func sameOriginAppRecording(t *testing.T) (*app, string, *originUpstream) {
 		// B20.12: an operator holding a moderator key, so the review queue's writes reach Lens here too.
 		operatorSubs: []string{"u1"}, moderatorKey: "tlv_mod_sameorigin_fixture",
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "so-sid", "u1", "ng@example.com", "u-test-workspace")
 	s, _ := auth.sessions.get("so-sid")
 	s.trackWorkspaceID = "track-ws-7"
@@ -265,6 +265,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/money/budgets/x1"},
 		{method: http.MethodPost, path: "/api/money/alerts/channels", body: `{"kind":"push"}`}, // B28.66
 		{method: http.MethodDelete, path: "/api/money/alerts/channels/x1"},
+		{method: http.MethodPut, path: "/api/money/low-balance", body: `{"agent_id":"a1","currency":"GBP","threshold_minor":2000}`}, // B28.61
+		{method: http.MethodDelete, path: "/api/money/low-balance/x1"},
 		{method: http.MethodPost, path: "/api/agents/x1/scan-watches", body: `{"series":["eia.stocks.cushing-crude"],"rule":"range"}`},                                   // B52.28
 		{method: http.MethodDelete, path: "/api/scan/watches/x1"},                                                                                                        // B52.28                                                                                      // B41.39
 		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                                                // B53.8
@@ -577,7 +579,6 @@ var notSweptWrite = map[string]string{
 	"/oauth/register":        "B40.6 — exempt from the Origin rule (oauthMachinePath): an assistant's server sends no Origin, and the call creates nothing a person has agreed to",
 	"/oauth/token":           "B40.6 — exempt (oauthMachinePath): an assistant's server calls it with the PKCE verifier or refresh token as its credential",
 	"/oauth/revoke":          "B40.6 — exempt (oauthMachinePath): the token being revoked is its own credential",
-	"/auth/mobile/session":   "B40.24 — exempt (originExemptPath): the phone app sends no Origin, and its ID token is the credential",
 	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath) only with no Origin: the phone harness sends none, and the operator key is the credential; another site's Origin is refused (B50.36, TestSyntheticPhoneSignInRefusesAnotherSite)",
 	"/api/connect/agent-ceiling": "B52.6 — Origin-GATED, but it is kept in the BFF and writes nothing upstream, so this table's arrival " +
 		"assertion cannot hold for it; TestConnectCreateAgentUnderTheCeiling puts one from another site and asserts the 403",
@@ -603,7 +604,6 @@ var notSweptWrite = map[string]string{
 	"/auth/lock":                       "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/auth/unlock/challenge":           "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/auth/unlock":                     "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
-	"/auth/google/move":                "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/api/people/finding":              "B61.93 — Origin-GATED, and it reaches Lens only for a session holding a person, which this table's fixture does not; TestB6193_CrossSiteChangeIsRefused posts it from another site with a person's session and asserts the 403 and that nothing reached Lens",
 	"/auth/logout-everywhere": "B52.9 — Origin-GATED, but it answers in the BFF and writes nothing upstream; " +
 		"TestSignOutEverywhereEndsEveryAssistant posts it from another site and asserts the 403 and that nothing ended",

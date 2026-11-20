@@ -9,13 +9,16 @@ import { App, queryClient } from '../../App'
 
 const MEANINGS = ['signed in', 'email and phone confirmed', 'identity checked', 'company checked']
 
-function mockBff() {
+/** `start` is the record's checks before the page opens, newest first (B65.2). `business` makes the account a Business
+ *  whose company details answer only once `business` resolves (B17.501). */
+function mockBff(start: Array<Record<string, unknown>> = [], business?: Promise<void>) {
   const sent: Array<{ url: string; body: unknown }> = []
-  const checks: Array<Record<string, unknown>> = []
+  const checks: Array<Record<string, unknown>> = [...start]
+  const reached = () => checks.filter((c) => c.status === 'completed').length
   const record = () => ({
     workspace_id: 'ws_1',
-    level: `L${checks.length}`,
-    meaning: MEANINGS[checks.length],
+    level: `L${reached()}`,
+    meaning: MEANINGS[reached()],
     live_level: 'L0',
     live_meaning: MEANINGS[0],
     checks: checks.length === 0 ? null : [...checks],
@@ -26,14 +29,18 @@ function mockBff() {
     const method = init?.method ?? 'GET'
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
-    if (url === '/api/workspace/account') return json({ account_type: 'personal', money_kind: 'hybrid' })
+    if (url === '/api/workspace/account') return json({ account_type: business ? 'business' : 'personal', money_kind: 'hybrid' })
+    if (url === '/api/workspace/business' && business) {
+      await business
+      return json({ company_name: '', registration_number: '', country: '', people: [] })
+    }
     if (url === '/api/verification') return json(record())
     const m = /^\/api\/verification\/(contact|identity|company)$/.exec(url)
     if (m && method === 'POST') {
       const body = JSON.parse(String(init?.body))
       sent.push({ url, body })
       const level = ['contact', 'identity', 'company'].indexOf(m[1]) + 1
-      if (checks.length < level - 1) {
+      if (reached() < level - 1) {
         return json({ error: `economy: verification levels are reached in order: the ${MEANINGS[level]} check (L${level}) needs L${level - 1} — ${MEANINGS[level - 1]} — first; this workspace is at L${checks.length}` }, 409)
       }
       const check = { level: `L${level}`, subject: ['contact', 'person', 'company'][level - 1], method: 'test', test: true, status: 'completed', evidence_ref: `test_kyc_${level}`, detail: 'Persona: approved', started_at: '2026-10-08T09:00:00Z', checked_at: '2026-10-08T09:00:00Z' }
@@ -110,6 +117,25 @@ describe('the Verification screen', () => {
     ])
   })
 
+  // B17.501 — the nightly found "Confirm who I am" on a Business's screen with no company form: the company details are
+  // read after the account, and answered later than the checks on a real network. The button waits for them.
+  it('shows a Business owner "Confirm who I am" only with the Company details form beside it', async () => {
+    let answer = () => {}
+    mockBff([], new Promise<void>((resolve) => (answer = resolve)))
+    window.history.pushState({}, '', '/settings/verification')
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Confirm who you are' })).toBeTruthy()
+    await screen.findByText('Reading…', { exact: false })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByRole('button', { name: 'Confirm who I am' })).toBeNull()
+
+    answer()
+    const confirm = await screen.findByRole('button', { name: 'Confirm who I am' })
+    expect(confirm).toBeTruthy()
+    expect(screen.getByRole('form', { name: 'Company details' })).toBeTruthy()
+  })
+
   // B57.173 — drawn as Pocket's w-verification lays it out: one line under the title, and every check on the record
   // in the column beside the form, under the checks.
   it('says its one line under the title and lists every check on the record beside the form', async () => {
@@ -139,5 +165,21 @@ describe('the Verification screen', () => {
     expect(within(column).getByRole('heading', { name: 'The checks' })).toBeTruthy()
     expect(within(column).getByText('Every check on your record')).toBeTruthy()
     expect(within(column).getAllByTestId('verification-check')).toHaveLength(2)
+  })
+
+  it('a person check waiting for the identity partner opens its page from Verify your ID, with nothing to upload here (B65.2)', async () => {
+    const link = 'https://inquiry.withpersona.com/verify?code=one-time&redirect-uri=https%3A%2F%2Fapp.talyvor.com%2Fsettings%2Fverification'
+    mockBff([
+      { level: 'L2', subject: 'person', method: 'persona', test: true, status: 'pending', evidence_ref: 'inq_1', detail: 'Your ID check is waiting for you. Open the link to finish it.', link, started_at: '2026-11-18T09:01:00Z', checked_at: '2026-11-18T09:01:00Z' },
+      { level: 'L1', subject: 'contact', method: 'test', test: true, status: 'completed', evidence_ref: 'test_kyc_1', started_at: '2026-11-18T09:00:00Z', checked_at: '2026-11-18T09:00:00Z' },
+    ])
+    window.history.pushState({}, '', '/settings/verification')
+    render(<App />)
+    const step = await screen.findByRole('region', { name: 'Your ID document' })
+    expect(await within(step).findByRole('link', { name: 'Verify your ID' })).toHaveAttribute('href', link)
+    expect(within(screen.getByTestId('identity-person')).getByText('Not checked yet')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm who I am' })).toBeNull()
+    expect(document.querySelector('input[type="file"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('Persona:')
   })
 })
