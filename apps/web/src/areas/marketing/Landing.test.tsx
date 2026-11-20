@@ -420,7 +420,7 @@ describe('The logo', () => {
   it('marks the nav and footer logo as the brand logo, a file that is served', () => {
     const { container } = render(<Landing />)
     const logos = Array.from(container.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
-    expect(logos.map((i) => i.closest('nav, footer')?.tagName)).toEqual(['NAV', 'FOOTER'])
+    expect(logos.map((i) => i.closest('header, footer')?.tagName)).toEqual(['HEADER', 'FOOTER'])
     for (const img of logos) {
       const path = new URL(img.src, 'https://talyvor.com').pathname
       expect(path).toMatch(/^\/brand\/logo\/talyvor-logo-small-on-dark-240\.png$/)
