@@ -3,7 +3,8 @@
 //
 // instant-transfer-quote, on Lens's API: the owner opens the company's USD account and two agents' USD accounts, and turns on the
 // sender's "Can use Instant transfer". A quote for USD 5.00 to the other agent's account shows what leaves, the fee (Lens's fee_bps
-// of it, rounded up), the rate and what arrives, and is locked for exactly its 30 seconds: a send at it inside them is not refused
+// of the part above the plan's free conversions, its free_minor, rounded up: B17.518), the rate and what arrives, and is locked
+// for exactly its 30 seconds: a send at it inside them is not refused
 // as expired, and a send at it once they are over is refused in words that say it expired and to ask for a new one.
 //
 // instant-transfer-send (B61.67), on Lens's API: the owner registers a test device key (as device-key-approval does), puts
@@ -38,6 +39,8 @@ export interface InstantQuote {
   send_currency: string
   fee_bps: number
   fee_minor: number
+  /** What of send_minor converts free under the plan this month (talyvor-lens B61.58): the fee is on the rest. */
+  free_minor: number
   rate: string
   receive_minor: number
   receive_currency: string
@@ -45,13 +48,23 @@ export interface InstantQuote {
   created_at: string
 }
 
-/** What is wrong with a quote for `sendMinor` of `currency`: what leaves, the fee, the rate, what arrives and its 30 seconds. */
-export function quoteFaults(q: InstantQuote, sendMinor: number, currency: string): string[] {
+/**
+ * What is wrong with a quote for `sendMinor` of `currency`: what leaves, the fee, the rate, what arrives and its 30 seconds.
+ * The fee is fee_bps of the part above the plan's free conversions, rounded up (B17.518); `marginBps` is the plan's
+ * fx_margin_bps as Lens's public fees state it, and only a plan whose margin is 0 may quote a fee_bps of 0.
+ */
+export function quoteFaults(q: InstantQuote, sendMinor: number, currency: string, marginBps?: number): string[] {
   const faults: string[] = []
   if (q.send_minor !== sendMinor || q.send_currency !== currency) faults.push(`the quote must send ${sendMinor} ${currency}; it sends ${q.send_minor} ${q.send_currency}`)
-  if (!Number.isInteger(q.fee_bps) || q.fee_bps <= 0) faults.push(`the quote must show its fee; its fee_bps is ${q.fee_bps}`)
-  else if (q.fee_minor !== Math.ceil((sendMinor * q.fee_bps) / 10_000)) {
-    faults.push(`the fee is ${q.fee_bps} basis points of ${sendMinor}, rounded up: ${Math.ceil((sendMinor * q.fee_bps) / 10_000)}; the quote shows ${q.fee_minor}`)
+  if (!Number.isInteger(q.free_minor) || q.free_minor < 0 || q.free_minor > sendMinor) {
+    faults.push(`the quote must show what of ${sendMinor} converts free, between 0 and all of it; its free_minor is ${q.free_minor}`)
+  } else if (!Number.isInteger(q.fee_bps) || q.fee_bps < 0 || (q.fee_bps === 0 && marginBps !== 0)) {
+    faults.push(`the quote must show its fee; its fee_bps is ${q.fee_bps}`)
+  } else {
+    const fee = Math.ceil(((sendMinor - q.free_minor) * q.fee_bps) / 10_000)
+    if (q.fee_minor !== fee) {
+      faults.push(`the fee is ${q.fee_bps} basis points of the ${sendMinor - q.free_minor} above the ${q.free_minor} that converts free, rounded up: ${fee}; the quote shows ${q.fee_minor}`)
+    }
   }
   if (!(Number(q.rate) > 0)) faults.push(`the quote must show its rate; it shows "${q.rate}"`)
   if (!Number.isInteger(q.receive_minor) || q.receive_minor <= 0 || q.receive_currency !== currency) {
@@ -107,7 +120,8 @@ export function instantTransferQuote(): Scenario {
         { send_minor: SEND_MINOR, send_currency: 'USD', receive_currency: 'USD', to: 'talyvor_account' }, `a quote for USD 5.00 to ${receiver.name}'s account`)
       if (quoted.status !== 201 || quoted.value === undefined) return fail(`a Hybrid account's quote for USD 5.00 to a Talyvor account must answer 201; Lens answered ${said(quoted)}`)
       const q = quoted.value
-      const faults = quoteFaults(q, SEND_MINOR, 'USD')
+      const margin = ctx.env.fees.fx_margin_bps?.[(await lens.workspacePlan(user)).plan]
+      const faults = quoteFaults(q, SEND_MINOR, 'USD', margin)
       if (faults.length > 0) return fail(faults.join('; '))
       const send = (note: string) => step('POST', `/v1/workspaces/{ws}/agents/${sender.id}/money/instant-transfers`,
         { quote_id: q.id, to_account_id: accounts[receiver.id], idempotency_key: `e2e-${randomBytes(8).toString('hex')}` }, note)
@@ -124,7 +138,7 @@ export function instantTransferQuote(): Scenario {
       if (!saysExpired(late.error)) return fail(`the refusal of a send at an expired quote must say it expired and to ask for a new one; Lens said "${late.error}"`)
       return {
         pass: true,
-        detail: `USD 5.00 quoted at a fee of ${q.fee_minor} (${q.fee_bps} bps), rate ${q.rate}, ${q.receive_minor} arriving, locked 30 seconds; inside them a send ` +
+        detail: `USD 5.00 quoted at a fee of ${q.fee_minor} (${q.fee_bps} bps above ${q.free_minor} free), rate ${q.rate}, ${q.receive_minor} arriving, locked 30 seconds; inside them a send ` +
           `answered ${inside.status}, after them refused ${late.status} "${late.error.slice(0, 160)}"`,
       }
     },
