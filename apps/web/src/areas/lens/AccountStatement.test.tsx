@@ -128,12 +128,15 @@ describe('Statements, a tab per wallet and account', () => {
     expect(asked.some((u) => u.startsWith('/api/money/accounts/acct_usd/statement?') && u.includes('format=csv'))).toBe(true)
   })
 
-  it('lists the account’s monthly statements and downloads a past month as Lens’s PDF (B30.95)', async () => {
+  it('lists the account’s monthly statements and downloads a past month as Lens’s PDF (B30.95, B57.206 in Pocket)', async () => {
     show('/statements?wallet=acct_usd')
     const months = await screen.findByTestId('monthly-statements')
-    const rows = within(months).getAllByRole('button', { name: /^Download PDF for / })
-    expect(rows).toHaveLength(12)
-    expect(within(months).getByText(/^\w+ \d{4}, so far$/)).toBeTruthy()
+    // B57.206 — the month is chosen in Pocket's Select, as Statements' downloads choose (B57.112), with one Download PDF.
+    const month = within(months).getByLabelText('Month') as HTMLSelectElement
+    const options = within(month).getAllByRole('option')
+    expect(options).toHaveLength(12)
+    expect(options[0].textContent).toMatch(/^\w+ \d{4}, so far$/)
+    expect(within(months).getAllByRole('button', { name: 'Download PDF' })).toHaveLength(1)
 
     URL.createObjectURL = vi.fn(() => 'blob:x')
     URL.revokeObjectURL = vi.fn()
@@ -146,7 +149,9 @@ describe('Statements, a tab per wallet and account', () => {
     const from = last.toISOString().slice(0, 10)
     const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10)
     const name = last.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-    fireEvent.click(within(months).getByRole('button', { name: `Download PDF for ${name}` }))
+    fireEvent.change(month, { target: { value: from } })
+    expect(month.selectedOptions[0].textContent).toBe(name)
+    fireEvent.click(within(months).getByRole('button', { name: 'Download PDF' }))
     await waitFor(() => expect(saved).toEqual([`company-usd-statement-${from.slice(0, 7)}.pdf`]))
     expect(asked).toContain(`/api/money/accounts/acct_usd/statement?${new URLSearchParams({ from, to, format: 'pdf' })}`)
   })
