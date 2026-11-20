@@ -10,6 +10,9 @@
 // B53.18); it is approved, the money spent lists exactly one card_charge of £180.00 at British Airways, and the £20.00 of its cap
 // left unspent goes back to the agent's account. Charged again it is declined, "it pays once": no second card_charge, and the
 // account does not move.
+// B17.510 — a charge disputed (Lens B28.333, B59.24): the owner disputes the £180.00 airline charge with a reason; the dispute
+// is with the issuer and nothing moves. Disputed again it is the payment's one dispute. The Sandbox decides it won, as the
+// issuer would: the agent's account gets exactly the £180.00 back, once (card_dispute_won); won again, nothing moves twice.
 
 import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
@@ -21,6 +24,8 @@ import type { Scenario, ScenarioCtx } from './scenarios.ts'
 
 interface Account { id: string; test_minor: number }
 interface Card { id: string; merchant: string; cap_minor: number; currency: string; status: string; expires_at?: string }
+interface Dispute { id: string; payment_id: string; agent_id?: string; card_id: string; merchant: string; amount_minor: number; currency: string; reason: string
+  status: string; credited_minor: number }
 interface Batch { id: string; agent_id: string; total_minor: number; status: string; cards: Card[] | null }
 
 const CAPABILITIES = ['currency_accounts', 'payments_in', 'payments_out', 'agent_card']
@@ -29,6 +34,7 @@ const TRIP = [{ merchant: 'British Airways', cap_minor: 20_000 }, { merchant: 'M
 const TOTAL_MINOR = TRIP.reduce((n, c) => n + c.cap_minor, 0)
 const DAY_MS = 86_400_000
 const SPEND_MINOR = 18_000
+const REASON = 'The flight was cancelled and the airline has not refunded it'
 
 export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<string | undefined> = payInvoiceByCard): Scenario {
   return {
@@ -37,10 +43,11 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
     own: true,
     agents: 1,
     feature: 'Agent Wallets',
-    items: ['B46.20', 'B28.323'],
+    items: ['B46.20', 'B28.323', 'B28.333'],
     title: "an agent's single-use cards: its key asks for three capped cards to book a trip; one approval issues all three, each locked to " +
       'its merchant, capped and closing within 24 hours, with one card_hold of the total; approved again it holds nothing twice; ' +
-      'a card pays once: its first charge writes one card_charge, a second is declined and moves nothing',
+      'a card pays once: its first charge writes one card_charge, a second is declined and moves nothing; ' +
+      'the charge disputed and won comes back to the agent\'s account exactly once',
     run: async (ctx) => {
       const { lens } = ctx.env
       const user = ctx.app.user
@@ -159,11 +166,39 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
         if (twice.length !== 1) wrong.push(`a declined second charge must write no card_charge: Lens lists ${twice.length} for the agent`)
         if (end !== spent) wrong.push(`a declined second charge must move nothing: the agent's account went from ${spent} to ${end} minor`)
         if (wrong.length > 0) return fail(wrong.join('; '))
+
+        // 5. The owner disputes the charge: with the issuer, nothing moves; disputed again, the payment's one dispute.
+        const opened = await call<Dispute>('POST', '/v1/money/card-disputes', { payment_id: first.value.authorization_id, reason: REASON }, `the owner disputes the ${airline.merchant} charge`)
+        if (opened.status !== 201 || !opened.ok) return fail(`disputing the ${airline.merchant} charge must answer 201; Lens answered ${said(opened)}`)
+        const dispute = opened.value
+        if (dispute.status !== 'with_issuer' || dispute.amount_minor !== SPEND_MINOR || dispute.currency !== 'GBP' || dispute.card_id !== card.id || dispute.agent_id !== agent.id || dispute.reason !== REASON) {
+          wrong.push(`the dispute must be the ${SPEND_MINOR} GBP charge on the ${airline.merchant} card, with its reason, with the issuer; Lens answered ${JSON.stringify(dispute)}`)
+        }
+        const disputed = await held('after the dispute')
+        if (disputed !== end) wrong.push(`a dispute the issuer has not decided must move nothing: the agent's account went from ${end} to ${disputed} minor`)
+        const reopened = await call<Dispute>('POST', '/v1/money/card-disputes', { payment_id: first.value.authorization_id, reason: REASON }, `the owner disputes the ${airline.merchant} charge again`)
+        if (!reopened.ok || reopened.value.id !== dispute.id) wrong.push(`disputing the same charge again must answer its one dispute ${dispute.id}; Lens answered ${said(reopened)}`)
+        if (wrong.length > 0) return fail(wrong.join('; '))
+
+        // 6. Won: the charge comes back to the agent's account exactly once.
+        const won = await call<Dispute>('POST', `/v1/money/card-disputes/${dispute.id}/sandbox-outcome`, { won: true }, 'the Sandbox decides the dispute won, as the issuer would')
+        if (!won.ok || won.value.status !== 'won' || won.value.credited_minor !== SPEND_MINOR) return fail(`a won dispute of the ${SPEND_MINOR} minor charge must read won, ${SPEND_MINOR} credited; Lens answered ${said(won)}`)
+        const back = await held('after the dispute was won')
+        if (back !== disputed + SPEND_MINOR) wrong.push(`a won dispute must credit the agent's account the ${SPEND_MINOR} minor charge once (card_dispute_won): it went from ${disputed} to ${back} minor, not ${disputed + SPEND_MINOR}`)
+        const wonAgain = await call<Dispute>('POST', `/v1/money/card-disputes/${dispute.id}/sandbox-outcome`, { won: true }, 'the same outcome again')
+        if (!wonAgain.ok || wonAgain.value.status !== 'won') wrong.push(`the same outcome again must answer the dispute as it is, won; Lens answered ${said(wonAgain)}`)
+        const settled = await held('after the same outcome again')
+        if (settled !== back) wrong.push(`the same won outcome again must credit nothing more: the agent's account went from ${back} to ${settled} minor`)
+        const listed = await call<{ card_disputes: Dispute[] | null }>('GET', '/v1/money/card-disputes', undefined, "the owner reads the workspace's disputes")
+        const mine = listed.ok ? (listed.value.card_disputes ?? []).filter((d) => d.payment_id === first.value.authorization_id) : []
+        if (mine.length !== 1 || mine[0].status !== 'won' || mine[0].credited_minor !== SPEND_MINOR) wrong.push(`the disputes must list the charge's one dispute, won, ${SPEND_MINOR} credited; Lens answered ${said(listed)}`)
+        if (wrong.length > 0) return fail(wrong.join('; '))
         return {
           pass: true,
           detail: `${agent.name}'s key asked for batch ${batch.id}: ${TRIP.map((c) => `${c.merchant} ${c.cap_minor}`).join(', ')} GBP minor; one approval issued all three, ` +
             `active and closing within 24 hours, the agent's account ${FUND_MINOR} → ${after} minor (one card_hold of ${TOTAL_MINOR}); approved again it stayed at ${last}; ` +
-            `the ${airline.merchant} card charged ${SPEND_MINOR} wrote one card_charge, the account ${last} → ${spent}; charged again it was declined and stayed at ${end}`,
+            `the ${airline.merchant} card charged ${SPEND_MINOR} wrote one card_charge, the account ${last} → ${spent}; charged again it was declined and stayed at ${end}; ` +
+            `disputed (${dispute.id}) it stayed at ${disputed}, won it came back to ${back} and stayed at ${settled} on the same outcome again`,
         }
       } catch (e) {
         return fail((e as Error).message)
