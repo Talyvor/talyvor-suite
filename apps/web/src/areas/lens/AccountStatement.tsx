@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Logo, inlineLink } from '@talyvor/ui'
-import { Button, Card as PocketCard, Icon, KindTile, Money, Row, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
+import { Button, Card as PocketCard, Field, Icon, KindTile, Money, Select, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
 import { dayAfter, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
-import { lineWhen } from './AgentStatement'
+import { DownloadFailed, lineWhen } from './AgentStatement'
 import { AgentBankError, agentBankApi, refusalText, type Agent, type CurrencyAccount, type MoneyStatementLine } from './agentBankApi'
 import { DisputePayment } from './CardDisputes'
 import { InstantLegs, groupInstant } from './InstantTransferReceipt'
@@ -100,10 +100,13 @@ export function statementMonths(now = new Date(), count = STATEMENT_MONTHS): Arr
 /**
  * B30.95 — a currency account's monthly statements: this month so far and each month before it, every one the PDF
  * document Lens writes (Lens B30.23), named for the account and the month.
+ * B57.206 — in Pocket, as Statements' downloads are (B57.112): the month in Pocket's Select, then Download PDF.
  */
 export function MonthlyStatements({ account, title }: { account: CurrencyAccount; title: string }) {
   const [, inWords] = currencyWords(account.currency)
   const months = statementMonths()
+  const [chosen, setChosen] = useState(months[0].from)
+  const month = months.find((m) => m.from === chosen) ?? months[0]
   const file = useMutation({
     mutationFn: async (m: (typeof months)[number]) => {
       const stem = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -113,38 +116,32 @@ export function MonthlyStatements({ account, title }: { account: CurrencyAccount
     onSuccess: (m) => showToast(`Downloading the ${title} statement for ${m.name} as a PDF file`),
   })
   return (
-    <PocketCard tone="white" data-testid="monthly-statements" {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-2 p-5 wide:px-7 wide:py-6">
-      <div>
-        <h2 className="font-display text-title font-extrabold leading-none text-ink">Monthly statements</h2>
-        <p className="mt-1 text-body text-ink-2">Each month of this account as a PDF, in {inWords}.</p>
-      </div>
-      <div>
-        {months.map((m) => (
-          <Row
-            key={m.from}
-            title={m.current ? `${m.name}, so far` : m.name}
-            action={
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<Icon name="download" />}
-                aria-label={`Download PDF for ${m.name}`}
-                disabled={file.isPending}
-                onClick={() => file.mutate(m)}
-              >
-                Download PDF
-              </Button>
-            }
-          />
-        ))}
-      </div>
-      {file.isError ? (
-        <p className="text-body text-ink-2">
-          {file.error instanceof AgentBankError && file.error.status < 500 && file.error.sentence
-            ? refusalText(file.error)
-            : readFailure(file.error, 'The statement')}
-        </p>
-      ) : null}
+    <PocketCard data-testid="monthly-statements" {...{ [DESIGN_ATTR]: 'pocket' }}>
+      <h3 className="font-display text-reading font-bold text-ink">Monthly statements</h3>
+      <p className="mt-1 text-body text-ink-2">Each month of this account as a PDF, in {inWords}.</p>
+      <form
+        className="mt-3 grid gap-3 wide:flex wide:items-end"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!file.isPending) file.mutate(month)
+        }}
+      >
+        <Field label="Month" className="min-w-0 wide:w-80">
+          <Select value={month.from} onChange={(e) => setChosen(e.target.value)}>
+            {months.map((m) => (
+              <option key={m.from} value={m.from}>
+                {m.current ? `${m.name}, so far` : m.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div>
+          <Button type="submit" variant="secondary" icon={<Icon name="download" />} disabled={file.isPending}>
+            {file.isPending ? 'Preparing…' : 'Download PDF'}
+          </Button>
+        </div>
+      </form>
+      {file.isError ? <DownloadFailed error={file.error} /> : null}
     </PocketCard>
   )
 }
