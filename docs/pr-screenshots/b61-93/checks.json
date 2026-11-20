@@ -1,0 +1,68 @@
+[
+ {
+  "route": "/settings",
+  "screen": "w-settings"
+ },
+ {
+  "route": "/settings",
+  "screen": "w-settings",
+  "dark": true
+ },
+ {
+  "route": "/signup/confirm",
+  "answers": {
+   "/auth/me": {
+    "mode": "oidc",
+    "authenticated": true,
+    "user": {
+     "sub": "person:per_nick",
+     "name": "Nick",
+     "email": ""
+    },
+    "workspace_id": "ws_nicks_team",
+    "signup_open": true
+   },
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "fiat"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L2",
+    "meaning": "identity checked",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L2",
+      "subject": "person",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_2",
+      "started_at": "2026-11-18T09:00:00Z",
+      "checked_at": "2026-11-18T09:00:00Z"
+     },
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_1",
+      "started_at": "2026-11-18T09:00:00Z",
+      "checked_at": "2026-11-18T09:00:00Z"
+     }
+    ]
+   },
+   "/api/people/finding": {
+    "name": "",
+    "email": "",
+    "phone": "+447700900456",
+    "by_name": false,
+    "by_phone": false,
+    "by_email": false
+   }
+  }
+ }
+]
