@@ -176,7 +176,7 @@ describe('the docs page-write seam is asked about, in both directions', () => {
 /**
  * THE THIRD lens.go PAGE ROUTE, AND THE ONE WHOSE CROSS-REPO CLAIM IS A DELETE RATHER THAN A SEND.
  *
- * `apps/bff/lens.go#docsSpacePages` relays talyvor-docs' page LIST through
+ * `apps/bff/lens.go#docsPageList` relays talyvor-docs' page LIST through
  * `stripPageContentList`, which does `delete(row, "content")` and `delete(row, "content_text")`
  * on every row. Those two literals are a claim about another repository's response shape — the
  * same KIND of claim as the two above, made in the opposite direction — and it is the only thing

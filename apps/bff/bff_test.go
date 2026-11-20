@@ -135,7 +135,7 @@ var KEY_SWEEP_PROXIES = map[string]bool{
 // Nine proxying routes sent no key at all and the assertion whose whole purpose is to prove the
 // proxy attaches it server-side was satisfied by the tenth.
 //
-// ⚠ THE WIDER SUITE DID CATCH THAT ONE, AND ONLY BY LUCK OF COVERAGE: `workspaces_test.go:55`
+// ⚠ THE WIDER SUITE DID CATCH THAT ONE, AND ONLY BY LUCK OF COVERAGE: `workspaces_test.go#TestWorkspacesForwardsToLensWorkspaces`
 // asserts the flip side for `/api/workspaces` SPECIFICALLY, and says so in its own comment. So
 // the repository was not blind — but the sweep that names FOURTEEN routes was holding ONE, and
 // which one depended on evaluation order rather than on anything anybody chose.

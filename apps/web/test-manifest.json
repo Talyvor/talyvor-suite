@@ -336,7 +336,7 @@
   "src/pocketPending.test.tsx": 7,
   "src/pocketRules.test.tsx": 20,
   "src/PocketShell.test.tsx": 5,
-  "src/pointerAudit.test.ts": 10,
+  "src/pointerAudit.test.ts": 14,
   "src/populatedBffCoverage.test.tsx": 5,
   "src/proseClasses.test.ts": 9,
   "src/publicCopy.test.tsx": 10,
