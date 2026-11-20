@@ -50,11 +50,11 @@ describe('the brand-logo oracle (B17.401)', () => {
       at('/brand/logo/talyvor-logo-small-on-dark-240.png', 'light'),
       at('/site/hero-loop-poster.jpg', 'light'),
       at('/brand/logo/talyvor-logo-small-on-light-480.png', 'light', false),
-    ], ['/brand/svg/talyvor-mark.svg'])).toEqual([
+    ], ['/old/logo.svg'])).toEqual([
       '/ light shows /brand/logo/talyvor-logo-small-on-dark-240.png on a light plane',
       '/ light shows /site/hero-loop-poster.jpg on a light plane',
       '/ light /brand/logo/talyvor-logo-small-on-light-480.png did not load',
-      '/ still asks for /brand/svg/talyvor-mark.svg',
+      '/ still asks for /old/logo.svg',
     ])
   })
 })
