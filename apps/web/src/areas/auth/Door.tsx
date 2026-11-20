@@ -84,7 +84,7 @@ export const DOOR_WORDS = {
 } as const
 
 /** The digits a box can hold: everything else typed or pasted is dropped. */
-const digitsOf = (s: string) => s.replace(/\D/g, '')
+export const digitsOf = (s: string) => s.replace(/\D/g, '')
 
 /**
  * Six boxes for a code or the passcode. A paste, or the browser's fill from the text into the first box, lands in all
@@ -168,7 +168,7 @@ export function DigitBoxes({ label, masked = false, oneTimeCode = false, disable
 }
 
 /** A refusal, in Lens's words. */
-function Said({ children }: { children: React.ReactNode }) {
+export function Said({ children }: { children: React.ReactNode }) {
   return (
     <p role="alert" className="flex items-center gap-1.5 text-body text-danger">
       <Icon name="x" size={16} />
@@ -188,7 +188,7 @@ function Question({ title, lead }: { title: React.ReactNode; lead?: React.ReactN
 }
 
 /** Pocket Live's .note: a line on the cloud, with its icon. */
-function Note({ icon, children }: { icon: React.ComponentProps<typeof Icon>['name']; children: React.ReactNode }) {
+export function Note({ icon, children }: { icon: React.ComponentProps<typeof Icon>['name']; children: React.ReactNode }) {
   return (
     <p data-door-note className="flex w-full items-start gap-2.5 rounded-control bg-cloud px-3.5 py-3 text-body text-ink-2">
       <Icon name={icon} size={18} className="mt-px shrink-0" />
@@ -223,7 +223,7 @@ function DoorTop({ onBack, sandbox }: { onBack?: () => void; sandbox: boolean })
 }
 
 /** The country picker's face, as Pocket Live draws it: a globe and the calling code, the browser's own list under it. */
-function CountryPicker({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+export function CountryPicker({ value, onChange }: { value: string; onChange: (code: string) => void }) {
   const calling = (PHONE_COUNTRIES.find(([c]) => c === value) ?? PHONE_COUNTRIES[0])[2]
   return (
     <span
