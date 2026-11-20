@@ -5,7 +5,6 @@ import { PageBackground, personalHues } from '@talyvor/ui/pocket'
 import { api } from '../lib/api'
 import { useDocumentTitle } from '../documentTitle'
 import { AuthCard, SignInCard } from '../areas/auth/Entry'
-import { Door } from '../areas/auth/Door'
 
 // The auth gate: one probe (/auth/me) decides whether the app or the sign-in
 // card renders. ONLY an oidc-mode BFF reporting "no session" gates — disabled
@@ -53,21 +52,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
   // B61.26 — a new number's session may only finish sign-up (the BFF answers 403 to the rest), so it goes back there.
   if (q.data?.authenticated && q.data.signup_unfinished) return <Navigate to="/signup" replace />
-  // B61.26 — the one move from Google: a Google sign-in with no number yet takes one and a passcode first.
-  if (q.data?.authenticated && q.data.phone_needed) return <MoveToPhone />
   return <>{children}</>
-}
-
-function MoveToPhone() {
-  useDocumentTitle('Your phone number')
-  return (
-    <main data-design="pocket" className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cloud px-gutter">
-      <PageBackground hues={personalHues} />
-      <AuthCard>
-        <Door mode="move" returnTo={window.location.pathname + window.location.search + window.location.hash} />
-      </AuthCard>
-    </main>
-  )
 }
 
 // Whether this browser was signed in when the probe last answered. A hint for what to draw while

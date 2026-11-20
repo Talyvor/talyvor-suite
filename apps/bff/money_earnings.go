@@ -11,7 +11,7 @@ import (
 //
 //	GET  /api/money/payout-details    the workspace's payout details, each asset's, and whether each is verified
 //	PUT  /api/money/payout-details    {asset, holder, iban, bic} or {asset: "USDC", holder, network: "base", address}
-//	GET  /api/money/earnings-payouts  the payouts the workspace made or was paid, newest first
+//	GET  /api/money/earnings-payouts  the payouts the workspace made or was paid, newest first (B28.59: ?format=csv as a CSV)
 //	POST /api/rooms/{id}/payouts      {amount_minor, currency, shares}, under an Idempotency-Key: the room's wallet pays
 //	                                  its members as the room's terms split it; one without verified details is held
 //
@@ -52,7 +52,7 @@ func (a *app) handleMoneyEarningsPayouts(w http.ResponseWriter, r *http.Request,
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/earnings-payouts", nil)
+	a.listRelay(w, r, t, "/v1/money/earnings-payouts")
 }
 
 // handleRoomPayouts — POST /api/rooms/{id}/payouts. The relay forwards the screen's Idempotency-Key, which Lens

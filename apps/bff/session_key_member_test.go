@@ -98,7 +98,7 @@ func TestSessionKey_TwoMembersOfOneWorkspaceEachChatOnTheirOwnKey(t *testing.T) 
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	const ws = "ws-shared-team"
 	for _, member := range []string{"alice", "bob"} {
 		auth.sessions.put("sid-"+member, session{

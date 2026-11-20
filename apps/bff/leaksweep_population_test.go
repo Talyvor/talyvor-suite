@@ -647,9 +647,12 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// THE HUNDRED-AND-NINETY-EIGHTH TO TWO-HUNDREDTH ARE B61.33'S, POST only: /api/money/people/find answers a person's
 	// shown name and holds nothing; /api/money/people/pay/challenge relays a one-time challenge for the payment it names;
 	// /api/money/people/pay pays the person, read back through the account's statement (GET /api/money/accounts/{id}/statement).
-	if len(methodOnly) > 200 {
+	//
+	// THE TWO-HUNDRED-AND-FIRST IS B28.61'S, DELETE only: /api/money/low-balance/{id} removes a low-balance alert, read back
+	// through GET /api/money/low-balance, in the sweep's reach.
+	if len(methodOnly) > 201 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 200 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 201 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}
@@ -732,8 +735,10 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 		t.Fatalf("mounted patterns found = %d, want at least 20 — the route-table scan read almost nothing", len(patterns))
 	}
 
-	// B52.9: sign out everywhere ends every fixture's sessions and assistants, so it is swept after every other route.
-	patterns = append(slices.DeleteFunc(patterns, func(p string) bool { return p == "/auth/logout-everywhere" }), "/auth/logout-everywhere")
+	// B52.9: sign out everywhere ends every fixture's sessions and assistants, so it is swept after every other route;
+	// signing out ends the fixture's session too, so it comes last (B61.29: with Google gone it no longer answers 503).
+	patterns = append(slices.DeleteFunc(patterns, func(p string) bool { return p == "/auth/logout-everywhere" || p == "/auth/logout" }),
+		"/auth/logout-everywhere", "/auth/logout")
 
 	reached, succeeded := map[string]bool{}, map[string]bool{}
 	accepted := map[string]bool{}

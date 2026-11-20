@@ -9,7 +9,7 @@ import { lineWhen } from './AgentStatement'
 import { accountOwner, kindWords } from './AccountStatement'
 import { DisputePayment } from './CardDisputes'
 import { receiptText } from './InstantTransferReceipt'
-import { PaymentProofSection, paymentProofQuery } from './PaymentProof'
+import { PaymentProofSection, TaskSays, paymentProofQuery, paymentTask } from './PaymentProof'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { agentBankApi } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
@@ -21,6 +21,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
  * B57.170 — drawn as the launch pack's P10 receipt: its state chip with its mark, the amount large, who, its facts, then
  * Done and Download receipt.
  * B62.3 — then the agent's task in its own words and the payment's proof (Lens B62.1), with a button that copies it.
+ * B57.190 — the task under who it was paid to, as the approval sheet draws what a payment is for.
  */
 export function ActivityPaymentScreen() {
   const { account: accountID = '', entry = '' } = useParams()
@@ -28,7 +29,7 @@ export function ActivityPaymentScreen() {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const st = useQuery({ queryKey: statementKey(accountID, to), queryFn: () => agentBankApi.accountStatement(accountID, ACTIVITY_FROM, to) })
-  useQuery(paymentProofQuery(entry)) // B62.3: read beside the statement, drawn below its facts
+  const proof = useQuery(paymentProofQuery(entry)) // B62.3: read beside the statement, drawn below its facts
   const list = accounts.data?.accounts ?? []
   const agents = book.data?.agents ?? []
   const account = list.find((a) => a.id === accountID)
@@ -76,6 +77,7 @@ export function ActivityPaymentScreen() {
               <p className="text-reading text-ink-2" data-receipt-line>
                 {amount > 0 ? 'from' : 'to'} <span className="font-semibold text-ink">{who}</span>
               </p>
+              <TaskSays task={paymentTask(l.task, proof.data)} className="text-body text-ink-3" />
             </div>
             <Facts
               facts={[

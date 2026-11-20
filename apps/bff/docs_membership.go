@@ -42,7 +42,7 @@ func (a *app) docsMembership() http.HandlerFunc {
 		sess, ok := a.auth.sessionFrom(r)
 		if !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "authentication required — sign in at /auth/login"})
+				"error": "authentication required — sign in at /signin"})
 			return
 		}
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,

@@ -5,12 +5,18 @@
 // waits for one approval and nothing moves. The owner approves it once: GET /v1/money/cards/{id} shows three active cards, each
 // locked to its merchant, capped and closing within 24 hours, and the money ledger shows one card_hold of the total — the agent's
 // account down by exactly £400.00. Approved again it is answered as it stands and holds nothing twice. The money layer lists no
-// entries by kind, so the hold is read as the ledger keeps it: the agent's account balance, the sum of its postings. On the sandbox
-// no charge can be made from outside, so the charges stay covered by Lens's TestB4610 until an issuer adapter exists.
+// entries by kind, so the hold is read as the ledger keeps it: the agent's account balance, the sum of its postings.
+// B17.508 — each card pays once (Lens B28.323, B46.10): the issuer charges the airline card £180.00, as the issuer makes it (Lens
+// B53.18); it is approved, the money spent lists exactly one card_charge of £180.00 at British Airways, and the £20.00 of its cap
+// left unspent goes back to the agent's account. Charged again it is declined, "it pays once": no second card_charge, and the
+// account does not move.
+// B17.510 — a charge disputed (Lens B28.333, B59.24): the owner disputes the £180.00 airline charge with a reason; the dispute
+// is with the issuer and nothing moves. Disputed again it is the payment's one dispute. The Sandbox decides it won, as the
+// issuer would: the agent's account gets exactly the £180.00 back, once (card_dispute_won); won again, nothing moves twice.
 
 import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
-import type { Answered } from './lens.ts'
+import { type Answered, refusalOf } from './lens.ts'
 import { RUN_SALT } from './oracles.ts'
 import { payInvoiceByCard } from './payScreen.ts'
 import { said } from './routes.ts'
@@ -18,6 +24,8 @@ import type { Scenario, ScenarioCtx } from './scenarios.ts'
 
 interface Account { id: string; test_minor: number }
 interface Card { id: string; merchant: string; cap_minor: number; currency: string; status: string; expires_at?: string }
+interface Dispute { id: string; payment_id: string; agent_id?: string; card_id: string; merchant: string; amount_minor: number; currency: string; reason: string
+  status: string; credited_minor: number }
 interface Batch { id: string; agent_id: string; total_minor: number; status: string; cards: Card[] | null }
 
 const CAPABILITIES = ['currency_accounts', 'payments_in', 'payments_out', 'agent_card']
@@ -25,6 +33,8 @@ const FUND_MINOR = 50_000
 const TRIP = [{ merchant: 'British Airways', cap_minor: 20_000 }, { merchant: 'Marriott Lisbon', cap_minor: 15_000 }, { merchant: 'Hertz', cap_minor: 5_000 }]
 const TOTAL_MINOR = TRIP.reduce((n, c) => n + c.cap_minor, 0)
 const DAY_MS = 86_400_000
+const SPEND_MINOR = 18_000
+const REASON = 'The flight was cancelled and the airline has not refunded it'
 
 export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<string | undefined> = payInvoiceByCard): Scenario {
   return {
@@ -33,9 +43,11 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
     own: true,
     agents: 1,
     feature: 'Agent Wallets',
-    items: ['B46.20'],
+    items: ['B46.20', 'B28.323', 'B28.333'],
     title: "an agent's single-use cards: its key asks for three capped cards to book a trip; one approval issues all three, each locked to " +
-      'its merchant, capped and closing within 24 hours, with one card_hold of the total; approved again it holds nothing twice',
+      'its merchant, capped and closing within 24 hours, with one card_hold of the total; approved again it holds nothing twice; ' +
+      'a card pays once: its first charge writes one card_charge, a second is declined and moves nothing; ' +
+      'the charge disputed and won comes back to the agent\'s account exactly once',
     run: async (ctx) => {
       const { lens } = ctx.env
       const user = ctx.app.user
@@ -43,6 +55,16 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
         const got = await lens.act<T>(user, method, path, body)
         ctx.evidence.push({ note, answer: said(got) })
         return got
+      }
+
+      // One owner request with the Date header Lens answered it with: `at` is that instant in ms (NaN when absent).
+      const lensSaid = async <T>(method: string, path: string, body: object | undefined, note: string): Promise<Answered<T> & { date: string | null; at: number }> => {
+        const r = await lens.as(user.token, method, path, body)
+        const date = r.headers.get('Date')
+        const got: Answered<T> = r.status >= 200 && r.status < 300
+          ? { ok: true, status: r.status, value: (r.text === '' ? null : JSON.parse(r.text)) as T } : { ok: false, status: r.status, error: refusalOf(r.text) }
+        ctx.evidence.push({ note: `${note} (Lens's Date: ${date ?? 'none'})`, answer: said(got) })
+        return { ...got, date, at: Date.parse(date ?? '') }
       }
 
       const terms = await call<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
@@ -89,16 +111,18 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
         if (before !== FUND_MINOR) return fail(`the funding invoice was paid by card, but before approval the agent's GBP account holds ${before} minor, not ${FUND_MINOR}`)
 
         // 2. One approval issues all three, and holds their total once.
-        const approved = await call<Batch>('POST', `/v1/money/cards/${batch.id}/approve`, {}, 'the owner approves the three cards once')
+        // B17.512 — "closing within 24 hours" is judged on Lens's clock, which stamps expires_at at the approval, never the
+        // runner's: after the reading's Date and at most 24 hours after the approval's (whole seconds, so up to 1 s after it).
+        const approved = await lensSaid<Batch>('POST', `/v1/money/cards/${batch.id}/approve`, {}, 'the owner approves the three cards once')
         if (approved.status !== 200 || !approved.ok || approved.value.status !== 'issued') return fail(`approving the cards must answer 200 issued; Lens answered ${said(approved)}`)
-        const got = await call<Batch>('GET', `/v1/money/cards/${batch.id}`, undefined, 'the owner reads the cards')
+        const got = await lensSaid<Batch>('GET', `/v1/money/cards/${batch.id}`, undefined, 'the owner reads the cards')
         if (!got.ok) return fail(`reading the cards answered ${said(got)}`)
+        if (Number.isNaN(approved.at) || Number.isNaN(got.at)) return fail(`Lens's card answers must carry its clock in a Date header; the approval said ${approved.date}, the reading ${got.date}`)
         const wrong: string[] = []
-        const now = Date.now()
         for (const want of TRIP) {
           const c = (got.value.cards ?? []).find((x) => x.merchant === want.merchant)
           const expires = Date.parse(c?.expires_at ?? '')
-          if (c === undefined || c.status !== 'active' || c.cap_minor !== want.cap_minor || c.currency !== 'GBP' || !(expires > now && expires <= now + DAY_MS)) {
+          if (c === undefined || c.status !== 'active' || c.cap_minor !== want.cap_minor || c.currency !== 'GBP' || !(expires > got.at && expires < approved.at + 1_000 + DAY_MS)) {
             wrong.push(`the ${want.merchant} card must be active, locked to ${want.merchant}, capped at ${want.cap_minor} GBP and closing within 24 hours; Lens answered ${JSON.stringify(c)}`)
           }
         }
@@ -112,10 +136,69 @@ export function agentCards(fund: (ctx: ScenarioCtx, token: string) => Promise<st
         const last = await held('after the second approval')
         if (last !== after) wrong.push(`approving the cards again held more: the agent's account went from ${after} to ${last} minor`)
         if (wrong.length > 0) return fail(wrong.join('; '))
+
+        // 4. A card pays once: the issuer's first charge on the airline card writes one card_charge; its second is declined.
+        const [airline] = TRIP
+        const card = (got.value.cards ?? []).find((x) => x.merchant === airline.merchant)
+        if (card === undefined) return fail(`the batch has no ${airline.merchant} card`)
+        const charge = async (note: string) => {
+          const c = await lens.chargeTestCard(user, card.id, { merchant: airline.merchant, amount_minor: SPEND_MINOR })
+          ctx.evidence.push({ note, answer: said(c) })
+          return c
+        }
+        const charges = async (note: string) => {
+          const s = await call<{ payments: { agent_id?: string; kind?: string; merchant: string; amount_minor: number }[] | null }>('GET', '/v1/money/spending', undefined, note)
+          if (!s.ok) throw new Error(`reading the money spent ${note} answered ${said(s)}`)
+          return (s.value.payments ?? []).filter((p) => p.agent_id === agent.id && p.kind === 'card_charge')
+        }
+        const first = await charge(`the issuer charges ${SPEND_MINOR} minor at ${airline.merchant}`)
+        if (!first.ok || !first.value.approved) return fail(`a ${SPEND_MINOR} minor charge at ${airline.merchant} on its card capped at ${airline.cap_minor} must be approved; Lens answered ${said(first)}`)
+        const spent = await held('after the first charge')
+        const once = await charges('after the first charge')
+        if (once.length !== 1 || once[0].merchant !== airline.merchant || once[0].amount_minor !== SPEND_MINOR) {
+          wrong.push(`the first charge must write one card_charge of ${SPEND_MINOR} minor at ${airline.merchant}; Lens lists ${JSON.stringify(once)}`)
+        }
+        if (spent !== last + airline.cap_minor - SPEND_MINOR) wrong.push(`the ${airline.cap_minor - SPEND_MINOR} minor of the card's cap left unspent must go back to the agent's account: it went from ${last} to ${spent} minor, not ${last + airline.cap_minor - SPEND_MINOR}`)
+        const second = await charge(`the issuer charges ${SPEND_MINOR} minor at ${airline.merchant} again`)
+        if (!second.ok || second.value.approved || !/pays once/.test(second.value.reason)) wrong.push(`a second charge on a single-use card must be declined "it pays once"; Lens answered ${said(second)}`)
+        const end = await held('after the second charge')
+        const twice = await charges('after the second charge')
+        if (twice.length !== 1) wrong.push(`a declined second charge must write no card_charge: Lens lists ${twice.length} for the agent`)
+        if (end !== spent) wrong.push(`a declined second charge must move nothing: the agent's account went from ${spent} to ${end} minor`)
+        if (wrong.length > 0) return fail(wrong.join('; '))
+
+        // 5. The owner disputes the charge: with the issuer, nothing moves; disputed again, the payment's one dispute.
+        const opened = await call<Dispute>('POST', '/v1/money/card-disputes', { payment_id: first.value.authorization_id, reason: REASON }, `the owner disputes the ${airline.merchant} charge`)
+        if (opened.status !== 201 || !opened.ok) return fail(`disputing the ${airline.merchant} charge must answer 201; Lens answered ${said(opened)}`)
+        const dispute = opened.value
+        if (dispute.status !== 'with_issuer' || dispute.amount_minor !== SPEND_MINOR || dispute.currency !== 'GBP' || dispute.card_id !== card.id || dispute.agent_id !== agent.id || dispute.reason !== REASON) {
+          wrong.push(`the dispute must be the ${SPEND_MINOR} GBP charge on the ${airline.merchant} card, with its reason, with the issuer; Lens answered ${JSON.stringify(dispute)}`)
+        }
+        const disputed = await held('after the dispute')
+        if (disputed !== end) wrong.push(`a dispute the issuer has not decided must move nothing: the agent's account went from ${end} to ${disputed} minor`)
+        const reopened = await call<Dispute>('POST', '/v1/money/card-disputes', { payment_id: first.value.authorization_id, reason: REASON }, `the owner disputes the ${airline.merchant} charge again`)
+        if (!reopened.ok || reopened.value.id !== dispute.id) wrong.push(`disputing the same charge again must answer its one dispute ${dispute.id}; Lens answered ${said(reopened)}`)
+        if (wrong.length > 0) return fail(wrong.join('; '))
+
+        // 6. Won: the charge comes back to the agent's account exactly once.
+        const won = await call<Dispute>('POST', `/v1/money/card-disputes/${dispute.id}/sandbox-outcome`, { won: true }, 'the Sandbox decides the dispute won, as the issuer would')
+        if (!won.ok || won.value.status !== 'won' || won.value.credited_minor !== SPEND_MINOR) return fail(`a won dispute of the ${SPEND_MINOR} minor charge must read won, ${SPEND_MINOR} credited; Lens answered ${said(won)}`)
+        const back = await held('after the dispute was won')
+        if (back !== disputed + SPEND_MINOR) wrong.push(`a won dispute must credit the agent's account the ${SPEND_MINOR} minor charge once (card_dispute_won): it went from ${disputed} to ${back} minor, not ${disputed + SPEND_MINOR}`)
+        const wonAgain = await call<Dispute>('POST', `/v1/money/card-disputes/${dispute.id}/sandbox-outcome`, { won: true }, 'the same outcome again')
+        if (!wonAgain.ok || wonAgain.value.status !== 'won') wrong.push(`the same outcome again must answer the dispute as it is, won; Lens answered ${said(wonAgain)}`)
+        const settled = await held('after the same outcome again')
+        if (settled !== back) wrong.push(`the same won outcome again must credit nothing more: the agent's account went from ${back} to ${settled} minor`)
+        const listed = await call<{ card_disputes: Dispute[] | null }>('GET', '/v1/money/card-disputes', undefined, "the owner reads the workspace's disputes")
+        const mine = listed.ok ? (listed.value.card_disputes ?? []).filter((d) => d.payment_id === first.value.authorization_id) : []
+        if (mine.length !== 1 || mine[0].status !== 'won' || mine[0].credited_minor !== SPEND_MINOR) wrong.push(`the disputes must list the charge's one dispute, won, ${SPEND_MINOR} credited; Lens answered ${said(listed)}`)
+        if (wrong.length > 0) return fail(wrong.join('; '))
         return {
           pass: true,
           detail: `${agent.name}'s key asked for batch ${batch.id}: ${TRIP.map((c) => `${c.merchant} ${c.cap_minor}`).join(', ')} GBP minor; one approval issued all three, ` +
-            `active and closing within 24 hours, the agent's account ${FUND_MINOR} → ${after} minor (one card_hold of ${TOTAL_MINOR}); approved again it stayed at ${last}`,
+            `active and closing within 24 hours, the agent's account ${FUND_MINOR} → ${after} minor (one card_hold of ${TOTAL_MINOR}); approved again it stayed at ${last}; ` +
+            `the ${airline.merchant} card charged ${SPEND_MINOR} wrote one card_charge, the account ${last} → ${spent}; charged again it was declined and stayed at ${end}; ` +
+            `disputed (${dispute.id}) it stayed at ${disputed}, won it came back to ${back} and stayed at ${settled} on the same outcome again`,
         }
       } catch (e) {
         return fail((e as Error).message)

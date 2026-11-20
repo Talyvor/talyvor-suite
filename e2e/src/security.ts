@@ -331,7 +331,7 @@ export function writeRoutes(lensGo: string): { method: string; path: string }[] 
 }
 
 /** The writes apps/bff lens.go originExemptPath lets through without an Origin: machine callers that authenticate themselves. */
-export const ORIGIN_EXEMPT = new Set(['/oauth/register', '/oauth/token', '/oauth/revoke', '/mcp', '/auth/mobile/session'])
+export const ORIGIN_EXEMPT = new Set(['/oauth/register', '/oauth/token', '/oauth/revoke', '/mcp'])
 
 export function csrfEveryWrite(): Scenario {
   return {

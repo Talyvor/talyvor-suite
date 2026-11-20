@@ -35,11 +35,11 @@ function chrome() {
   // The site's header comes first; testing-library also counts the legal pages' title <header> in
   // main as a banner, which a browser does not.
   const header = screen.getAllByRole('banner')[0]
-  expect(header.querySelector('[data-brand="lockup"] img[src="/brand/logo/talyvor-logo-small-on-light.svg"]')).not.toBeNull()
+  expect(header.querySelector('[data-brand="lockup"] img[srcset="/brand/logo/talyvor-logo-small-on-light-240.png 1x, /brand/logo/talyvor-logo-small-on-light-480.png 2x"][alt="Talyvor"]')).not.toBeNull()
   expect(within(header).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
 
   const footer = screen.getByRole('contentinfo')
-  expect(footer.querySelector('[data-brand="lockup"] img[src="/brand/logo/talyvor-logo-small-on-light.svg"]')).not.toBeNull() // B57.59: Pocket's footer opens with the logo
+  expect(footer.querySelector('[data-brand="lockup"] img[srcset="/brand/logo/talyvor-logo-small-on-light-240.png 1x, /brand/logo/talyvor-logo-small-on-light-480.png 2x"][alt="Talyvor"]')).not.toBeNull() // B57.59: Pocket's footer opens with the logo
   expect(within(footer).getByText(new RegExp(COMPANY_NAME))).toBeInTheDocument()
   expect(within(footer).getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy')
 }

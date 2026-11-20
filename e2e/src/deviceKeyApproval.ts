@@ -5,9 +5,11 @@
 // approval; the device's signature over that approval's challenge approves it. Once the device is revoked, a second approval
 // signed the same way is refused 403, an unsigned decision is refused too, and that approval stays pending.
 // A Lens without LENS_DEVICE_TEST_ATTESTATION=true (production) refuses the "test" platform: a SKIP, never a pass.
+// B17.509 — then the owner downloads the approvals and the payer's transfers as CSV (talyvor-lens B28.332, ?format=csv): each
+// is Lens's file, one row per item of the same route's JSON list, the same ids in the same order.
 
 import { generateKeyPairSync, sign } from 'node:crypto'
-import { fail } from './bank.ts'
+import { csvRows, fail } from './bank.ts'
 import type { Answered } from './lens.ts'
 import { RUN_SALT } from './oracles.ts'
 import { said } from './routes.ts'
@@ -36,7 +38,7 @@ export function deviceKeyApproval(): Scenario {
     own: true,
     agents: 2,
     feature: 'Agent Wallets',
-    items: ['B40.28'],
+    items: ['B40.28', 'B28.332'],
     title: "a phone's device key registered as platform \"test\" is on the device list and signs an agent's approval, which is approved; " +
       'revoked, its signature on a new approval is refused 403, an unsigned decision is refused, and that approval stays pending',
     run: async (ctx) => {
@@ -113,10 +115,30 @@ export function deviceKeyApproval(): Scenario {
       if (left !== 'pending') wrong.push(`after the refused decisions approval ${second} is ${left}, not pending`)
       if (wrong.length > 0) return fail(wrong.join('; '))
 
+      // B17.509 — each list as a CSV: one row per item of its JSON list, in its order.
+      const exported: string[] = []
+      for (const [what, path, key] of [['the approvals', '/v1/workspaces/{ws}/agents/approvals', 'approvals'],
+        [`${payer.name}'s transfers`, `/v1/workspaces/{ws}/agents/${payer.id}/transfers`, 'transfers']] as const) {
+        const listed = await call<Record<string, { id: string }[] | null>>('GET', path, undefined, `the owner lists ${what}`)
+        const file = await lens.as(user.token, 'GET', `${path.replace('{ws}', user.workspaceID)}?format=csv`)
+        ctx.evidence.push({ note: `the owner downloads ${what} as CSV`, answer: `${file.status} ${file.headers.get('content-type')} ${file.text.slice(0, 400)}` })
+        if (!listed.ok) return fail(`listing ${what} was refused: ${said(listed)}`)
+        const ids = (listed.value[key] ?? []).map((x) => x.id)
+        if (file.status !== 200 || !(file.headers.get('content-type') ?? '').startsWith('text/csv') ||
+          file.headers.get('content-disposition') !== `attachment; filename="${key}.csv"`) {
+          return fail(`${what} as CSV must answer 200 text/csv as ${key}.csv; Lens answered ${file.status} ${file.headers.get('content-type')} ${file.headers.get('content-disposition')}`)
+        }
+        const [header = [], ...rows] = csvRows(file.text)
+        const got = rows.map((r) => r[header.indexOf('id')])
+        if (got.join(',') !== ids.join(',')) return fail(`${what}' CSV has ${rows.length} rows (${got.join(', ')}); its JSON list has ${ids.length} items (${ids.join(', ')})`)
+        if (key === 'approvals' && !(got.includes(first) && got.includes(second))) return fail(`the approvals' CSV must hold approvals ${first} and ${second}; it holds ${got.join(', ')}`)
+        exported.push(`${what} ${rows.length} rows`)
+      }
+
       return {
         pass: true,
         detail: `device ${device} registered as "test" and listed; approval ${first} approved with its signature; revoked, approval ${second} ` +
-          'refused 403 signed by it and 403 unsigned, still pending',
+          `refused 403 signed by it and 403 unsigned, still pending; as CSV ${exported.join(' and ')}, each its JSON list`,
       }
     },
   }

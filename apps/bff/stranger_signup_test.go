@@ -2,17 +2,16 @@ package main
 
 // stranger_signup_test.go — THE SEQUENCE, not the steps.
 //
-// Every individual piece of signup has a test already: the OIDC round-trip (auth_test.go), that
-// two seeded sessions reach two workspaces (tenant_boundary_test.go), that Track bootstraps
-// (track_tenant_test.go). All of them start from a session someone else created, or from a
-// workspace the test seeded. None of them answers the question the trial actually turns on:
+// Every individual piece of signup has a test already: the phone door (b6125_phone_signin_test.go), that two seeded
+// sessions reach two workspaces (tenant_boundary_test.go), that Track bootstraps (track_tenant_test.go). None of them
+// answers the question the trial actually turns on:
 //
-//   Can an identity NOBODY HAS EVER SEEN arrive at the front door and come out the other side
-//   holding a working product, with no operator touching anything?
+//   Can an identity NOBODY HAS EVER SEEN come out of sign-in holding a working product, with no operator touching
+//   anything?
 //
-// So these tests start where a stranger starts — at /auth/login with an empty cookie jar — and
-// drive the whole chain over HTTP: login → IdP → callback → allowlist → Lens provisioning →
-// Track bootstrap → pooling prompt → Setup coordinates → key mint → ledger read.
+// So these tests start where a stranger's sign-in lands — Lens provisioning a never-seen identity (signInAsSub; the
+// Google round trip they once drove is gone, B61.29) — and drive the rest of the chain over HTTP: Track bootstrap →
+// pooling prompt → Setup coordinates → key mint → ledger read.
 //
 // AND THEY RUN IT TWICE, as two different people in two different browsers. That second run is
 // the point. Almost everything works for user one: user one is who a developer tests as, and a
@@ -277,7 +276,6 @@ type strangerSuite struct {
 	t       *testing.T
 	lens    *strangerLens
 	track   *strangerTrack
-	idp     *fakeIDP
 	ts      *httptest.Server
 	app     *app
 	logs    *logCapture
@@ -299,7 +297,6 @@ func startStrangerSuiteWith(t *testing.T, allowed []string, mod func(*config)) *
 		t:       t,
 		lens:    newStrangerLens(t),
 		track:   newStrangerTrack(t),
-		idp:     newFakeIDP(t),
 		logs:    captureLogs(t),
 		webDist: t.TempDir(),
 	}
@@ -322,9 +319,7 @@ func startStrangerSuiteWith(t *testing.T, allowed []string, mod func(*config)) *
 		provisionSecret:   testProvisionSecret,
 		webDist:           s.webDist,
 		authMode:          authModeOIDC,
-		oidcIssuer:        s.idp.srv.URL,
-		oidcClientID:      s.idp.clientID,
-		oidcClientSecret:  s.idp.clientSecret,
+		oidcIssuer:        testIssuer,
 		publicBaseURL:     "https://" + ln.Addr().String(),
 		allowedEmails:     allowed,
 		sessionTTL:        time.Hour,
@@ -335,10 +330,7 @@ func startStrangerSuiteWith(t *testing.T, allowed []string, mod func(*config)) *
 	if mod != nil {
 		mod(&cfg)
 	}
-	auth, err := newAuthenticator(t.Context(), cfg)
-	if err != nil {
-		t.Fatalf("newAuthenticator: %v", err)
-	}
+	auth := newAuthenticator(cfg)
 	s.app = newApp(cfg, auth)
 	ts := httptest.NewUnstartedServer(s.app)
 	ts.Listener.Close()
@@ -367,21 +359,13 @@ func (s *strangerSuite) browser() *http.Client {
 	}
 }
 
-// signUp drives the WHOLE front door for one never-before-seen identity and returns their
-// browser. It fails the test if any hop refuses — this is the sequence under test, not a setup
-// helper that may quietly skip.
+// signUp signs one never-before-seen identity in and returns their browser: Lens provisions them, as every sign-in
+// does (signInAsSub). Google sign-in, which these tests once drove, is gone (B61.29); the phone door is tested in
+// b6125_phone_signin_test.go.
 func (s *strangerSuite) signUp(sub, email string) *http.Client {
 	s.t.Helper()
-	s.idp.sub, s.idp.email = sub, email
 	br := s.browser()
-	h := loginHops(s.t, s.ts, br, "/")
-	if h.callback.StatusCode != http.StatusFound {
-		s.t.Fatalf("stranger %s (%s) was refused at the callback: %d — %s",
-			sub, email, h.callback.StatusCode, h.cbBody)
-	}
-	if cookieNamed(h.callback, sessionCookieName) == nil {
-		s.t.Fatalf("stranger %s completed the flow but got no session cookie", sub)
-	}
+	signInAsSub(s.t, s.app, s.ts, br, sub, email, signupAccount{})
 	return br
 }
 
@@ -491,7 +475,14 @@ func TestStranger_WholeSignupSequence_ForTwoUnrelatedPeople(t *testing.T) {
 			"other than the issuer+subject is deciding tenancy", aliceWS, wantAlice)
 	}
 
-	// ── 4. THEIR OWN TRACK WORKSPACE, bootstrapped at login, per-identity ─────
+	// ── 4. THEIR OWN TRACK WORKSPACE, bootstrapped on first use, per-identity ─
+	// Read the roster as each of them: the response must be their own workspace's, not a shared one. signInAsSub
+	// provisions Lens alone, so here the first Track read bootstraps it (trackWorkspaceFor).
+	aliceRoster := s.getBody(alice, "/api/members")
+	bobRoster := s.getBody(bob, "/api/members")
+	if aliceRoster == bobRoster {
+		t.Fatalf("both strangers read an identical Track roster — Track is shared:\n%s", aliceRoster)
+	}
 	s.track.mu.Lock()
 	bootstraps := append([]string(nil), s.track.bootstrap...)
 	s.track.mu.Unlock()
@@ -501,12 +492,6 @@ func TestStranger_WholeSignupSequence_ForTwoUnrelatedPeople(t *testing.T) {
 	if bootstraps[0] == bootstraps[1] {
 		t.Fatalf("both strangers bootstrapped Track under the SAME identity %q — they would share "+
 			"an issue tracker", bootstraps[0])
-	}
-	// Read the roster as each of them: the response must be their own workspace's, not a shared one.
-	aliceRoster := s.getBody(alice, "/api/members")
-	bobRoster := s.getBody(bob, "/api/members")
-	if aliceRoster == bobRoster {
-		t.Fatalf("both strangers read an identical Track roster — Track is shared:\n%s", aliceRoster)
 	}
 
 	// ── 5. the pooling consent, which blocks until they choose ───────────────
@@ -623,163 +608,6 @@ func TestStranger_NoRouteServesTheOtherStrangersWorkspace(t *testing.T) {
 	}
 }
 
-// ─── 3. THE WILDCARD, END TO END ────────────────────────────────────────────
-
-// OIDC_ALLOWED_EMAILS="*" is what a public trial runs on. The unit-level check that
-// authorizeIdentity returns true for "*" says nothing about whether a stranger's identity
-// actually REACHES provisioning — the gate could pass and the next step still refuse.
-//
-// So this asserts the consequence: an identity on nobody's list arrives with a workspace that
-// Lens genuinely created for it.
-func TestWildcard_AStrangerReachesProvisioning(t *testing.T) {
-	s := startStrangerSuite(t, []string{"*"})
-	br := s.signUp("never-seen-before-sub", "stranger@example.org")
-
-	me := s.me(br)
-	ws, _ := me["workspace_id"].(string)
-	if ws == "" {
-		t.Fatal("the wildcard admitted the stranger but no workspace was provisioned — the gate " +
-			"passed and the chain stopped one step later")
-	}
-	s.lens.mu.Lock()
-	created := s.lens.created[ws]
-	s.lens.mu.Unlock()
-	if !created {
-		t.Fatalf("workspace %q was never created at Lens", ws)
-	}
-	if me["needs_pooling_choice"] != true {
-		t.Error("a stranger's brand-new workspace did not raise the pooling disclosure")
-	}
-}
-
-// The same rig with a CLOSED list must still refuse — the wildcard test above would pass
-// vacuously if the allowlist had stopped being consulted at all. This is the positive control:
-// the instrument can still say no.
-func TestWildcard_PositiveControl_AClosedListStillRefusesTheSameStranger(t *testing.T) {
-	s := startStrangerSuite(t, []string{"someone-else@example.com"})
-	s.idp.sub, s.idp.email = "never-seen-before-sub", "stranger@example.org"
-	br := s.browser()
-
-	h := loginHops(t, s.ts, br, "/")
-	if h.callback.StatusCode != http.StatusForbidden {
-		t.Fatalf("a closed allowlist admitted an unlisted stranger: %d — %s",
-			h.callback.StatusCode, h.cbBody)
-	}
-}
-
-// ─── 4. THE REFUSAL THE OPERATOR HAS TO ACT ON ──────────────────────────────
-
-// When a deployment IS running closed, someone will be turned away. Two things must be true at
-// that moment, and they are for different readers:
-//
-//	THE PERSON gets a page that explains it (auth_denied_page_test.go pins the page itself).
-//	THE OPERATOR gets a log line NAMING THE ADDRESS, so adding them is a copy-paste rather than
-//	a hunt through an id_token for a subject that appears nowhere in the console they'd add it in.
-//
-// The subject alone is useless for that job: OIDC_ALLOWED_EMAILS is keyed on EMAIL, so an
-// operator holding only `sub=118002...` cannot act on it at all.
-func TestDeniedLoginNamesTheAddressForTheOperator(t *testing.T) {
-	cases := []struct {
-		name           string
-		email          string
-		verified       *bool
-		wantInLog      []string
-		wantNotInLog   []string
-		wantAbsentWord bool
-	}{
-		{
-			name:      "unlisted address is named",
-			email:     "newcomer@example.org",
-			wantInLog: []string{"newcomer@example.org"},
-			// The REFUSED address, not the list. The log is an operator's terminal, but it is
-			// also whatever ships logs off the box, and the allowlist is not refusal detail.
-			wantNotInLog: []string{"only-me@example.com"},
-		},
-		{
-			// The issuer disputes the address. The operator STILL needs to know which address,
-			// or they cannot tell who complained to them.
-			name:      "unverified address is named",
-			email:     "disputed@example.org",
-			verified:  boolPtr(false),
-			wantInLog: []string{"disputed@example.org"},
-		},
-		{
-			// No email claim at all. ABSENT MUST BE ITS OWN WORD: a log line that renders a
-			// missing address as an empty string reads as a blank field, and two different
-			// failures (no claim / claim not listed) look identical in the operator's terminal.
-			name:           "an absent address SAYS it is absent",
-			email:          "",
-			wantAbsentWord: true,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := startStrangerSuite(t, []string{"only-me@example.com"})
-			s.idp.sub, s.idp.email, s.idp.emailVerified = "sub-refused", tc.email, tc.verified
-			br := s.browser()
-			h := loginHops(t, s.ts, br, "/")
-			if h.callback.StatusCode != http.StatusForbidden {
-				t.Fatalf("expected a refusal, got %d", h.callback.StatusCode)
-			}
-
-			got := s.logs.String()
-			if !strings.Contains(got, "DENIED") {
-				t.Fatalf("no refusal was logged at all; log was:\n%s", got)
-			}
-			for _, want := range tc.wantInLog {
-				if !strings.Contains(got, want) {
-					t.Errorf("the refusal log does not name the address %q — the operator cannot add "+
-						"them without it. Log was:\n%s", want, got)
-				}
-			}
-			for _, unwanted := range tc.wantNotInLog {
-				if strings.Contains(got, unwanted) {
-					t.Errorf("refusal log contains %q; log was:\n%s", unwanted, got)
-				}
-			}
-			if tc.wantAbsentWord {
-				if !strings.Contains(strings.ToLower(got), "no email claim") {
-					t.Errorf("a refusal with NO address must say so in words, not render an empty "+
-						"field. Log was:\n%s", got)
-				}
-				if strings.Contains(got, "email= ") || strings.Contains(got, "email=\n") {
-					t.Errorf("the address field rendered BLANK — absence must be a word, not an "+
-						"empty string. Log was:\n%s", got)
-				}
-			}
-
-			// THE REMEDY IS PART OF THE LINE. "Name the address" is only half the job the
-			// operator has: the fix also needs a RESTART, because config is read once at boot.
-			// A line that names the variable and stops sends someone to edit a file, refresh,
-			// see the same refusal, and conclude the product is broken. A remedy printed in an
-			// alert is production code — so it is asserted like production code.
-			for _, want := range []string{"OIDC_ALLOWED_EMAILS", "RESTART"} {
-				if !strings.Contains(got, want) {
-					t.Errorf("the refusal log does not tell the operator how to fix it (missing %q). "+
-						"Log was:\n%s", want, got)
-				}
-			}
-		})
-	}
-}
-
-// The page a refused person sees must stay the same regardless — the log is where the detail
-// goes, and widening the log must not widen the page.
-func TestDeniedPageStillLeaksNothingAfterTheLogWasWidened(t *testing.T) {
-	s := startStrangerSuite(t, []string{"only-me@example.com"})
-	s.idp.sub, s.idp.email = "sub-refused", "newcomer@example.org"
-	br := s.browser()
-	h := loginHops(t, s.ts, br, "/")
-	if h.callback.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", h.callback.StatusCode)
-	}
-	for _, leak := range []string{"only-me@example.com", "OIDC_ALLOWED_EMAILS", "allowlist"} {
-		if strings.Contains(h.cbBody, leak) {
-			t.Errorf("the denied page leaks %q:\n%s", leak, h.cbBody)
-		}
-	}
-}
-
 // ─── 3b. THE ENTRY ROUTES SURVIVE A COLD NAVIGATION ─────────────────────────
 
 // The marketing page's call to action is a plain <a href="/signup">, so clicking it is a FULL
@@ -820,52 +648,6 @@ func TestEntryRoutesAreServedOnAColdNavigation(t *testing.T) {
 		t.Fatalf("control: /api/context without a session should still be 401, got %d — if this "+
 			"changed, the test above is no longer evidence that /signup is deliberately public",
 			resp.StatusCode)
-	}
-}
-
-// ─── 4b. THE SCOPE LIST IS LOAD-BEARING FOR THE WHOLE TRIAL ─────────────────
-
-// WHY A TEST GUARDS THREE STRINGS.
-//
-// Everything about how this deployment reaches the public rests on one fact: we ask Google for
-// basic identity and nothing else. Google's OAuth app state overview says of the Testing state,
-// verbatim: "Only users explicitly added to the test user allowlist can access the app (limited
-// to a hard cap of 100 test users). Exception: If the app only requests basic identity scopes
-// (openid, email, profile), any user can access without being on the allowlist." Verification is
-// "Required for public apps that request sensitive and restricted scopes" — not ours.
-//
-// So the moment anyone adds a fourth scope — a calendar read, a Drive file, a Gmail label — the
-// app needs verification, acquires a 100-user cap, and starts showing unverified-app warnings.
-// None of that fails a build, none of it fails a deploy, and none of it is visible from inside
-// the product: it manifests as strangers being turned away by Google, on a screen we do not
-// control and cannot explain ourselves on.
-//
-// A COMMENT CANNOT FAIL A BUILD (the marketing page shipped a dead mailto: under a comment
-// saying the alias did not route). The deploy runbook now cites this test by name as the reason
-// an operator may believe the "no verification needed" claim, so the claim and its evidence live
-// or die together.
-//
-// The assertion is on the CONSTRUCTED oauth2.Config, not a grep of the source: it is the value
-// the authorize URL is actually built from.
-func TestOnlyBasicIdentityScopesAreRequested(t *testing.T) {
-	s := startStrangerSuite(t, []string{"*"})
-	got := s.app.auth.oauth.Scopes
-
-	want := map[string]bool{"openid": true, "email": true, "profile": true}
-	for _, sc := range got {
-		if !want[sc] {
-			t.Errorf("scope %q is requested but is not a basic identity scope.\n\n"+
-				"If it is SENSITIVE or RESTRICTED under Google's policy, this deployment now needs "+
-				"OAuth verification, gains a hard cap of 100 total users, and shows unverified-app "+
-				"warnings to everyone — none of which fails a build. Remove it, or accept the "+
-				"verification burden deliberately and update deploy/README.md, which cites this "+
-				"test as the evidence for the opposite claim.", sc)
-		}
-		delete(want, sc)
-	}
-	for missing := range want {
-		t.Errorf("scope %q is no longer requested — the id_token may stop carrying the claims the "+
-			"allowlist and the denied page depend on", missing)
 	}
 }
 

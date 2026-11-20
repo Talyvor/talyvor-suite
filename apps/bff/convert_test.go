@@ -83,7 +83,7 @@ func convertApp(t *testing.T, up *convertUpstream) (*app, *http.Cookie) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "conv-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()

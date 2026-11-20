@@ -54,86 +54,20 @@ command whose expected output is stated.
 
 ---
 
-## 0. The IdP decision — read this before anything else
+## 0. Sign-in — read this before anything else
 
-`BFF_AUTH_MODE=oidc` is mandatory on the public internet, and oidc mode needs a
-real OIDC issuer: the BFF runs discovery against it **at boot** (an unreachable
-IdP refuses to start), sends the browser to its authorize endpoint (so the
-**browser** must be able to reach it — a loopback-only IdP on this box cannot
-work), exchanges the code as a **confidential client** (client id + secret;
-PKCE is added on top, it does not replace the secret), and takes the user's
-identity from the id_token's `email` claim (it counts only when the id_token
-says `email_verified: true`; false or absent is refused, with `*` or a list).
+`BFF_AUTH_MODE=oidc` (the name is historical) is mandatory on the public internet: it turns sign-in on. People join
+and sign in with their phone number, a texted code, a passcode and a passkey (`apps/bff/phone_signin.go`; Lens holds
+the codes, the passcodes and the keys). **Google sign-in is gone (B61.29)**: there is no OAuth client to register, no
+redirect URI, and nothing the BFF fetches from an identity provider at boot.
 
-**The trial runs on Google as the issuer** (deployed and live). Not a provider
-you sign up for and not a container you run — an IdP you already have. The BFF
-is deliberately generic OIDC precisely so it can point at anything
-standards-compliant, and `accounts.google.com` is the most battle-tested
-issuer in existence for this exact stack (go-oidc + authorization code + PKCE).
-
-- Zero new processes on the box; zero new config files beyond the env file.
-- ~15 minutes of one-time console work (step 1 below): consent screen, one
-  OAuth web client, one redirect URI.
-- **THE TRIAL GATE IS `OIDC_ALLOWED_EMAILS`, AND ONLY THAT.** This list
-  previously claimed the gate was "enforced twice — `OIDC_ALLOWED_EMAILS` in
-  the BFF (authoritative) and Google's test-user list (non-test-users can't
-  even complete the Google prompt while the app is in Testing)". **The second
-  half is false**, and believing it would leave an operator thinking the door
-  is double-locked when it has one lock. Google's *OAuth app state overview*
-  says of the **Testing** state, verbatim: *"Only users explicitly added to the
-  test user allowlist can access the app (limited to a hard cap of 100 test
-  users). **Exception: If the app only requests basic identity scopes
-  (`openid`, `email`, `profile`), any user can access without being on the
-  allowlist.**"* The BFF requests exactly `openid email profile` and nothing
-  else (`apps/bff/auth.go`, pinned by `TestOnlyBasicIdentityScopesAreRequested`).
-  So **any Google account can complete the Google half of the flow today**,
-  test-user list or not, and the only thing standing between a stranger and a
-  workspace is `OIDC_ALLOWED_EMAILS`. Set it deliberately — see the variable
-  table.
-- Google sets `email_verified: true`; the BFF's verified-email rule is
-  satisfied.
-- Costs, honestly: trial users need Google accounts, and Google is in the login
-  path's availability. Sessions are the BFF's own (**no refresh tokens** — grep
-  `apps/bff` for `AccessTypeOffline`: zero hits), so Testing mode's 7-day
-  refresh-token expiry is irrelevant to us. An **unpublished** app shows a
-  consent screen without our name or logo; publishing fixes that and needs no
-  review for these scopes (step 1).
-
-**The self-contained alternative is Dex** on this box — choose it only if "no
-third party in the login path" outweighs the cost. Be clear about the cost:
-Dex must be **browser-reachable over https**, so it needs a public route (a
-`handle_path /dex/*` block added to the live Caddyfile, or its own subdomain
-and DNS), its own config file with `staticPasswords` (bcrypt hashes you
-generate and manage by hand), and one more container/unit to run and patch.
-Call it 45–90 minutes plus ongoing password custody. Keycloak/Authentik do the
-same job with far more machinery; a hosted Auth0 tenant works but is a new
-SaaS account when Google is already in hand.
+`OIDC_ISSUER` stays, with the value it had (`https://accounts.google.com` on the live box): it is the namespace the
+identities of people who first signed in with Google were made under, and Lens keys their accounts by it. Changing it
+would give those people new, empty accounts.
 
 ## 1. Obtain these BEFORE starting (nothing boots without them)
 
-1. **OIDC client (Google path):** in Google Cloud Console —
-   *APIs & Services → OAuth consent screen* (newer console: *Google Auth
-   Platform*): **External**. Then *Credentials → Create credentials → OAuth
-   client ID → Web application*, with **Authorized redirect URI exactly**
-   `https://app.talyvor.com/auth/callback` (scheme, host, and path must match
-   to the character). Record the client id and secret. The issuer is
-   `https://accounts.google.com`.
-
-   **Scopes: leave them as the three prefilled non-sensitive ones**
-   (`openid`, `email`, `profile`) and add nothing. That choice is what keeps
-   this app out of verification entirely — see the ⚠ note below and
-   `TestOnlyBasicIdentityScopesAreRequested`.
-
-   **Publishing status — recommended, not required.** *Google Auth Platform →
-   Audience → **Publish app** → Confirm*. With only the three basic scopes
-   this is **instant and needs no review**: verification is required only for
-   sensitive/restricted scopes, and the 100-user cap and unverified-app
-   "Danger UI" both apply only to apps requesting those. Publishing buys one
-   thing — an app in **Testing** shows a consent screen without our name or
-   logo. **Test users already added are NOT locked out**: publishing widens
-   access from "the list" to "any Google Account", so everyone previously
-   admitted still is, and the test-user list simply stops being consulted.
-   Nobody is removed and nothing needs re-adding.
+1. Nothing for sign-in: the phone door needs no client or secret of its own.
 2. **Lens:** the base URL of the Lens box (**must be `https://…`** — the
    workspace key travels in a header on every read, and the BFF refuses to
    boot on a remote plain-http URL for exactly that reason; http is allowed
@@ -373,24 +307,20 @@ Every variable the BFF reads, and what happens without it:
 | `LENS_WORKSPACE_KEY` | no — **inert** | — | ⚠ Read by **nothing** since per-user signup (#30): `grep -c LENS_WORKSPACE apps/bff/main.go` = 0. Kept in `bff.env.example` on purpose — the **pre-#30 binary requires it**, so one env file boots either binary and rollback stays a binary swap. Tolerated silently by the current BFF. |
 | `LENS_WORKSPACE_ID` | no — **inert** | — | As above. Both were previously documented here as required with "Missing → refuses to start"; that was true of the old binary and false of this one, in the direction that wastes the most time — it sends you looking at a working variable while the real refusal names a different one. |
 | `WEB_DIST` | **yes, here** | `../web/dist` | Path to the built SPA — `/opt/talyvor/web-dist`. The default is a repo-relative dev path that means nothing under systemd; the unit deliberately does not set it, so **it must be in the env file** (it is in the template now — it wasn't, and that cost a round-trip). Wrong path won't stop boot — step 6's `curl /` catches it. |
-| `BFF_PUBLIC_BASE_URL` | **yes** (oidc) | — | Browser-facing origin, `https://app.talyvor.com`. Derives the OIDC redirect URI (`<origin>/auth/callback`) and scopes the `__Host-` cookie. Must be a **bare origin** — any path/query → refuses to start; non-https public → refuses a non-loopback bind. |
-| `OIDC_ISSUER` | **yes** (oidc) | — | Discovery base (`https://accounts.google.com`). Missing → refuses to start. Reachable but wrong / IdP down → **boot-time discovery fails** and the process exits (systemd retries). Must be https (http only on loopback, dev). |
-| `OIDC_CLIENT_ID` | **yes** (oidc) | — | The client registered at the IdP. Missing → refuses to start. |
-| `OIDC_CLIENT_SECRET` | **yes** (oidc) | — | Confidential-client secret; PKCE supplements it, never replaces it. Missing → refuses to start. |
-| `OIDC_ALLOWED_EMAILS` | **yes** (oidc) | — | **`*` for a public trial; a comma-separated list for a closed one.** See "Which value goes here" directly below — this is the only thing gating signup, so it is a decision, not a formality. Lower-cased match against the id_token email; `*` alone admits every identity the issuer authenticates. Empty → refuses to start ("authorization must be stated, not implied"). An identity whose email the id_token does not mark `email_verified: true` (false or absent) is refused, by a list and by `*` alike. **Read at boot: changing it needs a BFF restart.** |
+| `BFF_PUBLIC_BASE_URL` | **yes** (oidc) | — | Browser-facing origin, `https://app.talyvor.com`. Scopes the `__Host-` cookie and is the origin every write must come from. Must be a **bare origin** — any path/query → refuses to start; non-https public → refuses a non-loopback bind. |
+| `OIDC_ISSUER` | **yes** (oidc) | — | The namespace the identities of people who first signed in with Google were made under (`https://accounts.google.com` on the live box); Lens keys their accounts by it, so **keep its value**. Nothing is fetched from it (B61.29). Missing → refuses to start. |
+| `OIDC_ALLOWED_EMAILS` | **yes** (oidc) | — | `*` reports sign-up as open on `/auth/me` (`signup_open`), which the website's access line reads; a comma-separated list reports it closed. It no longer admits or refuses anyone: Google sign-in, which it gated, is gone (B61.29). Empty → refuses to start. **Read at boot: changing it needs a BFF restart.** |
 | `OPERATOR_SUBS` | no — but **unset means nobody, including you** | — none, deliberately | ⚠ **Also read by the BFF and named in no operator document** — it was missed even by a grep, because it is read through a named constant (`operatorSubsEnv`) rather than a literal. Comma-separated list of OIDC **`sub`** values (not emails) allowed to read **every tenant's** data — spend, purchases, royalties. Independent of `OIDC_ALLOWED_EMAILS`, which answers "who may sign in"; this answers "who may see everything", and neither reads the other. **Empty refuses every identity, including the deployment owner's** (`operator.go`: "a boundary whose default is open is not a boundary"), so a fresh deployment has no operator until someone is named — and an operator who never learns this variable exists can never get in. `sub` is opaque (`110248495…`): read yours out of `/auth/me` once and paste it here. **No `*` wildcard, deliberately.** Read at boot — changing it needs a restart. Changing Google account loses access until the new `sub` is added. |
 | `BFF_SESSION_TTL` | no | `12h` | Absolute session lifetime (Go duration). Unparseable or ≤0 → refuses to start. Sessions are **in-memory**: every BFF restart signs everyone out (they just re-login). |
 | `TRACK_BASE_URL` | no† | — | Track upstream base (reachable from this box). |
 | `TRACK_GATEWAY_SECRET` | no† | — | Track's own `GATEWAY_AUTH_SECRET`, replayed as the `X-Gateway-Auth` transit proof. Held server-side, never emitted. |
-| ~~`TRACK_WORKSPACE_ID`~~ | **MUST BE ABSENT** | — | ⚠ **The BFF now REFUSES TO START if this is set** (`apps/bff/main.go:175`). Track is per-session: each person is bootstrapped their own workspace at login. Delete the line from any existing env file. |
+| ~~`TRACK_WORKSPACE_ID`~~ | **MUST BE ABSENT** | — | ⚠ **The BFF now REFUSES TO START if this is set** (`apps/bff/main.go:170`). Track is per-session: each person is bootstrapped their own workspace at login. Delete the line from any existing env file. |
 | `DOCS_BASE_URL` | no‡ | — | Docs upstream base. |
 | `DOCS_GATEWAY_SECRET` | no‡ | — | Docs' `GATEWAY_AUTH_SECRET`, as above. |
-| `BFF_GOOGLE_SIGNIN` | no | (on) | B61.25 — `off` removes Google sign-in: `/auth/login`, `/auth/callback`, `/auth/mobile/session` and `/auth/google/move` answer 404, and `/auth/me` says `google_signin: false`. B61.29 sets it. |
-| `OIDC_MOBILE_CLIENT_IDS` | no | (empty) | The phone app's client ids at the same issuer (iOS, Android), comma-separated. Its ID token is traded at `POST /auth/mobile/session` for a Bearer session. Empty → that route answers 404. |
 | `BFF_DATABASE_URL` | no | (unset) | Postgres for Talyvor Connect's sign-ins: OAuth clients, codes, grants and tokens (tokens by SHA-256 only) are kept there and read back at boot, so a restart signs no assistant out. The BFF creates its `oauth_*` tables itself. Unreachable at boot → refuses to start. **Unset: in memory, and every restart signs every connected assistant out.** Sign out everywhere (B52.9) ends browser and phone sessions, and Connect's grants and codes, in the memory of the BFF that serves it, so **the stack runs one BFF instance** until sessions and that revocation are shared. |
 | `BFF_CONNECT_REGISTER_PER_IP_HOUR` | no | `10` | B52.3 — Talyvor Connect's client registrations per IP per hour; also the cap on unused clients one address holds (an unused one is forgotten after an hour, in memory and in the table). Over a Connect limit → 429 with `Retry-After`. A number for Nicolai to confirm. |
 | `BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE` | no | `60` | B52.3 — `/oauth/authorize` requests per IP per minute. |
-| `BFF_PHONE_DOOR_PER_IP_MINUTE` | no | `60` | B61.25 — requests per IP per minute to each sign-in route of the phone door (`/auth/phone/*`, `/auth/passkey/challenge`, `/auth/passkey/finish`, `/auth/unlock*`, `/auth/google/move`), beside Lens's own limits on texts and passcode tries. |
+| `BFF_PHONE_DOOR_PER_IP_MINUTE` | no | `60` | B61.25 — requests per IP per minute to each sign-in route of the phone door (`/auth/phone/*`, `/auth/passkey/challenge`, `/auth/passkey/finish`, `/auth/unlock*`), beside Lens's own limits on texts and passcode tries. |
 | `BFF_CONNECT_TOKEN_PER_IP_MINUTE` | no | `60` | B52.3 — `/oauth/token` requests per IP per minute. |
 | `BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE` | no | `10` | B52.3 — token refreshes per connection per minute. |
 | `BFF_CONNECT_MCP_PER_IP_MINUTE` | no | `600` | B52.3 — `/mcp` requests per IP per minute. |
@@ -419,53 +349,10 @@ routes answer 503 and the rest of the app works.
 
 ### Which value goes in `OIDC_ALLOWED_EMAILS`
 
-**There is no unsafe default, because there is no default** — the variable is
-required and the BFF refuses to start without it. So this is a decision about
-which trial you are running, not a risk to be hedged.
-
-**Running a PUBLIC trial → `OIDC_ALLOWED_EMAILS=*`.**
-
-Three facts make that safe, each of them checked rather than assumed:
-
-1. **Every identity gets its own workspace.** Lens derives the workspace id
-   from `(issuer, subject)` and the BFF never names one; Track bootstraps the
-   same way. Two unrelated strangers signing up reach two workspaces, and
-   neither can read the other's balance, keys, ledger, roster or spend —
-   asserted on the RESPONSE BODIES of every workspace-scoped route, not just
-   on the upstream paths (`apps/bff/stranger_signup_test.go`).
-2. **An open door does not open the wallet.** A newly provisioned workspace
-   has a zero LXC balance. The only two writers into an LXC balance in Lens are
-   the Stripe top-up (`internal/billing/billing.go`, a paid purchase) and an
-   admin grant route that is **default-off** behind
-   `LENS_ADMIN_LXC_GRANT_ENABLED` — `cmd/lens/provision_handler.go` credits
-   nothing. An unwanted signup therefore costs you one empty row, not money.
-3. **Google does not gate this for us.** See the section above: with only
-   `openid email profile`, any Google account completes the Google half
-   regardless of publishing status or test-user list. A list here is the whole
-   lock; `*` removes it deliberately rather than by accident.
-
-**Running a CLOSED trial → the comma-separated list.** Costs, plainly: adding
-someone means editing this file **and restarting the BFF** (config is read at
-boot), so every new tester waits for you to be awake. That is the real price of
-the list, and it is why `*` is the right value the moment you want strangers.
-
-Whichever you choose, a refusal is now something you can act on rather than
-hunt for. The person turned away gets a styled page that says the sign-in
-worked, that this workspace has not granted them access, and offers a
-different-account restart — it leaks nothing about the list. You get a log line
-that **names the address** and tells you what to do with it:
-
-```
-bff: login DENIED — email=newcomer@example.org sub=1180024… reason=the address is not on
-OIDC_ALLOWED_EMAILS | to admit them, add that address to OIDC_ALLOWED_EMAILS and RESTART the
-BFF (config is read at boot); or set OIDC_ALLOWED_EMAILS=* to admit every identity this
-issuer authenticates
-```
-
-An identity that carried **no** email claim renders as
-`email=(none — the id_token carried no email claim)`, never as a blank field:
-"the issuer sent no address" and "the address is not listed" are different
-problems and must not look identical at 2am.
+`*` for a public trial: the website then says anyone may start. Every identity gets its own workspace (Lens derives
+its id from the identity and the BFF never names one), and a new workspace holds no money, so an unwanted sign-up
+costs one empty row. A list makes the website say access is by invitation; since Google sign-in went (B61.29) it
+refuses nobody at the door, so set a list only together with whatever closes the door.
 
 ## 5. Preflight boot — prove the env before touching systemd or Caddy
 
@@ -482,7 +369,7 @@ sudo -u talyvor bash -c 'set -a; . /etc/talyvor/bff.env; set +a; /opt/talyvor/bi
 
 ```
 bff: non-loopback bind 0.0.0.0:8787 permitted: BFF_AUTH_MODE=oidc with https public origin https://app.talyvor.com
-bff: auth=oidc issuer=https://accounts.google.com public=https://app.talyvor.com allowlist=N entries
+bff: auth=oidc identity namespace=https://accounts.google.com public=https://app.talyvor.com allowlist=N entries
 bff: product upstreams: track=… docs=… (unset = routes answer 503)
 bff: serving [::]:8787 → Lens https://… (workspace …); web bundle from /opt/talyvor/web-dist
 bff: the Lens key is held server-side and never sent to the browser
@@ -649,30 +536,20 @@ curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' https://talyvor.com/
 # expect: 301 -> https://app.talyvor.com/anything
 ```
 
-## 8. The login round-trip (the only step that needs a browser)
+## 8. The sign-in round-trip (the only step that needs a browser)
 
-Open `https://app.talyvor.com` → sign in → Google prompt → back at the app,
-signed in. Then confirm the areas: Lens screens live; Track/Docs live or a
-clean 503 state per what you wired in step 4. If Google bounces the redirect,
-the registered URI does not equal `https://app.talyvor.com/auth/callback`
-character-for-character — fix it at the console, no server change needed.
+Open `https://app.talyvor.com` → your phone number → the texted code → your passcode → back at the app, signed in.
+Then confirm the areas: Lens screens live; Track/Docs live or a clean 503 state per what you wired in step 4.
 
-**Then walk the stranger's path, which is the one the trial actually depends
-on.** Signing in as yourself proves user one; almost everything works for user
-one. In a private window, open `https://app.talyvor.com/marketing` → **Get
-started** → `/signup` → **Continue**, as a **second, different Google account
-that has never signed in here**:
+**Then walk the stranger's path, which is the one the trial actually depends on.** Signing in as yourself proves user
+one; almost everything works for user one. In a private window, open `https://app.talyvor.com/marketing` → **Get
+started** → `/signup`, with a **phone number that has never signed in here**:
 
-- The access line on `/signup` must match reality: "no invitation needed" if
-  you set `*`, the closed-trial sentence if you set a list. It is rendered from
-  the BFF's own gate (`signup_open` on `/auth/me`), so a mismatch means the BFF
+- The access line on `/signup` must match reality: "no invitation needed" if you set `*`, the closed-trial sentence if
+  you set a list. It is rendered from the BFF's own setting (`signup_open` on `/auth/me`), so a mismatch means the BFF
   you are talking to is not the one you configured.
-- The pooling disclosure must **block** before the app, then land on `/setup`.
-- `/setup` must show a workspace id **different** from your own account's, and
-  a key you mint there must work.
-- With a list configured, a third account not on it must get the styled
-  "Access not granted" page — and `journalctl -u talyvor-bff` must show a
-  `login DENIED — email=…` line naming that address.
+- A new number chooses a passcode, typed twice, then sign-up's steps.
+- The new account's workspace id must be **different** from your own account's.
 
 ---
 

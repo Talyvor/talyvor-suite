@@ -2,6 +2,8 @@
 // files, copied unchanged into apps/web/public/brand/logo and shown as <img>, never redrawn or recoloured. Both
 // versions are in the page and theme.css shows the one for the nearest data-theme (--logo-on-light,
 // --logo-on-dark), so the on-light file never sits on a dark background or the reverse.
+// B64.11 — under 240 px the small logo is the kit's PNG export (240 px file 1x, 480 px file 2x), not its SVG: Safari
+// draws the SVG's glow filter at low resolution on Retina, and Nick saw the streams soft on 19 Nov.
 import { cn } from '../lib/cn'
 
 export const LOGO_DIR = '/brand/logo'
@@ -15,6 +17,12 @@ export function logoFile(width: number) {
 // drawing's 2963.51 by 944 frame (build/logo.py's CHEVRON), so half of it is 168.
 const LOGO_VIEW = { w: 2963.51, h: 944 }
 const HALF_ARROW = 168
+
+/** The kit's small-logo PNGs: the 240 px file at 1x, the 480 px file at 2x. Height follows the file, never stretched. */
+export function smallLogoSrc(v: 'light' | 'dark') {
+  const at = (px: number) => `${LOGO_DIR}/talyvor-logo-small-on-${v}-${px}.png`
+  return { src: at(240), srcSet: `${at(240)} 1x, ${at(480)} 2x` }
+}
 
 /** Both versions of one kit drawing; theme.css shows the nearest theme's. */
 export function ThemedImg({ file, width, height }: { file: string; width: number; height: number }) {
@@ -49,7 +57,22 @@ export function Logo({ width = 144, className }: LogoProps) {
   const clear = Math.ceil((w * HALF_ARROW) / LOGO_VIEW.w)
   return (
     <span className={cn('inline-block shrink-0 leading-none', className)} style={{ padding: clear }} data-brand="lockup">
-      <ThemedImg file={logoFile(w)} width={w} height={h} />
+      {logoFile(w) === 'talyvor-logo' ? (
+        <ThemedImg file="talyvor-logo" width={w} height={h} />
+      ) : (
+        (['light', 'dark'] as const).map((v) => (
+          <img
+            key={v}
+            {...smallLogoSrc(v)}
+            alt="Talyvor"
+            width={w}
+            height={Math.round((w * 76) / 240)}
+            decoding="async"
+            data-brand="logo"
+            style={{ display: `var(--logo-on-${v})`, width: w, height: 'auto' }}
+          />
+        ))
+      )}
     </span>
   )
 }

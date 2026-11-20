@@ -175,13 +175,15 @@ function SentList({ kinds, title, empty }: { kinds: RequestKind[]; title: string
 }
 
 /** Sends one kind of request, then lists it; `after` is the snack's line once it is sent. */
+// B17.499 — the request is listed from Lens's answer to the send, newest first, never from a read of the list after
+// it: a read that does not show it yet would leave the page without the request it just said was sent.
 function useSend(kind: RequestKind, after: (r: AccountRequest) => { title: string; line: string }) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (message: string) => sendRequest(kind, message.trim()),
     onSuccess: (r) => {
       showSnack(after(r))
-      void qc.invalidateQueries({ queryKey: REQUESTS_KEY })
+      qc.setQueryData<AccountRequest[]>(REQUESTS_KEY, (was) => [r, ...(was ?? []).filter((x) => x.id !== r.id)])
     },
   })
 }

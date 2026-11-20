@@ -1,7 +1,7 @@
 package main
 
 // accounts_test.go — B61.8: a person's accounts, switching between them, and opening another, through the real
-// login, IdP and callback against a Lens stand-in that answers B61.7's provision modes (stranger_signup_test.go).
+// sign-in's provisioning (signInAsSub) against a Lens stand-in that answers B61.7's provision modes (stranger_signup_test.go).
 // "Reaches the account" is read from Lens's side: GET /api/workspace/account answers only on that account's own token.
 
 import (
@@ -15,39 +15,14 @@ import (
 	"time"
 )
 
-// signUpIn drives sign-up's answers through /auth/login to the callback in br, which may already be signed in.
-func (s *strangerSuite) signUpIn(br *http.Client, sub string, answers url.Values) {
+// signUpIn signs br in as sub with sign-up's answers: Lens provisions the account they chose (signInAsSub).
+func (s *strangerSuite) signUpIn(br *http.Client, sub string, answers url.Values) string {
 	s.t.Helper()
-	s.signUpInFrom(br, sub, answers, "same-origin")
-}
-
-// signUpInFrom is signUpIn with the Sec-Fetch-Site the browser sends to /auth/login: "same-origin" from our own
-// /signup page, "none" from a link opened in an email or a chat app.
-func (s *strangerSuite) signUpInFrom(br *http.Client, sub string, answers url.Values, site string) {
-	s.t.Helper()
-	s.idp.sub, s.idp.email = sub, sub+"@example.org"
-	req, err := http.NewRequest(http.MethodGet, s.ts.URL+"/auth/login?"+answers.Encode(), nil)
+	signup, err := parseSignupAccount(answers.Get("account_type"), answers.Get("money_kind"), answers.Get("name"), "", "")
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	req.Header.Set("Sec-Fetch-Site", site)
-	login, err := br.Do(req)
-	if err != nil {
-		s.t.Fatal(err)
-	}
-	b, _ := io.ReadAll(login.Body)
-	login.Body.Close()
-	body := string(b)
-	if login.StatusCode != http.StatusFound {
-		s.t.Fatalf("login: %d (%s)", login.StatusCode, body)
-	}
-	idp, idpBody := doReq(s.t, br, http.MethodGet, login.Header.Get("Location"))
-	if idp.StatusCode != http.StatusFound {
-		s.t.Fatalf("idp authorize: %d (%s)", idp.StatusCode, idpBody)
-	}
-	if cb, cbBody := doReq(s.t, br, http.MethodGet, idp.Header.Get("Location")); cb.StatusCode != http.StatusFound {
-		s.t.Fatalf("callback: %d (%s)", cb.StatusCode, cbBody)
-	}
+	return signInAsSub(s.t, s.app, s.ts, br, sub, sub+"@example.org", signup)
 }
 
 var (
@@ -109,7 +84,7 @@ func TestB618_OpenAnotherAccountThenSwitchBack(t *testing.T) {
 	s := startStrangerSuite(t, []string{"*"})
 	br := s.browser()
 	s.signUpIn(br, "b618-maya", b618Business)
-	first := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, "b618-maya"))
+	first := deriveWorkspaceIDLikeLens(provisionIdentity(testIssuer, "b618-maya"))
 	if got := s.accountTypeOf(br); got != "business "+first {
 		t.Fatalf("after sign-up the session reaches %q, want the business account %s", got, first)
 	}
@@ -129,10 +104,7 @@ func TestB618_OpenAnotherAccountThenSwitchBack(t *testing.T) {
 
 	// A restart restores the session from its seal on the account it moved to, not the one it was made on.
 	u, _ := url.Parse(s.ts.URL)
-	restartedAuth, err := newAuthenticator(t.Context(), s.app.cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	restartedAuth := newAuthenticator(s.app.cfg)
 	restarted := newApp(s.app.cfg, restartedAuth)
 	req := httptest.NewRequest(http.MethodGet, "/api/workspace/account", nil)
 	for _, c := range br.Jar.Cookies(u) {
@@ -158,7 +130,7 @@ func TestB618_SwitchingToAnotherPersonsAccountOrFromAnotherSiteIsRefused(t *test
 	maya, bob := s.browser(), s.browser()
 	s.signUpIn(maya, "b618-maya", b618Business)
 	s.signUpIn(bob, "b618-bob", b618Business)
-	mayaFirst := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, "b618-maya"))
+	mayaFirst := deriveWorkspaceIDLikeLens(provisionIdentity(testIssuer, "b618-maya"))
 	mayaSecond := s.openPersonal(maya)
 	bobAt := s.accountTypeOf(bob)
 
@@ -211,41 +183,9 @@ func TestB618_TheEleventhAccountIsRefusedInWords(t *testing.T) {
 	}
 }
 
-// Signing up again while signed in opens another account; it never lands in the one already held.
-func TestB618_ASignUpWhileSignedInOpensAnotherAccount(t *testing.T) {
-	s := startStrangerSuite(t, []string{"*"})
-	br := s.browser()
-	s.signUpIn(br, "b618-again", b618Business)
-	first := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, "b618-again"))
-	s.signUpIn(br, "b618-again", b618Personal)
-	if got := s.accountTypeOf(br); !strings.HasPrefix(got, "personal ") || strings.HasSuffix(got, first) {
-		t.Fatalf("a sign-up as Personal while signed in reaches %q, want a new personal account", got)
-	}
-	if list := s.accountsOf(br); len(list) != 2 {
-		t.Fatalf("/api/accounts = %+v, want both accounts", list)
-	}
-}
-
-// A link someone sent a signed-in person (Sec-Fetch-Site "none") carrying sign-up answers signs them in to the
-// account they had; it never opens another. Only our own /signup page (same-origin) opens one from /auth/login.
-func TestB618_ASignUpLinkFromElsewhereNeverOpensAnotherAccount(t *testing.T) {
-	s := startStrangerSuite(t, []string{"*"})
-	br := s.browser()
-	s.signUpIn(br, "b618-link", b618Business)
-	first := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, "b618-link"))
-	s.signUpInFrom(br, "b618-link", b618Personal, "none")
-	if got := s.accountTypeOf(br); got != "business "+first {
-		t.Fatalf("after a sign-up link opened from elsewhere the session reaches %q, want business %s", got, first)
-	}
-	if list := s.accountsOf(br); len(list) != 1 {
-		t.Fatalf("/api/accounts = %+v, want the one account the person had", list)
-	}
-}
-
 // The phone sends its session as a Bearer token: a move answers the new token, and the old one is ended.
 func TestB618_ThePhoneMovesWithItsBearerToken(t *testing.T) {
-	s := startStrangerSuiteWith(t, []string{"*"}, func(c *config) { c.oidcMobileClientIDs = []string{"phone-ios"} })
-	s.idp.sub, s.idp.email, s.idp.aud = "b618-phone", "b618-phone@example.org", "phone-ios"
+	s := startStrangerSuite(t, []string{"*"})
 	call := func(method, path, token, body string) (int, string) {
 		req, _ := http.NewRequest(method, s.ts.URL+path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -269,8 +209,7 @@ func TestB618_ThePhoneMovesWithItsBearerToken(t *testing.T) {
 		}
 		return out.Token
 	}
-	old := tokenOf(call(http.MethodPost, mobileSessionPath, "",
-		`{"id_token":"`+s.idp.mintIDToken("")+`","account_type":"business","money_kind":"stablecoin","name":"Northwind Studio"}`))
+	old := s.signUpIn(s.browser(), "b618-phone", url.Values{"account_type": {"business"}, "money_kind": {"stablecoin"}, "name": {"Northwind Studio"}})
 	opened := tokenOf(call(http.MethodPost, "/api/accounts", old, b618PersonalJSON))
 	if code, body := call(http.MethodGet, "/api/workspace/account", opened, ""); code != http.StatusOK || !strings.Contains(body, `"account_type":"personal"`) {
 		t.Fatalf("the new token reaches %d %s, want the personal account", code, body)
@@ -278,7 +217,7 @@ func TestB618_ThePhoneMovesWithItsBearerToken(t *testing.T) {
 	if code, _ := call(http.MethodGet, "/api/workspace/account", old, ""); code != http.StatusUnauthorized {
 		t.Fatalf("the token from before the move still answers %d, want 401", code)
 	}
-	first := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, "b618-phone"))
+	first := deriveWorkspaceIDLikeLens(provisionIdentity(testIssuer, "b618-phone"))
 	back := tokenOf(call(http.MethodPost, "/api/accounts/switch", opened, `{"account_id":"`+first+`"}`))
 	if code, body := call(http.MethodGet, "/api/workspace/account", back, ""); !strings.Contains(body, `"account_type":"business"`) {
 		t.Fatalf("after switching back the phone reaches %d %s, want the business account", code, body)
@@ -306,7 +245,7 @@ func TestB618_AConnectGrantKeepsTheAccountItWasMadeIn(t *testing.T) {
 	s := startStrangerSuite(t, []string{"*"})
 	br := s.browser()
 	s.signUpIn(br, "b618-connect", b618Business)
-	first := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, "b618-connect"))
+	first := deriveWorkspaceIDLikeLens(provisionIdentity(testIssuer, "b618-connect"))
 	second := s.openPersonal(br)
 	// The browser is on the second account. A grant made in the first, and one made in the second, both read back
 	// with no token after a restart (oauth_store.go stores none), so each is re-minted here.

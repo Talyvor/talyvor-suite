@@ -22,7 +22,7 @@ function mockBff(accountType: 'business' | 'personal') {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/workspace/account') return json({ account_type: accountType, money_kind: 'hybrid' })
-    if (url === '/api/verification') return json({ workspace_id: 'ws_1', level: 'L0', live_level: 'L0', checks: null })
+    if (url.split('?')[0] === '/api/verification') return json({ workspace_id: 'ws_1', level: 'L0', live_level: 'L0', checks: null })
     if (url !== '/api/workspace/business') return new Response('null', { status: 404 })
     asked.push(init?.method ?? 'GET')
     if (accountType === 'personal') return json({ error: 'a Personal account has no company details', code: 'not_business' }, 404)

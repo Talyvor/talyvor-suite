@@ -509,6 +509,30 @@ export interface AlertDelivery {
 }
 
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
+/** B28.61 — Lens economy.BalanceThreshold (B28.334): the owner's low-balance alert for an agent's balance in a currency. */
+export interface BalanceThreshold {
+  id: string
+  agent_id: string
+  currency: string
+  threshold_minor: number
+  /** what the agent's open accounts in currency hold now */
+  balance_minor: number
+  /** false: the agent has no open account in currency, so nothing is checked */
+  has_account: boolean
+  below: boolean
+}
+
+/** B28.61 — Lens economy.LowBalanceAlert (B28.334): an hour an agent's balance was found below its threshold, one an hour. */
+export interface LowBalanceAlert {
+  id: string
+  agent_id: string
+  currency: string
+  hour_start: string
+  balance_minor: number
+  threshold_minor: number
+  created_at: string
+}
+
 export interface LimitAlert {
   id: string
   kind: 'budget' | 'card' | 'agent_limit'
@@ -1068,6 +1092,25 @@ async function cardExportFile(from: string, through: string): Promise<Blob> {
   return res.blob()
 }
 
+/** B28.59 — a wallet list (the approvals, the schedules) as the CSV Lens writes for it (Lens B28.332): one row per item
+ *  of its JSON list, in the same order. A refusal carries Lens's sentence. */
+export type ListFile = 'approvals' | 'schedules'
+
+async function listFile(list: ListFile): Promise<Blob> {
+  const path = `/api/agents/${list}?format=csv`
+  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+  if (!res.ok) {
+    let sentence = ''
+    try {
+      sentence = ((await res.json()) as { error?: string }).error ?? ''
+    } catch {
+      // a body that is not JSON carries no sentence
+    }
+    throw new AgentBankError(res.status, path, sentence)
+  }
+  return res.blob()
+}
+
 /** B28.51 — what a statement page is read for: the lines of these kinds whose words hold q, any case. */
 export interface StatementSearch {
   kinds: readonly PostingKind[]
@@ -1259,6 +1302,7 @@ export const agentBankApi = {
   cardRefunds: async (): Promise<CardRefund[]> =>
     (await getSaid<{ card_refunds: CardRefund[] | null }>('/api/money/card-refunds')).card_refunds ?? [],
   cardExportFile,
+  listFile,
   /** B19.24 — the agent's test-mode card and every purchase on it; null when it has none (Lens answers 404). */
   card: async (id: string): Promise<{ card: AgentCard; authorizations: CardAuthorization[] | null } | null> => {
     try {
@@ -1317,6 +1361,12 @@ export const agentBankApi = {
   addAlertChannel: (kind: AlertChannel['kind'], url: string) => send<AlertChannel>('POST', '/api/money/alerts/channels', { kind, url }),
   removeAlertChannel: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/alerts/channels/${e(id)}`),
   alertDeliveries: () => getJSON<{ deliveries: AlertDelivery[] | null }>('/api/money/alerts/deliveries', { deliveries: 'list' }),
+  // B28.61 — a low-balance alert for an agent's balance in a currency (Lens B28.334).
+  lowBalance: () => getJSON<{ thresholds: BalanceThreshold[] | null }>('/api/money/low-balance', { thresholds: 'list' }),
+  setLowBalance: (agent_id: string, currency: string, threshold_minor: number) =>
+    send<BalanceThreshold>('PUT', '/api/money/low-balance', { agent_id, currency, threshold_minor }),
+  removeLowBalance: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/low-balance/${e(id)}`),
+  lowBalanceAlerts: () => getJSON<{ alerts: LowBalanceAlert[] | null }>('/api/money/low-balance/alerts', { alerts: 'list' }),
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
@@ -1407,8 +1457,9 @@ export const agentBankApi = {
   // B22.10 — money between owners (Lens B22.1, B22.3, B22.4, B22.5).
   capabilities: () => getJSON<{ capabilities: WalletCapability[] | null }>('/api/wallets/capabilities', { capabilities: 'list' }),
   // B30.116 — the owner's verification levels (Lens B30.4).
-  verification: () =>
-    getJSON<WorkspaceVerification>('/api/verification', { level: 'string', live_level: 'string', checks: 'list' }),
+  // B65.2 — returnTo names the page the identity partner sends the person back to (Lens B65.1); none is Settings.
+  verification: (returnTo?: CheckReturn) =>
+    getJSON<WorkspaceVerification>(returnTo ? `/api/verification?return_to=${returnTo}` : '/api/verification', { level: 'string', live_level: 'string', checks: 'list' }),
   verify: ({ kind, ...body }: VerificationBody) => send<VerificationAnswer>('POST', VERIFY_PATH[kind], body),
   // B30.103 — each capability's terms (Lens B30.9), and each agent's Know Your Agent credential (Lens B30.5).
   terms: () => getJSON<{ terms: WorkspaceTerms[] | null }>('/api/terms', { terms: 'list' }),
@@ -2207,7 +2258,12 @@ export interface VerificationCheck {
   detail?: string
   started_at: string
   checked_at: string
+  /** B65.2 — where the person finishes a check still waiting for them: the identity partner's one-time page. */
+  link?: string
 }
+
+/** B65.2 — the pages the identity partner may send the person back to, by name (Lens B65.1's CheckReturns). */
+export type CheckReturn = 'signup' | 'settings'
 
 /** Lens economy.WorkspaceVerification (B30.4): the level the checks reach, the level live money is judged by, every check. */
 export interface WorkspaceVerification {
@@ -2227,7 +2283,7 @@ export interface VerificationAnswer {
 /** What each level's check is asked to confirm (Lens economy.VerificationRequest). */
 export type VerificationBody =
   | { kind: 'contact'; email: string; phone: string }
-  | { kind: 'identity'; name: string; country: string; date_of_birth: string; address?: HomeAddress }
+  | { kind: 'identity'; name: string; country: string; date_of_birth: string; address?: HomeAddress; return_to?: CheckReturn }
   | { kind: 'company'; name: string; country: string; company_number: string; directors: string[]; people_with_significant_control: string[] }
 
 /** Lens economy.HomeAddress (B61.45): a person's home address for an identity check, sent whole or not at all. */

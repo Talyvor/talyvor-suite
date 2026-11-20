@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Logo, cn, inlineLink } from '@talyvor/ui'
-import { Button, Icon, Input, Select, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Logo, cn } from '@talyvor/ui'
+import { Button, Icon, Input, pocketFocusRing } from '@talyvor/ui/pocket'
 import { StatusLabel } from '../../labels/StatusLabel'
 import {
   DoorError,
   DOOR_FAILED,
-  googleMove,
+  doorNav,
   holdPasscode,
   makeSignInKey,
   passkeyHere,
@@ -27,12 +27,16 @@ import {
 // Door.tsx — B61.26: the web's one door (REFERENCE Pocket Live, the phone's `su` steps, one question per page).
 //
 //   1. "What’s your phone number?" with the country picker, one field, one button. Above it, "Sign in with a passkey",
-//      offered first to anyone who has signed in on this browser before. Under it, while the move from Google runs,
-//      "Continue with Google", small, for existing accounts only; with BFF_GOOGLE_SIGNIN=off there is none.
+//      offered first to anyone who has signed in on this browser before. It is the only way in: Google sign-in is gone
+//      (B61.29).
 //   2. The code: six boxes; a paste or the browser's fill from the text lands in all six; "Send again" after 30 seconds.
 //      In Sandbox the code is on the screen, under the Sandbox label.
 //   3. A known number: the passcode. A new number: choose a passcode, typed twice, then sign-up's steps (SignUp.tsx).
 //   4. After a sign-in without a passkey: "Sign in faster next time" offers to make one here, and can be skipped.
+//
+// B57.184 — drawn as Pocket Live's `su0`, `su1`, `su2` and `lock`: Back and the Sandbox label across the top, the question
+// in the display face at 30 with its lead close under it, the country picker as a globe and the calling code, the code's and
+// the passcode's boxes centred, and the Sandbox code in a note.
 //
 // There is no password anywhere: the passcode is six numeric digits, masked, and it is the only secret typed here.
 // Every refusal is Lens's own sentence (relayed by the BFF), which says what to do next.
@@ -56,18 +60,17 @@ export const DOOR_WORDS = {
   passkey: 'Sign in with a passkey',
   phoneTitle: 'What’s your phone number?',
   phoneLead: 'We text you a code to check it’s yours.',
-  moveLead: 'From now on you sign in with your phone number and a passcode. We text you a code to check it’s yours.',
   phoneLabel: 'Your phone number',
+  phoneExample: '7700 900456',
   country: 'Country',
   phoneNeeded: 'Type your phone number.',
-  google: 'Continue with Google',
   codeTitle: 'Enter the code',
   sentTo: (shown: string) => `We sent it to ${shown}.`,
   sandboxCode: (code: string) => `In Sandbox no text is sent. Your code is ${code.slice(0, 3)} ${code.slice(3)}.`,
   sendAgain: 'Send again',
   sendAgainIn: (s: number) => `You can ask for a new code in ${s} seconds.`,
   sentAgain: 'A new code is on its way.',
-  otherNumber: 'Use another number',
+  back: 'Back',
   passcodeTitle: 'Enter your passcode',
   chooseTitle: 'Choose a passcode',
   chooseLead: '6 digits. You type it each time you sign in to Talyvor.',
@@ -115,7 +118,7 @@ export function DigitBoxes({ label, masked = false, oneTimeCode = false, disable
     if (filled === -1) onDone(next.join(''))
   }
   return (
-    <div role="group" aria-label={label} className="grid w-full max-w-xs grid-cols-6 gap-2">
+    <div role="group" aria-label={label} className="grid w-full max-w-xs grid-cols-6 gap-2 justify-self-center">
       {digits.map((d, i) => (
         <input
           key={i}
@@ -174,15 +177,80 @@ function Said({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Title({ children }: { children: React.ReactNode }) {
-  return <h1 className="mt-4 font-display text-title font-bold text-ink">{children}</h1>
+/** Pocket Live's .q: the page's one question, in the display face at 30, with its lead line close under it. */
+function Question({ title, lead }: { title: React.ReactNode; lead?: React.ReactNode }) {
+  return (
+    <div className="mt-2 grid gap-1">
+      <h1 className="font-display text-pocket-question text-ink">{title}</h1>
+      {lead ? <p className="text-reading text-ink-2">{lead}</p> : null}
+    </div>
+  )
 }
 
-function Lead({ children }: { children: React.ReactNode }) {
-  return <p className="text-reading text-ink-2">{children}</p>
+/** Pocket Live's .note: a line on the cloud, with its icon. */
+function Note({ icon, children }: { icon: React.ComponentProps<typeof Icon>['name']; children: React.ReactNode }) {
+  return (
+    <p data-door-note className="flex w-full items-start gap-2.5 rounded-control bg-cloud px-3.5 py-3 text-body text-ink-2">
+      <Icon name={icon} size={18} className="mt-px shrink-0" />
+      <span>{children}</span>
+    </p>
+  )
 }
 
-const quietButton = cn('text-body font-semibold text-ink', inlineLink)
+/** The top of every step, as the phone's flow draws it: Back (from the second question on) and the logo on the left,
+ *  the Sandbox label on the right once the door knows it is Sandbox. */
+function DoorTop({ onBack, sandbox }: { onBack?: () => void; sandbox: boolean }) {
+  return (
+    <div data-testid="door-top" className="flex w-full items-center justify-between gap-3 justify-self-stretch">
+      <div className="flex items-center gap-2">
+        {onBack ? (
+          <button
+            type="button"
+            aria-label={DOOR_WORDS.back}
+            onClick={onBack}
+            className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-pill bg-cloud text-ink transition-colors duration-200 hover:bg-cloud-2', pocketFocusRing)}
+          >
+            <Icon name="back" size={20} />
+          </button>
+        ) : null}
+        <a href="/marketing" aria-label="Talyvor website" className={cn('rounded-control', pocketFocusRing)}>
+          <Logo width={144} />
+        </a>
+      </div>
+      {sandbox ? <StatusLabel legend="sandbox" /> : null}
+    </div>
+  )
+}
+
+/** The country picker's face, as Pocket Live draws it: a globe and the calling code, the browser's own list under it. */
+function CountryPicker({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+  const calling = (PHONE_COUNTRIES.find(([c]) => c === value) ?? PHONE_COUNTRIES[0])[2]
+  return (
+    <span
+      className={cn(
+        'relative flex h-11.5 w-24 shrink-0 items-center gap-2 rounded-control bg-page px-3.5 text-ink shadow-edge',
+        'focus-within:outline focus-within:outline-3 focus-within:outline-offset-2 focus-within:outline-tangerine',
+      )}
+    >
+      <span data-testid="door-country" className="flex items-center gap-2 font-figure text-reading font-semibold">
+        <Icon name="globe" size={16} />
+        {`+${calling}`}
+      </span>
+      <select
+        aria-label={DOOR_WORDS.country}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+      >
+        {PHONE_COUNTRIES.map(([code, name, calling]) => (
+          <option key={code} value={code}>
+            {`${name} +${calling}`}
+          </option>
+        ))}
+      </select>
+    </span>
+  )
+}
 
 const sentence = (err: unknown) => (err instanceof Error && err.message ? err.message : DOOR_FAILED)
 
@@ -200,16 +268,12 @@ const SEND_AGAIN_AFTER = 30
 export interface DoorProps {
   /** Where a sign-in lands: the page the person was trying to reach, or Home. */
   returnTo?: string
-  /** 'move' is the one move from Google: the signed-in Google account takes a number and a passcode. */
-  mode?: 'door' | 'move'
-  /** Whether the BFF still offers Google sign-in (/auth/me's google_signin). */
-  google?: boolean
   /** What the door shows under its button, for a stranger (the access line on /signup). */
   foot?: React.ReactNode
 }
 
 /** The door, drawn in the auth card (Entry.tsx's EntryFrame, or AuthGate's card in place). */
-export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProps) {
+export function Door({ returnTo, foot }: DoorProps) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [step, setStep] = useState<Step>({ at: 'phone' })
@@ -219,6 +283,8 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
   const [dial, setDial] = useState('GB')
   const [national, setNational] = useState('')
   const [canKey, setCanKey] = useState(false)
+  /** Whether Lens said this door is Sandbox (the code's answer), so the label stays across the top from then on. */
+  const [sandbox, setSandbox] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => setCanKey(passkeysSupported()), [])
   useEffect(() => {
@@ -245,8 +311,13 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
       setBusy(false)
     }
   }
-  /** Signed in: the session is new, so nothing read before it is kept, and the person goes where they were going. */
+  /** Signed in: the session is new, so nothing read before it is kept, and the person goes where they were going. An
+   *  assistant's Connect page (/oauth/) is the BFF's, not the app's, so it is a page load. */
   const land = async (to: string) => {
+    if (to.startsWith('/oauth/')) {
+      doorNav.leave(to)
+      return
+    }
     navigate(to, { replace: true })
     await qc.resetQueries()
   }
@@ -267,40 +338,23 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
   const sendCode = () =>
     run(async () => {
       const started = await phoneStart(phone)
+      setSandbox(started.sandbox === true)
       go({ at: 'code', phone, shown, sandboxCode: started.sandbox ? started.sandbox_code : undefined, sentAt: Date.now() })
       setNow(Date.now())
     })
 
   const finishWith = (check: string, passcode: string, join: boolean) =>
     run(async () => {
-      if (mode === 'move') {
-        await googleMove(check, passcode)
-        rememberSignedInHere()
-        await land(returnTo ?? '/')
-        return
-      }
       await signedIn(await (join ? phoneJoin(check, passcode) : phoneSignIn(check, passcode)), passcode)
     })
 
-  const logo = (
-    <a href="/marketing" aria-label="Talyvor website" className={cn('rounded-control', pocketFocusRing)}>
-      <Logo width={144} />
-    </a>
-  )
 
   if (step.at === 'code') {
     const wait = Math.max(0, SEND_AGAIN_AFTER - Math.floor((now - step.sentAt) / 1000))
     return (
       <>
-        {logo}
-        <Title>{DOOR_WORDS.codeTitle}</Title>
-        <Lead>{DOOR_WORDS.sentTo(step.shown)}</Lead>
-        {step.sandboxCode ? (
-          <div className="grid justify-items-start gap-1.5">
-            <StatusLabel legend="sandbox" />
-            <p className="text-body text-ink-2">{DOOR_WORDS.sandboxCode(step.sandboxCode)}</p>
-          </div>
-        ) : null}
+        <DoorTop sandbox={sandbox} onBack={() => go({ at: 'phone' })} />
+        <Question title={DOOR_WORDS.codeTitle} lead={DOOR_WORDS.sentTo(step.shown)} />
         <DigitBoxes
           label="The code"
           oneTimeCode
@@ -313,8 +367,9 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
             })
           }
         />
+        {step.sandboxCode ? <Note icon="message">{DOOR_WORDS.sandboxCode(step.sandboxCode)}</Note> : null}
         {said ? <Said>{said}</Said> : null}
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div className="grid w-full justify-items-center">
           <Button
             variant="outline"
             disabled={busy}
@@ -330,9 +385,6 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
           >
             {DOOR_WORDS.sendAgain}
           </Button>
-          <button type="button" className={quietButton} onClick={() => go({ at: 'phone' })}>
-            {DOOR_WORDS.otherNumber}
-          </button>
         </div>
       </>
     )
@@ -345,11 +397,12 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
         : step.at === 'choose'
           ? { title: DOOR_WORDS.chooseTitle, lead: DOOR_WORDS.chooseLead }
           : { title: DOOR_WORDS.againTitle, lead: DOOR_WORDS.againLead }
+    // Back from "Type it again" is the passcode chosen again; from the others it is the phone number, as a check is used once.
+    const back = step.at === 'again' ? () => go({ at: 'choose', check: step.check }) : () => go({ at: 'phone' })
     return (
       <>
-        {logo}
-        <Title>{words.title}</Title>
-        {words.lead ? <Lead>{words.lead}</Lead> : null}
+        <DoorTop sandbox={sandbox} onBack={back} />
+        <Question title={words.title} lead={words.lead} />
         <DigitBoxes
           key={step.at}
           label="Passcode"
@@ -365,11 +418,7 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
             } else
               void run(async () => {
                 try {
-                  if (mode === 'move') {
-                    await googleMove(step.check, digits)
-                    rememberSignedInHere()
-                    await land(returnTo ?? '/')
-                  } else await signedIn(await phoneJoin(step.check, digits), digits)
+                  await signedIn(await phoneJoin(step.check, digits), digits)
                 } catch (err) {
                   // A passcode Lens will not take is chosen again; anything else stays on this step.
                   if (err instanceof DoorError && err.reason === 'weak_passcode') setStep({ at: 'choose', check: step.check })
@@ -386,9 +435,8 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
   if (step.at === 'faster') {
     return (
       <>
-        {logo}
-        <Title>{DOOR_WORDS.fasterTitle}</Title>
-        <Lead>{DOOR_WORDS.fasterLead}</Lead>
+        <DoorTop sandbox={sandbox} />
+        <Question title={DOOR_WORDS.fasterTitle} lead={DOOR_WORDS.fasterLead} />
         {said ? <Said>{said}</Said> : null}
         <Button
           size="lg"
@@ -413,11 +461,11 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
   }
 
   // The phone number: one field and one button. The passkey is the main action once this browser has signed in.
-  const keyFirst = mode === 'door' && canKey && signedInHere()
+  const keyFirst = canKey && signedInHere()
   return (
     <>
-      {logo}
-      {mode === 'door' && canKey ? (
+      <DoorTop sandbox={sandbox} />
+      {canKey ? (
         <Button
           variant={keyFirst ? 'primary' : 'outline'}
           size="lg"
@@ -443,20 +491,13 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
           if (digitsOf(national)) void sendCode()
         }}
       >
-        <Title>{DOOR_WORDS.phoneTitle}</Title>
-        <Lead>{mode === 'move' ? DOOR_WORDS.moveLead : DOOR_WORDS.phoneLead}</Lead>
+        <Question title={DOOR_WORDS.phoneTitle} lead={DOOR_WORDS.phoneLead} />
         <div className="grid gap-1.5">
-          <label htmlFor="door-phone" className="text-body font-semibold text-ink-2">
+          <label htmlFor="door-phone" className="sr-only">
             {DOOR_WORDS.phoneLabel}
           </label>
           <div className="flex gap-2">
-            <Select aria-label={DOOR_WORDS.country} value={dial} onChange={(e) => setDial(e.target.value)} className="w-28 shrink-0">
-              {PHONE_COUNTRIES.map(([code, name, calling]) => (
-                <option key={code} value={code} aria-label={`${name}, +${calling}`}>
-                  {`${code} +${calling}`}
-                </option>
-              ))}
-            </Select>
+            <CountryPicker value={dial} onChange={setDial} />
             <Input
               id="door-phone"
               type="tel"
@@ -464,6 +505,7 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
               autoComplete="tel-national"
               value={national}
               maxLength={20}
+              placeholder={dial === 'GB' ? DOOR_WORDS.phoneExample : undefined}
               onChange={(e) => setNational(e.target.value)}
               className="flex-1"
             />
@@ -482,11 +524,6 @@ export function Door({ returnTo, mode = 'door', google = false, foot }: DoorProp
         </Button>
       </form>
       {foot}
-      {mode === 'door' && google ? (
-        <a href={returnTo ? `/auth/login?return_to=${encodeURIComponent(returnTo)}` : '/auth/login'} className={cn('text-caption font-semibold text-ink-3', inlineLink)}>
-          {DOOR_WORDS.google}
-        </a>
-      ) : null}
     </>
   )
 }

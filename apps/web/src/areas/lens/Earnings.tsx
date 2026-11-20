@@ -5,6 +5,7 @@ import { Button, MuNumeral, Pill, inlineLink } from '@talyvor/ui'
 
 import { api, UnreadableError, type EarningsSummary, type EarningsTypeLine } from '../../lib/api'
 import { PanelFailure } from '../../components/SessionExpiredBar'
+import { useWorkspaceAreas } from '../../lib/workspaceAreas'
 import { Region, RegionScreen } from '../../components/Region'
 import { UNPAID_CONTRIBUTION_NOTICE, UNPAID_NOTICE_HEADLINE } from './unpaidNotice'
 import { ConvertRegion } from './ConvertLens'
@@ -104,9 +105,12 @@ export const ROYALTIES_PATH = '/statements/royalties'
  *  transition, so a cold load of /earnings had an empty page at the load event (8 of 10 nightly users). */
 export function EarningsMoved() {
   const navigate = useNavigate()
+  // B17.489 — and corrects it only once the workspace's areas are read: Royalties' own address draws nothing until
+  // then, so redirecting sooner emptied the page at the load event whenever that read was slow.
+  const settled = useWorkspaceAreas().settled
   useEffect(() => {
-    navigate(ROYALTIES_PATH, { replace: true })
-  }, [navigate])
+    if (settled) navigate(ROYALTIES_PATH, { replace: true })
+  }, [navigate, settled])
   return <Earnings />
 }
 

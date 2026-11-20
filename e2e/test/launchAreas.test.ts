@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import { inventory } from '../src/coverage.ts'
 import { type Control, type FiledRequest, deadControls, filedFaults, screenMatcher } from '../src/helpScreen.ts'
-import { instantTransferQuote, offeredFaults, quoteFaults } from '../src/instantTransfer.ts'
+import { instantTransferQuote, instantTransferSend, offeredFaults, quoteFaults } from '../src/instantTransfer.ts'
 import { hiddenPaths } from '../src/launch.ts'
 import { LensClient } from '../src/lens.ts'
 import { labelFaults, launchScreens } from '../src/sandboxLabel.ts'
-import type { ScenarioCtx, Verdict } from '../src/scenarios.ts'
+import type { Scenario, ScenarioCtx, Verdict } from '../src/scenarios.ts'
 
 // B61.48 — the scenarios of the launch version's three areas that had none: Instant transfer, Help and the Sandbox label. Each
 // passes on a sound copy and FAILs on a broken one: instant-transfer-quote against the stub Lens (selftest/stub-launch.ts) with
@@ -31,7 +31,7 @@ afterAll(() => {
   for (const s of stubs) s.kill()
 })
 
-async function quoteOnStub(broken: string): Promise<Verdict> {
+async function quoteOnStub(broken: string, scenario: Scenario = instantTransferQuote()): Promise<Verdict> {
   const port = await freePort()
   const stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
     env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'instant-transfer', STUB_BREAK: broken },
@@ -44,13 +44,13 @@ async function quoteOnStub(broken: string): Promise<Verdict> {
   })
   const lens = new LensClient(`http://127.0.0.1:${port}`, 'instant-transfer')
   const [user] = await lens.createUsers(1)
-  return instantTransferQuote().run({ app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx)
+  return scenario.run({ app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx)
 }
 
 describe('instant-transfer-quote (B61.48)', () => {
   it.concurrent('passes on a Lens whose quote shows its fee, holds 30 seconds and is refused in words after', async () => {
     const v = await quoteOnStub('')
-    expect(v.detail).toMatch(/^USD 5\.00 quoted at a fee of 3 \(50 bps\), rate 1, 497 arriving, locked 30 seconds; inside them a send answered 403, after them refused 409 ".*expired.*Ask for a new one/)
+    expect(v.detail).toMatch(/^USD 5\.00 quoted at a fee of 3 \(50 bps\), rate 1, 497 arriving, locked 30 seconds; inside them a send answered 409, after them refused 409 ".*expired.*Ask for a new one/)
     expect(v.pass).toBe(true)
   })
 
@@ -65,7 +65,7 @@ describe('instant-transfer-quote (B61.48)', () => {
   it.concurrent('FAILs when a send at an expired quote is not refused for it', async () => {
     const v = await quoteOnStub('instant-quote-expired-sent')
     expect(v.pass).toBe(false)
-    expect(v.detail).toMatch(/^the refusal of a send at an expired quote must say it expired and to ask for a new one; Lens said "economy: this Instant transfer/)
+    expect(v.detail).toMatch(/^the refusal of a send at an expired quote must say it expired and to ask for a new one; Lens said "economy: not enough for this move/)
   })
 
   it('judges a quote by its own figures', () => {
@@ -75,6 +75,35 @@ describe('instant-transfer-quote (B61.48)', () => {
     expect(quoteFaults({ ...q, fee_minor: 1 }, 500, 'USD')).toEqual(['the fee is 30 basis points of 500, rounded up: 2; the quote shows 1'])
     expect(quoteFaults({ ...q, rate: '' }, 500, 'USD')).toEqual(['the quote must show its rate; it shows ""'])
     expect(quoteFaults({ ...q, receive_minor: 0 }, 500, 'USD')).toEqual(['the quote must show what arrives in USD; it shows 0 USD'])
+  })
+}, 120_000)
+
+// B61.67 — the sends, on a sender the owner funded from the company's account: each planted defect FAILs it.
+describe('instant-transfer-send (B61.67)', () => {
+  const sendOnStub = (broken: string) => quoteOnStub(broken, instantTransferSend())
+
+  it.concurrent("passes when a send waits for the owner's key, arrives once, sends once under its key and waits above \"ask me above\"", async () => {
+    const v = await sendOnStub('')
+    expect(v.detail).toMatch(/^USD 5\.00 to a new account waited for the owner's key \(apr_\w+\), then arrived once: Instant sender \S+ 3000 → 2500, Instant receiver \S+ 0 → 497, itr_\S+ received; the same key again answered itr_\S+ and moved nothing; USD 10\.00 above 5000000 µLXC waited \(apr_\w+\) with nothing moved, and an unsigned decision was refused 403$/)
+    expect(v.pass).toBe(true)
+  })
+
+  it.concurrent('FAILs when the same Idempotency-Key sends again', async () => {
+    const v = await sendOnStub('instant-sent-twice')
+    expect(v.pass).toBe(false)
+    expect(v.detail).toMatch(/^the same Idempotency-Key again must answer transfer itr_/)
+  })
+
+  it.concurrent("FAILs when the receiver's account is not credited", async () => {
+    const v = await sendOnStub('instant-not-credited')
+    expect(v.pass).toBe(false)
+    expect(v.detail).toMatch(/^Instant receiver \S+'s account must be up by the 497 cents that arrive: 0 → 0$/)
+  })
+
+  it.concurrent('FAILs when a send above "ask me above" goes through', async () => {
+    const v = await sendOnStub('instant-above-sent')
+    expect(v.pass).toBe(false)
+    expect(v.detail).toMatch(/^a send of USD 10\.00 above an "ask me above" of 5000000 µLXC must wait for the owner's key; Lens answered 200, sent and filed no pending approval$/)
   })
 }, 120_000)
 

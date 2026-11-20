@@ -74,7 +74,8 @@ async function openAdd() {
 
 afterEach(() => vi.restoreAllMocks())
 
-const LINE = 'Everyone who can reach this workspace. 1 person, of whom 1 is an owner.'
+const HEADING = 'Everyone who can reach this workspace.'
+const LINE = `${HEADING} 1 person, of whom 1 is an owner.`
 
 describe('Members is the reference’s', () => {
   it('has the crumb Settings › Members and says who can reach the workspace', async () => {
@@ -83,7 +84,16 @@ describe('Members is the reference’s', () => {
     const crumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(crumb).getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
     expect(within(crumb).getByText('Members')).toHaveAttribute('aria-current', 'page')
-    expect(await screen.findByText((_, el) => el?.tagName === 'P' && el.textContent === LINE)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: HEADING })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('members-lede')).toHaveTextContent(LINE))
+  })
+
+  // B17.489 — the nightly opens /members cold and reads `main h2` at the load event, before the roster answers.
+  it('draws its heading on the first frame, while the roster is still being read', () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}))
+    renderMembers()
+    expect(screen.getByRole('heading', { level: 2, name: HEADING })).toBeInTheDocument()
+    expect(screen.getByText('Reading members…')).toBeInTheDocument()
   })
 
   it('draws each member with an initial, a name, their role and "you", owners first', async () => {

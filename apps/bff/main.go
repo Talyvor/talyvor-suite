@@ -5,11 +5,10 @@
 //  1. Hold the Lens workspace key (tlv_ws_…) server-side and attach it to every
 //     upstream read. THE KEY NEVER REACHES THE BROWSER — the whole point of the
 //     proxy. TestKeyNeverReachesResponse asserts it.
-//  2. Authenticate the browser. BFF_AUTH_MODE=oidc runs an OIDC authorization-code
-//     + PKCE flow against ANY standards-compliant provider (Keycloak, Authentik,
-//     Dex, Clerk-as-OIDC-IdP, …) configured by environment — the product is
-//     self-hostable, so no hosted-SaaS dependency is baked in. The browser gets an
-//     opaque __Host- session cookie; tokens and the Lens key stay server-side.
+//  2. Sign people in. BFF_AUTH_MODE=oidc (the name is historical) turns sign-in on:
+//     a phone number, a texted code, a passcode and a passkey (phone_signin.go).
+//     The browser gets an opaque __Host- session cookie, the phone app a Bearer
+//     token; the Lens token stays server-side.
 //  3. Proxy Track and Docs (inc6): both gate /v1 behind gatewayauth — a
 //     transit-proof header (X-Gateway-Auth, a shared secret a browser cannot
 //     produce) that makes the identity headers trustworthy. The BFF holds a
@@ -75,17 +74,13 @@ type config struct {
 	provisionSecret string
 	webDist         string // path to the built apps/web bundle to serve
 
-	authMode         string // "oidc" | "disabled" — REQUIRED; silence is not a mode
-	publicBaseURL    string // oidc: browser-facing origin (https://app.talyvor.com); no path
-	oidcIssuer       string // oidc: discovery base, e.g. https://idp.example.com
-	oidcClientID     string // oidc: this BFF's client id at the IdP
-	oidcClientSecret string // oidc: confidential-client secret (PKCE is added on top)
-	// oidc: the phone app's public client ids (iOS, Android). Empty ⇒ POST /auth/mobile/session refuses.
-	oidcMobileClientIDs []string
-	// googleSignInOff (BFF_GOOGLE_SIGNIN=off) removes Google sign-in: its routes answer 404 (B61.25; B61.29 sets it).
-	googleSignInOff bool
-	allowedEmails   []string      // oidc: lower-cased allowlist; ["*"] = any issuer identity
-	sessionTTL      time.Duration // oidc: absolute session lifetime
+	authMode      string // "oidc" | "disabled" — REQUIRED; silence is not a mode
+	publicBaseURL string // oidc: browser-facing origin (https://app.talyvor.com); no path
+	// oidcIssuer (OIDC_ISSUER) is only a namespace now: the identities of people who first signed in with Google were
+	// made under it, and Lens still keys their accounts by it (identityOf). Nothing is fetched from it (B61.29).
+	oidcIssuer    string
+	allowedEmails []string      // oidc: lower-cased allowlist; ["*"] = sign-up open (/auth/me's signup_open)
+	sessionTTL    time.Duration // oidc: absolute session lifetime
 
 	// Track/Docs upstreams (inc6). Both gate /v1 behind gatewayauth: the request
 	// must carry X-Gateway-Auth == their GATEWAY_AUTH_SECRET before the identity
@@ -217,37 +212,19 @@ func loadConfig() (config, error) {
 	}
 }
 
-// loadOIDCConfig validates everything oidc mode needs. All of it is fail-closed:
-// a partially-configured IdP must never boot into an unauthenticated proxy.
+// loadOIDCConfig validates everything oidc mode (sign-in on) needs. All of it is
+// fail-closed: a partial configuration must never boot into an unauthenticated proxy.
 func loadOIDCConfig(cfg config) (config, error) {
 	cfg.oidcIssuer = os.Getenv("OIDC_ISSUER")
-	cfg.oidcClientID = os.Getenv("OIDC_CLIENT_ID")
-	cfg.oidcClientSecret = os.Getenv("OIDC_CLIENT_SECRET")
-	cfg.googleSignInOff = strings.EqualFold(strings.TrimSpace(os.Getenv("BFF_GOOGLE_SIGNIN")), "off")
-	for _, id := range strings.Split(os.Getenv("OIDC_MOBILE_CLIENT_IDS"), ",") {
-		if id = strings.TrimSpace(id); id != "" {
-			cfg.oidcMobileClientIDs = append(cfg.oidcMobileClientIDs, id)
-		}
-	}
-
 	if cfg.oidcIssuer == "" {
-		return cfg, errors.New("BFF_AUTH_MODE=oidc: OIDC_ISSUER is required (the provider's discovery base URL)")
-	}
-	if _, err := parseHTTPSOrLoopback("OIDC_ISSUER", cfg.oidcIssuer); err != nil {
-		return cfg, err
-	}
-	if cfg.oidcClientID == "" {
-		return cfg, errors.New("BFF_AUTH_MODE=oidc: OIDC_CLIENT_ID is required")
-	}
-	if cfg.oidcClientSecret == "" {
-		return cfg, errors.New("BFF_AUTH_MODE=oidc: OIDC_CLIENT_SECRET is required — the BFF is a " +
-			"confidential client (server-side code exchange); PKCE supplements the secret, it does not replace it")
+		return cfg, errors.New("BFF_AUTH_MODE=oidc: OIDC_ISSUER is required (the namespace existing people's " +
+			"identities were made under; nothing is fetched from it)")
 	}
 
 	rawPublic := os.Getenv("BFF_PUBLIC_BASE_URL")
 	if rawPublic == "" {
 		return cfg, errors.New("BFF_AUTH_MODE=oidc: BFF_PUBLIC_BASE_URL is required (the browser-facing " +
-			"origin, e.g. https://app.talyvor.com — it derives the OIDC redirect URI and scopes the session cookie)")
+			"origin, e.g. https://app.talyvor.com — it scopes the session cookie)")
 	}
 	pub, err := parseHTTPSOrLoopback("BFF_PUBLIC_BASE_URL", rawPublic)
 	if err != nil {
@@ -275,8 +252,8 @@ func loadOIDCConfig(cfg config) (config, error) {
 
 	// THE DELIBERATE RELAXATION. Loopback binds are always fine. Binding beyond
 	// loopback is allowed only now that auth is proven on (this branch) AND the
-	// public origin is https — the posture where the __Host- Secure cookie and the
-	// IdP redirect actually work. An http public URL is a loopback dev posture and
+	// public origin is https — the posture where the __Host- Secure cookie
+	// actually works. An http public URL is a loopback dev posture and
 	// must not be reachable from the network.
 	if !bindsLoopback(cfg.addr) {
 		if pub.Scheme != "https" {
@@ -379,9 +356,8 @@ func parseHTTPSOrLoopback(name, raw string) (*url.URL, error) {
 	}
 }
 
-// parseAllowedEmails parses the comma-separated allowlist. "*" (alone) means any
-// authenticated identity from the configured issuer — for IdPs whose whole user base
-// is trusted. Empty is refused: authorization must be stated, not implied.
+// parseAllowedEmails parses the comma-separated allowlist. "*" (alone) reports sign-up
+// as open (/auth/me's signup_open). Empty is refused: it must be stated, not implied.
 func parseAllowedEmails(raw string) ([]string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -513,8 +489,7 @@ func main() {
 
 	// `bff version` prints the build stamp and exits, BEFORE loadConfig.
 	//
-	// The ordering is the point: loadConfig can log.Fatalf, and in oidc mode boot performs
-	// network discovery against the IdP. Asking a binary what it is must not require it to be
+	// The ordering is the point: loadConfig can log.Fatalf. Asking a binary what it is must not require it to be
 	// deployable — otherwise the version is unreadable in exactly the situation where you most
 	// want it. This is also how CI asserts the stamp was applied: it builds the binary and reads
 	// this output, which a unit test cannot do.
@@ -528,15 +503,10 @@ func main() {
 		log.Fatalf("bff: %v", err)
 	}
 
-	// oidc mode discovers the issuer at boot: an unreachable or misconfigured IdP
-	// refuses to start rather than booting into a proxy nobody can log in to.
 	var auth *authenticator
 	if cfg.authMode == authModeOIDC {
-		auth, err = newAuthenticator(context.Background(), cfg)
-		if err != nil {
-			log.Fatalf("bff: OIDC setup (issuer %s): %v", cfg.oidcIssuer, err)
-		}
-		log.Printf("bff: auth=oidc issuer=%s public=%s allowlist=%s",
+		auth = newAuthenticator(cfg)
+		log.Printf("bff: auth=oidc identity namespace=%s public=%s allowlist=%s",
 			cfg.oidcIssuer, cfg.publicBaseURL, describeAllowlist(cfg.allowedEmails))
 		log.Printf("bff: product upstreams: track=%s docs=%s (unset = routes answer 503)",
 			orUnset(cfg.trackBaseURL), orUnset(cfg.docsBaseURL))

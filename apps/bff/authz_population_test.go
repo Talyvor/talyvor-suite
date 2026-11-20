@@ -105,7 +105,7 @@ var publicReadRoutes = map[string]string{
 		"before it can sign anyone in — oauth_test.go asserts them",
 	"/.well-known/openai-apps-challenge": "B52.8 — the token ChatGPT's directory reads to prove the domain is Talyvor's, " +
 		"from a setting and nothing per-person; unset it is a 404 — connect_directory_test.go asserts both",
-	"/oauth/authorize": "B40.6 — where an assistant sends the person. Signed out it redirects to /auth/login and back; " +
+	"/oauth/authorize": "B40.6 — where an assistant sends the person. Signed out it redirects to /signin and back; " +
 		"an unknown client is told so on a page before any session is looked at (the 400 here) — oauth_test.go owns both",
 	"/api/version": "the version surface is deliberately unauthenticated so an operator can " +
 		"identify a deployment before signing in — version_test.go asserts the 200 and the reason",
@@ -115,10 +115,8 @@ var publicReadRoutes = map[string]string{
 		"top-up range, nothing per-workspace — pricing_test.go asserts the 200 and what it carries",
 	"/auth/me": "the session PROBE. It must answer without a session; that is the whole point — " +
 		"`{authenticated:false}` is how the app learns to render the signed-out shell",
-	"/auth/login": "the sign-in entry point. Requiring a session to reach it would be a door " +
-		"locked from the inside (503 here only because this fixture configures no IdP)",
-	"/auth/callback": "the IdP redirect target — the browser arrives here BEFORE any session " +
-		"exists (503 here only because this fixture configures no IdP)",
+	"/auth/": "B61.29 — no route: any /auth/ path nothing else serves (Google sign-in's among them) answers 404 " +
+		"and reaches nothing — b6129_no_google_test.go",
 	"/auth/synthetic": "B17.2 — the synthetic sign-in, which by definition runs before any session " +
 		"exists. It needs the operator key instead (401 without it) and answers 404 while " +
 		"LENS_SYNTHETIC_KEY is unset, as here; synthetic_test.go owns both refusals",
@@ -295,8 +293,8 @@ var publicWriteRoutes = map[string]string{
 		"200 so the endpoint tells a caller nothing — oauth_test.go asserts a revoked token is refused",
 	"/": "the SPA fallback. There is no handler behind an unsafe method here — the router " +
 		"answers 404 and nothing is reached, so there is no session to require",
-	"/auth/mobile/session": "B40.24 — the phone app's sign-in, which by definition runs before any session exists. " +
-		"The ID token for a phone client is its credential; mobile_session_test.go asserts a web-client token gets 401",
+	"/auth/": "B61.29 — no route: any /auth/ path nothing else serves (Google sign-in's among them) answers 404 " +
+		"and reaches nothing — b6129_no_google_test.go",
 	"/auth/phone/start": "B61.25 — the phone door, before any session exists: it asks Lens to text a code and is limited " +
 		"per address by the BFF and by Lens; b6125_phone_signin_test.go owns it",
 	"/auth/phone/finish": "B61.25 — the texted code is its credential; a wrong one opens nothing — b6125_phone_signin_test.go",
@@ -314,7 +312,7 @@ var publicWriteRoutes = map[string]string{
 		"with a Bearer session; the same 401 without the key and 404 while LENS_SYNTHETIC_KEY is unset — " +
 		"synthetic_test.go runs every /auth/synthetic refusal against it too",
 	"/auth/logout": "session teardown, which cannot require the session it is tearing down. " +
-		"503 here only because this fixture configures no IdP (a.auth is nil); " +
+		"503 here only because this fixture has no sign-in (a.auth is nil); " +
 		"logout_test.go owns what it does when one exists",
 	"/api/waitlist": "B44.1 — talyvor.com's waitlist, joined by a visitor who has no account. It stores one email in " +
 		"Lens and nothing else, 5 tries an hour per IP; reading it back (GET) needs the operator — waitlist_test.go owns both",

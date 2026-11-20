@@ -355,11 +355,6 @@ export interface AuthMe {
   /** B20.12 — whether THIS person is on the BFF's OPERATOR_SUBS: the sidebar offers the marketplace
    *  review queue only to someone it will admit. The BFF's requireOperator still decides. */
   operator?: boolean
-  /** B61.25 — whether the BFF still offers Google sign-in, while every existing account moves; off with
-   *  BFF_GOOGLE_SIGNIN=off, and then the door shows no Google at all. */
-  google_signin?: boolean
-  /** B61.25 — a Google session with no phone number yet: the one move takes the number and a passcode. */
-  phone_needed?: boolean
   /** B61.25 — a new number's session, which may only finish sign-up. */
   signup_unfinished?: boolean
 }
