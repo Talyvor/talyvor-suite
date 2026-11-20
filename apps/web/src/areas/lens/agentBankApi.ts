@@ -1081,12 +1081,12 @@ async function statementFile(agentID: string | null, from: string, to: string, f
 }
 
 /**
- * B56.15 — a currency account's statement for [from, to) as the CSV Lens writes (Lens B56.14). A refusal carries
- * Lens's sentence.
+ * B56.15 — a currency account's statement for [from, to) as the CSV Lens writes (Lens B56.14), or (B30.95) the PDF
+ * document Lens writes of it (Lens B30.23). A refusal carries Lens's sentence.
  */
-async function accountStatementFile(accountID: string, from: string, to: string): Promise<Blob> {
-  const path = `/api/money/accounts/${e(accountID)}/statement?${new URLSearchParams({ from, to, format: 'csv' })}`
-  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+async function accountStatementFile(accountID: string, from: string, to: string, format: 'csv' | 'pdf' = 'csv'): Promise<Blob> {
+  const path = `/api/money/accounts/${e(accountID)}/statement?${new URLSearchParams({ from, to, format })}`
+  const res = await fetch(path, { headers: { Accept: format === 'pdf' ? 'application/pdf' : 'text/csv' } })
   if (!res.ok) {
     let sentence = ''
     try {

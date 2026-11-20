@@ -24,7 +24,7 @@ import { DownloadFailed } from './AgentStatement'
 import { agentBankApi, type Agent, type AgentApproval, type PaymentRequest } from './agentBankApi'
 import { formatDecided } from './format'
 import { signApproval } from './passkeys'
-import { AccountStatement, accountTitle, useAccountMonthCsv } from './AccountStatement'
+import { AccountStatement, MonthlyStatements, accountTitle, useAccountMonthCsv } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
@@ -503,6 +503,8 @@ export function StatementsScreen() {
             agent={tab.account.purpose === 'agent' ? (agents.find((a) => a.id === tab.account.agent_id) ?? null) : null}
           />
         ) : null}
+        {/* B30.95 — the account's statement for each month, as a PDF. */}
+        {tab ? <MonthlyStatements key={`months-${tab.id}`} account={tab.account} title={tab.title} /> : null}
       </Region>
     </RegionScreen>
   )
