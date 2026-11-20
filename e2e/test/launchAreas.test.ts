@@ -44,13 +44,13 @@ async function quoteOnStub(broken: string, scenario: Scenario = instantTransferQ
   })
   const lens = new LensClient(`http://127.0.0.1:${port}`, 'instant-transfer')
   const [user] = await lens.createUsers(1)
-  return scenario.run({ app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx)
+  return scenario.run({ app: { user }, env: { lens, fees: await lens.fees() }, evidence: [] } as unknown as ScenarioCtx)
 }
 
 describe('instant-transfer-quote (B61.48)', () => {
   it.concurrent('passes on a Lens whose quote shows its fee, holds 30 seconds and is refused in words after', async () => {
     const v = await quoteOnStub('')
-    expect(v.detail).toMatch(/^USD 5\.00 quoted at a fee of 3 \(50 bps\), rate 1, 497 arriving, locked 30 seconds; inside them a send answered 409, after them refused 409 ".*expired.*Ask for a new one/)
+    expect(v.detail).toMatch(/^USD 5\.00 quoted at a fee of 2 \(50 bps above 200 free\), rate 1, 498 arriving, locked 30 seconds; inside them a send answered 409, after them refused 409 ".*expired.*Ask for a new one/)
     expect(v.pass).toBe(true)
   })
 
@@ -62,6 +62,11 @@ describe('instant-transfer-quote (B61.48)', () => {
     expect(await quoteOnStub('instant-fee-dropped')).toEqual({ pass: false, detail: 'the quote must show its fee; its fee_bps is 0' })
   })
 
+  it.concurrent('FAILs when a quote charges its fee on the part that converts free', async () => {
+    expect(await quoteOnStub('instant-fee-on-free')).toEqual({ pass: false,
+      detail: 'the fee is 50 basis points of the 300 above the 200 that converts free, rounded up: 2; the quote shows 3' })
+  })
+
   it.concurrent('FAILs when a send at an expired quote is not refused for it', async () => {
     const v = await quoteOnStub('instant-quote-expired-sent')
     expect(v.pass).toBe(false)
@@ -69,12 +74,24 @@ describe('instant-transfer-quote (B61.48)', () => {
   })
 
   it('judges a quote by its own figures', () => {
-    const q = { id: 'itq_1', send_minor: 500, send_currency: 'USD', fee_bps: 30, fee_minor: 2, rate: '0.997', receive_minor: 498, receive_currency: 'USD',
+    const q = { id: 'itq_1', send_minor: 500, send_currency: 'USD', fee_bps: 30, fee_minor: 2, free_minor: 0, rate: '0.997', receive_minor: 498, receive_currency: 'USD',
       created_at: '2026-11-15T10:00:00.000Z', expires_at: '2026-11-15T10:00:30.000Z' }
-    expect(quoteFaults(q, 500, 'USD')).toEqual([])
-    expect(quoteFaults({ ...q, fee_minor: 1 }, 500, 'USD')).toEqual(['the fee is 30 basis points of 500, rounded up: 2; the quote shows 1'])
-    expect(quoteFaults({ ...q, rate: '' }, 500, 'USD')).toEqual(['the quote must show its rate; it shows ""'])
-    expect(quoteFaults({ ...q, receive_minor: 0 }, 500, 'USD')).toEqual(['the quote must show what arrives in USD; it shows 0 USD'])
+    expect(quoteFaults(q, 500, 'USD', 30)).toEqual([])
+    expect(quoteFaults({ ...q, fee_minor: 1 }, 500, 'USD', 30)).toEqual(['the fee is 30 basis points of the 500 above the 0 that converts free, rounded up: 2; the quote shows 1'])
+    expect(quoteFaults({ ...q, rate: '' }, 500, 'USD', 30)).toEqual(['the quote must show its rate; it shows ""'])
+    expect(quoteFaults({ ...q, receive_minor: 0 }, 500, 'USD', 30)).toEqual(['the quote must show what arrives in USD; it shows 0 USD'])
+  })
+
+  it('charges the fee only on the part above the plan\'s free conversions (B17.518)', () => {
+    // A business_studio quote of USD 5.00 as Lens answers it: all 500 within the month's free conversions, so no fee.
+    const q = { id: 'itq_1', send_minor: 500, send_currency: 'USD', fee_bps: 60, fee_minor: 0, free_minor: 500, rate: '1', receive_minor: 500, receive_currency: 'USD',
+      created_at: '2026-11-15T10:00:00.000Z', expires_at: '2026-11-15T10:00:30.000Z' }
+    expect(quoteFaults(q, 500, 'USD', 60)).toEqual([])
+    expect(quoteFaults({ ...q, fee_minor: 3 }, 500, 'USD', 60)).toEqual(['the fee is 60 basis points of the 0 above the 500 that converts free, rounded up: 0; the quote shows 3'])
+    expect(quoteFaults({ ...q, free_minor: 501 }, 500, 'USD', 60)).toEqual(['the quote must show what of 500 converts free, between 0 and all of it; its free_minor is 501'])
+    // A plan with no margin may quote 0 basis points; a plan with one may not.
+    expect(quoteFaults({ ...q, fee_bps: 0, free_minor: 0 }, 500, 'USD', 0)).toEqual([])
+    expect(quoteFaults({ ...q, fee_bps: 0, free_minor: 0 }, 500, 'USD', 60)).toEqual(['the quote must show its fee; its fee_bps is 0'])
   })
 }, 120_000)
 
@@ -84,7 +101,7 @@ describe('instant-transfer-send (B61.67)', () => {
 
   it.concurrent("passes when a send waits for the owner's key, arrives once, sends once under its key and waits above \"ask me above\"", async () => {
     const v = await sendOnStub('')
-    expect(v.detail).toMatch(/^USD 5\.00 to a new account waited for the owner's key \(apr_\w+\), then arrived once: Instant sender \S+ 3000 → 2500, Instant receiver \S+ 0 → 497, itr_\S+ received; the same key again answered itr_\S+ and moved nothing; USD 10\.00 above 5000000 µLXC waited \(apr_\w+\) with nothing moved, and an unsigned decision was refused 403$/)
+    expect(v.detail).toMatch(/^USD 5\.00 to a new account waited for the owner's key \(apr_\w+\), then arrived once: Instant sender \S+ 3000 → 2500, Instant receiver \S+ 0 → 498, itr_\S+ received; the same key again answered itr_\S+ and moved nothing; USD 10\.00 above 5000000 µLXC waited \(apr_\w+\) with nothing moved, and an unsigned decision was refused 403$/)
     expect(v.pass).toBe(true)
   })
 
@@ -97,7 +114,7 @@ describe('instant-transfer-send (B61.67)', () => {
   it.concurrent("FAILs when the receiver's account is not credited", async () => {
     const v = await sendOnStub('instant-not-credited')
     expect(v.pass).toBe(false)
-    expect(v.detail).toMatch(/^Instant receiver \S+'s account must be up by the 497 cents that arrive: 0 → 0$/)
+    expect(v.detail).toMatch(/^Instant receiver \S+'s account must be up by the 498 cents that arrive: 0 → 0$/)
   })
 
   it.concurrent('FAILs when a send above "ask me above" goes through', async () => {

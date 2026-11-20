@@ -1,11 +1,10 @@
-import { Logo, cn } from '@talyvor/ui'
-import { Button, PageBackground, personalHues, pocketFocusRing } from '@talyvor/ui/pocket'
+import { cn } from '@talyvor/ui'
+import { PageBackground, personalHues, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { CompanyLine } from '../../components/CompanyLine'
 import { ACCESS_LINE, useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
-import { useSearchParams } from 'react-router-dom'
 import { Door } from './Door'
-import { safeReturnTo } from './doorApi'
 
 // Entry.tsx — the two front doors: /signup for a stranger, /signin for someone coming back.
 //
@@ -40,12 +39,22 @@ import { safeReturnTo } from './doorApi'
 /** Privacy and Terms, small and underlined, at the foot of each card. */
 const footLink = cn('underline underline-offset-2 transition-colors duration-200 hover:text-ink', pocketFocusRing)
 
-/** pocket.css .authart: the kit's streams (brand/logo/svg/talyvor-streams-on-*.svg), 440 wide, left of centre, the
- *  version for the nearest theme shown as the logo's are (theme.css --logo-on-light, --logo-on-dark). From 840px:
- *  on a phone the card fills the width and there is no left for the streams to flow in from. */
+/** pocket.css .authart: the kit's streams (brand/logo/svg/talyvor-streams-on-*.svg), 440 wide, the version for the nearest
+ *  theme shown as the logo's are (theme.css --logo-on-light, --logo-on-dark). From 840px: on a phone the card fills the
+ *  width and there is no left for the streams to flow in from.
+ *  B64.12 — ANCHORED TO THE CARD, not the window: pinned to the window's left edge they ended in mid-air short of a
+ *  laptop-width card and read as a cut-off logo. Their right end (the drawing's right edge, 47.46% down, where the three
+ *  streams meet) now touches the card's left edge at the height of the card's logo, so they flow into it. */
 function Streams() {
   return (
-    <div className="pointer-events-none absolute left-0 top-1/2 hidden select-none wide:block" style={{ transform: 'translateY(-47.46%)' }} aria-hidden="true">
+    <div
+      className="pointer-events-none absolute right-full hidden select-none wide:block"
+      // Its own width: hung off the card's left edge (right: 100%) it has no room to shrink into, and the image's
+      // max-width: 100% would fold it to nothing.
+      style={{ top: CARD_LOGO_MIDDLE, width: 440, transform: 'translateY(-47.46%)' }}
+      aria-hidden="true"
+      data-anchor="card-logo"
+    >
       {(['light', 'dark'] as const).map((v) => (
         <img
           key={v}
@@ -62,6 +71,11 @@ function Streams() {
   )
 }
 
+/** The middle of the card's logo drawing, from the card's top: the card's padding (p-8, 32 px), the logo's clear space
+ *  (Logo: half the arrow's height, ceil(144 × 168 / 2963.51) = 9 px) and half the 144 px small logo's height
+ *  (144 × 76 / 240 = 45.6 px). 63.8 px, measured the same in Chromium and WebKit. */
+const CARD_LOGO_MIDDLE = 32 + Math.ceil((144 * 168) / 2963.51) + (144 * 76) / 240 / 2
+
 /** The card every entry state is drawn in: pocket.css .authcard, white with its large shadow on the cloud page. */
 export function AuthCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
@@ -71,38 +85,24 @@ export function AuthCard({ children, className }: { children: React.ReactNode; c
   )
 }
 
-/** pocket.css .h-page in the card: the page's one h1, in the display face, under the logo. */
-function CardHeading({ children }: { children: React.ReactNode }) {
-  return <h1 className="mt-4 font-display text-title font-bold text-ink">{children}</h1>
-}
-
-/** The card's lead line under its heading. */
-function Lead({ children }: { children: React.ReactNode }) {
-  return <p className="text-reading text-ink-2">{children}</p>
-}
-
-/** The card's logo, which goes to the website. */
-function CardLogo() {
-  return (
-    <a href="/marketing" aria-label="Talyvor website" className={cn('rounded-control', pocketFocusRing)}>
-      <Logo width={144} />
-    </a>
-  )
-}
-
 /** The shell both entry pages share — pocket.css .authp: the card centred on the cloud page, the streams behind it.
  *  Public pages, so no Shell/sidebar — there is no workspace to navigate yet. */
 export function EntryFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-cloud text-ink">
       {/* B61.70 — the moving background, as behind every page, in a Personal account's colours. */}
-      <PageBackground hues={personalHues} />
-      <Streams />
+      {/* B64.12 — one line system: from 840px the kit's streams flow into the card, so the background's own lines across
+          the top are not drawn there. On a phone (no kit streams) they stay. */}
+      <PageBackground hues={personalHues} className="wide:[&_.pk-bg-streams]:hidden" />
       {/* B57.58 — no theme control here: Settings' Appearance is the one, and before you sign in the page follows the device. */}
       {/* `main`, NOT `div`: the page's words are in a landmark region (LandmarkCoverage.test.tsx measures it). */}
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-gutter py-16 wide:px-10">
-        <AuthCard>{children}</AuthCard>
-        <CompanyLine onBackground className="mt-6 w-full max-w-md" />
+        <div className="relative w-full max-w-md">
+          <Streams />
+          <AuthCard>{children}</AuthCard>
+        </div>
+        {/* B64.12 — centred to the card's width, as the card is. */}
+        <CompanyLine onBackground className="mt-6 w-full max-w-md text-center" />
       </main>
     </div>
   )
@@ -142,19 +142,20 @@ export function AccessLine({ state, onBackground = false }: { state: SignupState
   return null
 }
 
-/** Rendered instead of the pitch when the browser already has a session: a signed-in person
- *  asked to "create your workspace" is being told their account does not exist. */
-export function AlreadyIn() {
-  return (
-    <>
-      <CardLogo />
-      <CardHeading>You’re signed in</CardHeading>
-      <Lead>This browser already has a Talyvor session, so there is nothing to sign up for.</Lead>
-      <Button asChild size="lg" className="w-full">
-        <a href="/">Open the app</a>
-      </Button>
-    </>
-  )
+/** B64.12 — where `returnTo` may send someone: a path on this site only. One leading "/", never "//" (another host),
+ *  never a backslash (browsers read "/\\evil" as "//evil"), never a control character (a tab or newline is dropped from
+ *  a URL, so "/\t/evil" is "//evil"). A path has no scheme, so "javascript:" and "https:" are refused by the first
+ *  rule. Anything else is null, and the caller opens Home. */
+export function sameSitePath(to: string | null | undefined): string | null {
+  if (!to || !to.startsWith('/') || to.startsWith('//') || to.includes('\\')) return null
+  if (/[\u0000-\u001f\u007f]/.test(to)) return null
+  return to
+}
+
+/** The `returnTo` this page was opened with (or the BFF's `return_to`, or PayInvoice's `next`), when it is a path on this site. */
+export function useReturnTo(): string | undefined {
+  const [params] = useSearchParams()
+  return sameSitePath(params.get('returnTo') ?? params.get('return_to') ?? params.get('next')) ?? undefined
 }
 
 // ─── /signin, and the gate's in-place card ──────────────────────────────────
@@ -168,17 +169,13 @@ export function AlreadyIn() {
  */
 export function SignIn({ returnTo }: { returnTo?: string } = {}) {
   const { authenticated } = useSignupProbe()
+  const fromUrl = useReturnTo()
   // B61.29 — /signin?return_to= is where the BFF sends a signed-out person (an assistant's Connect page among them).
-  const [params] = useSearchParams()
-  returnTo ??= safeReturnTo(params.get('return_to'))
-  useDocumentTitle(authenticated ? 'You’re signed in' : 'Sign in')
-  if (authenticated) {
-    return (
-      <EntryFrame>
-        <AlreadyIn />
-      </EntryFrame>
-    )
-  }
+  returnTo ??= fromUrl
+  useDocumentTitle('Sign in')
+  // B64.12 — someone with a session goes straight in, to a same-site returnTo or Home, with no page between: "You're
+  // signed in, there is nothing to sign up for" was a dead end. A second account opens from the account switcher (B61.9).
+  if (authenticated) return <Navigate to={returnTo ?? '/'} replace />
   return (
     <EntryFrame>
       <SignInCard returnTo={returnTo} />

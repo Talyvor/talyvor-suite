@@ -1,0 +1,5 @@
+[
+  { "route": "/approvals", "steps": ["Review"] },
+  { "route": "/?accounts=open" },
+  { "route": "/money/wallets", "steps": ["Add money"] }
+]

@@ -240,6 +240,7 @@ export function PayPersonDialog({
   const firstKey = pay.isError && pay.error instanceof AgentBankError && pay.error.status === 403 && /passkey/.test(pay.error.sentence)
   return (
     <Dialog
+      position="panel"
       open
       onClose={onClose}
       title={

@@ -106,7 +106,7 @@ export function YourAccounts({ onClose }: { onClose: () => void }) {
     move.mutate(a.id)
   }
   return (
-    <Layer labelledBy={heading} onClose={onClose}>
+    <Layer labelledBy={heading} onClose={onClose} position="panel">
       <div className="relative grid w-full gap-4 rounded-t-sheet bg-page p-6 pb-8.5 shadow-pocket-lg wide:w-120 wide:rounded-card wide:pb-6">
         <CloseX onClose={onClose} className="absolute right-4 top-4" />
         <div className="flex items-center justify-between gap-3 pr-10">

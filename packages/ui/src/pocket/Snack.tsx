@@ -1,6 +1,8 @@
-import { startTransition, useEffect, useState } from 'react'
+import { startTransition, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 import { cn } from '../lib/cn'
+import { play } from './motion'
 
 export interface SnackProps {
   title: React.ReactNode
@@ -13,8 +15,12 @@ export interface SnackProps {
 // pocket.css .snack: ink with the page's colour on it, a tick, the title and its line, at the foot of the view.
 // Both are Pocket wherever they open, as the Layer is: the page under them may still be drawn in today's design.
 export function Snack({ title, line, label, className }: SnackProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  // B61.74 — it arrives as a page does, fading up (move 8, on the web at the bottom centre).
+  useEffect(() => void play(ref.current, [{ opacity: 0, translate: '0 12px' }, { opacity: 1, translate: '0 0' }], 'page-in', 'out'), [])
   return (
     <div
+      ref={ref}
       role="status"
       data-design="pocket"
       className={cn(
@@ -55,7 +61,7 @@ type Shown = Omit<SnackProps, 'className'> & { id: number; shownOn?: string }
 const useConfirmations = create<{ snack: Shown | null; toast: { text: string; id: number } | null }>(() => ({ snack: null, toast: null }))
 let next = 0
 
-/** After an action: its confirmation, shown once on the next view, and gone from the view after that. */
+/** After an action: its confirmation, shown once on the next view for 2.4 s, and gone from the view after that. */
 export function showSnack(snack: Omit<SnackProps, 'className'>) {
   useConfirmations.setState({ snack: { ...snack, id: ++next } })
 }
@@ -70,7 +76,8 @@ export function showToast(text: string) {
   useConfirmations.setState({ toast: { text, id: ++next } })
 }
 
-const TOAST_MS = 2800
+// B61.74 — Pocket Live's move 8 on the web: one line at the bottom centre for 2.4 s, the snack and the short message alike.
+const SAID_MS = 2400
 
 /** Once per app, beside the routes: `view` is the address, so a snack is shown on one view and never again. */
 export function SnackHost({ view }: { view: string }) {
@@ -89,18 +96,26 @@ export function SnackHost({ view }: { view: string }) {
     if (snack.shownOn === undefined) useConfirmations.setState({ snack: { ...snack, shownOn: view } })
     else if (snack.shownOn !== view) useConfirmations.setState({ snack: null })
   }, [snack, view])
+  const snackId = snack?.id
+  useEffect(() => {
+    if (snackId === undefined) return
+    const t = setTimeout(() => useConfirmations.setState((s) => (s.snack?.id === snackId ? { snack: null } : s)), SAID_MS)
+    return () => clearTimeout(t)
+  }, [snackId])
   useEffect(() => {
     if (!toast) return
-    const t = setTimeout(() => useConfirmations.setState((s) => (s.toast?.id === toast.id ? { toast: null } : s)), TOAST_MS)
+    const t = setTimeout(() => useConfirmations.setState((s) => (s.toast?.id === toast.id ? { toast: null } : s)), SAID_MS)
     return () => clearTimeout(t)
   }, [toast])
   // Signing out takes the host away, and what it was about to say with it.
   useEffect(() => () => useConfirmations.setState({ snack: null, toast: null }), [])
   const shown = snack && (snack.shownOn === undefined || snack.shownOn === view) ? snack : null
-  return (
+  // B61.74 — on the body, as a Layer is: a page fading up is moved while it arrives, and must not carry these with it.
+  return createPortal(
     <>
       {shown ? <Snack key={shown.id} title={shown.title} line={shown.line} label={shown.label} /> : null}
       {toast ? <Toast key={toast.id}>{toast.text}</Toast> : null}
-    </>
+    </>,
+    document.body,
   )
 }
