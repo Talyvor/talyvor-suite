@@ -38,7 +38,7 @@ import { agentApprovalDenied, lxcConvertBonds, marketRemixLicence, walletCardFre
 import { appShell, brandPlanes, chatBrand, chatHelpInFull, everyScreen, homeCards, lensReads, marketBrand, screensBrand, walletBrand } from './tour.ts'
 import { sdkWalletQuickstart } from './sdk.ts'
 import { featuresLeadWithWallets } from './features.ts'
-import { brandDocs, brandROI, brandVisual, companyLine, heroFade, readingPages } from './brand.ts'
+import { brandDocs, brandROI, brandVisual, companyLine, heroFade, logoFaults, readingPages } from './brand.ts'
 import { b30Capabilities } from './clearances.ts'
 import { moneyRails } from './moneyRails.ts'
 import { dailyReconciliation } from './reconciliation.ts'
@@ -1444,14 +1444,14 @@ export function brandIcons(): Scenario {
   }
 }
 
-/** B29.3, B57.79 — the logo is the kit Nick chose on 4 Nov 2026, drawn from its own files: on the sidebar,
- *  sign-in, /marketing, /pricing and /documentation, in the dark theme and the light one. Each theme must
- *  show only that version's file, loaded, and no page may still ask for today's brand-v4 logo. */
+/** B29.3, B57.79, B17.401 — the logo is the kit Nick chose on 4 Nov 2026, drawn from its own files: on the sidebar,
+ *  sign-in, /marketing, /pricing and /documentation, in the dark theme and the light one. Each logo on screen must be
+ *  the kit's version for the plane it sits on, loaded, and no page may still ask for brand-v4's logo. */
 export function brandLogo(): Scenario {
   return {
     id: 'brand-logo',
     owner: 'talyvor-suite',
-    items: ['B57.79'],
+    items: ['B57.79', 'B17.401'],
     title: 'the sidebar, sign-in and public headers carry the chosen logo, its own version in each theme',
     run: async (ctx) => {
       const seen: string[] = []
@@ -1468,20 +1468,22 @@ export function brandLogo(): Scenario {
               // B58.16: judged the moment the <img> was attached, the file was still on its way and every page read
               // "did not load". decode() settles once the file is in or has failed; only then is it judged.
               await Promise.all(imgs.map((i) => i.decode().catch(() => undefined)))
-              const shown = imgs.map((i) => ({ src: new URL(i.src).pathname, loaded: i.complete && i.naturalWidth > 0 }))
+              // B17.401: the plane is the first mostly opaque background behind the logo; none means the theme's page.
+              const plane = (i: HTMLImageElement): 'dark' | 'light' => {
+                for (let e: Element | null = i; e !== null; e = e.parentElement) {
+                  const c = getComputedStyle(e).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? []
+                  if (c.length >= 3 && (c[3] ?? 1) >= 0.5) return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] < 128 ? 'dark' : 'light'
+                }
+                return t
+              }
+              const shown = imgs.map((i) => ({ src: new URL(i.currentSrc || i.src).pathname, loaded: i.complete && i.naturalWidth > 0, plane: plane(i) }))
               const old = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
                 .map((i) => new URL(i.src, location.href).pathname)
                 .filter((s) => /\/brand\/svg\/(talyvor-|favicon)/.test(s))
               return { shown, old }
             }, theme)
-            seen.push(`${path} ${theme}: ${got.shown.map((g) => g.src).join(' ') || 'no logo'}`)
-            if (got.shown.length === 0) wrong.push(`${path} ${theme} shows no logo`)
-            for (const g of got.shown) {
-              // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
-              if (!new RegExp(`^/brand/logo/talyvor-[a-z-]+-on-${theme}\\.svg$`).test(g.src)) wrong.push(`${path} ${theme} shows ${g.src}`)
-              if (!g.loaded) wrong.push(`${path} ${theme} ${g.src} did not load`)
-            }
-            if (got.old.length > 0) wrong.push(`${path} still asks for ${got.old.join(', ')}`)
+            seen.push(`${path} ${theme}: ${got.shown.map((g) => `${g.src} on ${g.plane}`).join(' ') || 'no logo'}`)
+            wrong.push(...logoFaults(path, theme, got.shown, got.old))
           }
         } catch (e) {
           wrong.push(`${path}: no logo (${(e as Error).message.split('\n')[0]})`)
@@ -1491,7 +1493,7 @@ export function brandLogo(): Scenario {
       }
       ctx.evidence.push({ note: seen.join('; ') })
       return wrong.length === 0
-        ? { pass: true, detail: 'the chosen logo on five screens, its on-dark and on-light files each in its own theme' }
+        ? { pass: true, detail: 'the chosen logo on five screens, each the kit\'s version for the plane it sits on, in both themes' }
         : { pass: false, detail: `logo wrong: ${wrong.join(', ')}` }
     },
   }
