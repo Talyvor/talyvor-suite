@@ -114,6 +114,7 @@ function bodyFor(url: string): unknown {
     return { at: '2026-10-04T00:00:00Z', month_start: '2026-10-01T00:00:00Z', month_end: '2026-11-01T00:00:00Z', spent_ulxc: 0, forecast_ulxc: 0, agents: [] }
   if (url.includes('/api/agents/approvals')) return { approvals: [] }
   if (url.includes('/api/money/payment-requests')) return { requests: [] }
+  if (url.includes('/api/people/finding')) return { name: '', email: '', phone: '+447700900456', by_name: false, by_phone: false, by_email: false } // B61.93
   if (url.includes('/api/money/mandates')) return { granted: [], received: [] } // B55.40: the badge counts an agent's mandate request
   if (url.includes('/api/agents/briefing')) return { items: [], spent_yesterday: [], quiet: true, line: 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.' }
   // B57.18 — Home's balances, the Researcher's wallet and the plan.
@@ -181,7 +182,7 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
   '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
   // B57.171 — Settings' Plan row says what the page holds, so /settings no longer reads the plan itself.
-  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/people/finding', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
@@ -287,7 +288,8 @@ describe('the swept set', () => {
     // 133 → 131 at B61.59: /billing is Settings, Plan, reading the plan instead of the top-up, the balance and the
     // allowance; /settings' Plan row reads the plan's name instead of the subscription.
     // 131 → 130 at B57.171: /settings' Plan row is Pocket Live's line, and the plan's name is on Settings, Plan.
-    expect(pairs).toBe(130)
+    // 130 → 131 at B61.93: /settings' Privacy reads how the person is found.
+    expect(pairs).toBe(131)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

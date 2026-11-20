@@ -43,6 +43,12 @@ package main
 // grepped; a line cannot. That is the same conclusion upstreamCitations.test.ts reached for the
 // TypeScript tree, enforced now for the tree it does not walk.
 //
+// ⚠ B66.3: A LINE OF THIS PACKAGE IS REFUSED TOO, NOT ONLY CHECKED. A number that is right
+// today goes false with the next line added above it, and lens.go gains lines in every PR that
+// mounts a route, so every open BFF PR ended up editing the same citations. A citation of this
+// package names a func, a method, or a const, var or type (`lens.go#proxyPaged`), and
+// TestGoNameCitationIsDeclared fails one whose name the file no longer declares.
+//
 // It does NOT claim the symbol names in those comments are right. That premise still lives in
 // another repository and this file cannot check it.
 //
@@ -179,6 +185,14 @@ func TestNoUncheckableGoLineCitation(t *testing.T) {
 			}
 			at := 1 + strings.Count(text[:m[0]], "\n")
 			switch classifyGoCitation(cited, n, bffFileLines) {
+			case citationOK:
+				// B66.3: checkable is not enough. A line of this package moves whenever a line is
+				// added above it, so every route a PR mounts in lens.go would move the citation,
+				// and every open BFF PR would edit it.
+				bad = append(bad, fmt.Sprintf(
+					"%s:%d cites %s line %d — this package's lines move with every edit above them. "+
+						"Cite the NAME (%s#Name): TestGoNameCitationIsDeclared checks it is there.",
+					f, at, cited, n, cited))
 			case citationUnresolvable:
 				bad = append(bad, fmt.Sprintf(
 					"%s:%d cites %s line %d — that file is not in this repository, so no review "+
@@ -223,5 +237,53 @@ func TestGoLineCitation_ResolverSeesBothOutcomes(t *testing.T) {
 	// A basename that exists here resolves even when cited with a directory that does not.
 	if got := classifyGoCitation("apps/bff/billing.go", 1, bffFileLines); got != citationOK {
 		t.Fatalf("a repo-rooted path to a file beside this one classified %v, want citationOK", got)
+	}
+}
+
+// goNameCitation matches a citation of a Go file by name: `lens.go#proxyPaged`.
+var goNameCitation = regexp.MustCompile(`([A-Za-z0-9_./-]+\.go)#([A-Za-z_][A-Za-z0-9_]*)`)
+
+// declaresGoName reports whether src declares name at the top level: a func, a method, or a
+// const, var or type, alone or inside a block.
+func declaresGoName(src, name string) bool {
+	q := regexp.QuoteMeta(name)
+	return regexp.MustCompile(`(?m)^(?:func (?:\([^)]*\) )?` + q + `[\[(]|(?:const|var|type) ` + q + `\b|\t` + q + `\b[^\n]*=)`).MatchString(src)
+}
+
+// TestGoNameCitationIsDeclared — B66.3: a comment here that cites this package's Go by name
+// (`file.go#Name`) names something the file still declares, so a rename or a deletion fails
+// here naming the citation instead of leaving a pointer to nothing. A path that is not this
+// package's (`internal/…`, another repository) is not checkable here and is left alone.
+func TestGoNameCitationIsDeclared(t *testing.T) {
+	var bad []string
+	checked := 0
+	for _, f := range goSourcesHere(t) {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		text := string(b)
+		for _, m := range goNameCitation.FindAllStringSubmatchIndex(text, -1) {
+			cited, name := text[m[2]:m[3]], text[m[4]:m[5]]
+			if strings.Contains(cited, "/") && !strings.HasPrefix(cited, "apps/bff/") {
+				continue // another package or repository
+			}
+			target, err := os.ReadFile(filepath.Base(cited))
+			if err != nil {
+				continue // a bare name of a file in another repository
+			}
+			checked++
+			if !declaresGoName(string(target), name) {
+				at := 1 + strings.Count(text[:m[0]], "\n")
+				bad = append(bad, fmt.Sprintf("%s:%d cites %s#%s — %s declares no %s", f, at, cited, name, cited, name))
+			}
+		}
+	}
+	// A literal floor: 13 such citations resolved here at B66.3. An absence rule over nothing passes free.
+	if checked < 10 {
+		t.Fatalf("name citations of this package checked = %d, want at least 10 — the scan found almost none", checked)
+	}
+	if len(bad) > 0 {
+		t.Fatalf("%d Go name citation(s) naming nothing:\n  %s", len(bad), strings.Join(bad, "\n  "))
 	}
 }

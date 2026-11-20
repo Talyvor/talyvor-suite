@@ -28,14 +28,14 @@ import (
 // ⚠ WHAT IS DELIBERATELY NOT COVERED, WITH THE ARGUMENT RATHER THAN A SILENT OMISSION —
 // W4.44's rule is that a bound nothing pins can be a true row and not a finding:
 //
-//	version.go:133  maxBundleVersionBytes — caps a read of a file THIS PROCESS WROTE, in a
+//	version.go#maxBundleVersionBytes — caps a read of a file THIS PROCESS WROTE, in a
 //	                directory it owns. There is no adversary on that path; the cap is
 //	                belt-and-braces and a test for it would assert against ourselves.
-//	docs_search.go:120  the offset clamp at 1<<20 — an offset past a million rows is
+//	docs_search.go#maxDocsSearchOffset  the offset clamp at 1<<20 — an offset past a million rows is
 //	                already meaningless, and the merged-window guard (X14) is separately
 //	                tested and covers the case that reaches upstream.
 //
-//	tenant.go:367   the 64 KiB bound on /api/pooling — AND THIS ONE IS NOT A TEST GAP, IT
+//	tenant.go#handlePoolingChoice  the 64 KiB bound on /api/pooling — AND THIS ONE IS NOT A TEST GAP, IT
 //	                IS A DIFFERENT THING WEARING THE SAME CLOTHES. It is io.LimitReader,
 //	                not http.MaxBytesReader, and MEASURED (W4.47) the difference is visible
 //	                from outside: a 100 KiB body whose JSON object CLOSES EARLY is accepted

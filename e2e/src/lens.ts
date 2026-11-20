@@ -785,6 +785,8 @@ export interface Fees {
   services_take_bps: number
   /** The platform fee on AI spend charged to credits, by plan. */
   platform_fee_bps: Record<string, number>
+  /** B17.518 — the margin on a currency conversion, by plan, on the part above the plan's free conversions. */
+  fx_margin_bps?: Record<string, number>
 }
 
 /** B32.15 — Lens's refusal of what a plan does not unlock (402): a plain sentence naming both plans (B55.29), and its setting beside. */

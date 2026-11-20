@@ -405,3 +405,10 @@ h1, h2, h3, h4 { font-family: var(--display); }
   -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
   border-color: var(--line);
 }
+
+/* B61.74 — a detail or a decision in the right panel (Layer position="panel"): what it holds fills the panel, top to
+   bottom, so a dialog's or a sheet's own corners and shadow give way to the panel's edge. The panel moves in and out with
+   the Web Animations API (pocket/motion.ts), never under reduced motion. */
+.pk-panel > * { width: 100% !important; min-height: 100%; align-content: start; border-radius: 0 !important; box-shadow: none !important; }
+/* Fields laid out side by side for the 480 dialog share the panel's narrower width rather than running past its edge. */
+.pk-panel .grid > *, .pk-panel input, .pk-panel select { min-width: 0; }

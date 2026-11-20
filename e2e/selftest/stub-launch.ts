@@ -4,7 +4,8 @@
 //
 // Instant transfer (Lens B59.14, B59.15), as instant-transfer-quote reads it:
 //   POST …/money/instant-transfers/quote {send_minor, send_currency, receive_currency, to}   201, locked for 30 seconds: the fee
-//        is LENS_FX_MARGIN_BPS (here 50) of what is sent, rounded up, and the beneficiary gets what is left at a rate of 1
+//        is LENS_FX_MARGIN_BPS (here 50) of what is sent above the plan's free part (here 200, free_minor), rounded up,
+//        and the beneficiary gets what is left at a rate of 1
 //   POST …/agents/{id}/money/instant-transfers {quote_id, to_account_id} and an Idempotency-Key   refused 403 field
 //        may_instant_transfer without the agent's rule; a quote past its 30 seconds refused 409 "… expired … Ask for a new
 //        one"; more than the agent's account holds refused 409; then judged as Lens judges it (B61.67): to an account the
@@ -23,6 +24,7 @@
 //   instant-quote-long     — a quote is locked for 60 seconds, not 30
 //   instant-quote-expired-sent — a send at a quote past its 30 seconds is not refused for it
 //   instant-fee-dropped    — a quote shows no fee
+//   instant-fee-on-free    — a quote charges its fee on the part that converts free too (B17.518)
 //   request-kind-support   — every request is filed as support, a complaint too, so it gets no reference
 //   instant-sent-twice     — the same Idempotency-Key again sends again
 //   instant-not-credited   — the beneficiary's account is not credited
@@ -33,9 +35,11 @@ import { randomBytes, randomUUID } from 'node:crypto'
 
 const QUOTE_LIFE_MS = 30_000
 const FEE_BPS = 50
+/** What of each quote converts free under the plan, as Lens's B61.58 allowance leaves it: the fee is on the rest. */
+const FREE_MINOR = 200
 
-interface Quote { id: string; workspace_id: string; to: string; send_minor: number; send_currency: string; fee_bps: number; fee_minor: number; rate: string
-  receive_minor: number; receive_currency: string; arrives_in_seconds: boolean; expires_at: string; created_at: string }
+interface Quote { id: string; workspace_id: string; to: string; send_minor: number; send_currency: string; fee_bps: number; fee_minor: number; free_minor: number
+  rate: string; receive_minor: number; receive_currency: string; arrives_in_seconds: boolean; expires_at: string; created_at: string }
 interface Transfer { id: string; workspace_id: string; agent_id: string; quote_id: string; idempotency_key: string; funding: string; from_account_id: string
   to_account_id: string; send_minor: number; send_currency: string; fee_minor: number; receive_minor: number; receive_currency: string; rate: string
   status: string; created_at: string }
@@ -135,10 +139,11 @@ export class LaunchDesk {
     if (!Number.isInteger(b.send_minor) || (b.send_minor ?? 0) <= 0) return this.json(res, 400, { error: 'economy: invalid Instant transfer: send_minor is a positive number of pence or cents' })
     if (b.to !== 'talyvor_account') return this.json(res, 400, { error: `economy: invalid Instant transfer: the stand-in quotes to a talyvor_account only, not "${b.to}"` })
     const minor = b.send_minor ?? 0
-    const fee = this.broken('instant-fee-dropped') ? 0 : Math.ceil((minor * FEE_BPS) / 10_000)
+    const free = Math.min(minor, FREE_MINOR)
+    const fee = this.broken('instant-fee-dropped') ? 0 : Math.ceil(((this.broken('instant-fee-on-free') ? minor : minor - free) * FEE_BPS) / 10_000)
     const now = Date.now()
     const q: Quote = { id: `itq_${randomUUID()}`, workspace_id: ws, to: b.to, send_minor: minor, send_currency: send, fee_bps: this.broken('instant-fee-dropped') ? 0 : FEE_BPS,
-      fee_minor: fee, rate: '1', receive_minor: minor - fee, receive_currency: receive, arrives_in_seconds: true,
+      fee_minor: fee, free_minor: free, rate: '1', receive_minor: minor - fee, receive_currency: receive, arrives_in_seconds: true,
       expires_at: new Date(now + (this.broken('instant-quote-long') ? 2 * QUOTE_LIFE_MS : QUOTE_LIFE_MS)).toISOString(), created_at: new Date(now).toISOString() }
     this.quotes.set(q.id, q)
     return this.json(res, 201, q)

@@ -905,6 +905,7 @@ export function AddPayee({ open, onClose, own = false }: { open: boolean; onClos
         </Said>
       ) : null}
       <Dialog
+        position="panel"
         open={open}
         onClose={onClose}
         title={own ? 'Add your own bank' : 'Add a payee'}

@@ -298,8 +298,8 @@ func TestCheckoutAcceptsEveryAdvertisedAmount(t *testing.T) {
 // of talyvor-lens, and no test here can — CI checks out this repository alone,
 // and a guard that reads a sibling repo only when it happens to be present is
 // inert in CI, which is where it would have to fire. The claim was INERT rather
-// than wrong on the day it was measured (lens a04310a
-// internal/billing/billing.go:47 is byte for byte the same three sizes), but the
+// than wrong on the day it was measured (at lens a04310a the size list in
+// internal/billing/billing.go is byte for byte the same three sizes), but the
 // list is documented ADDITIVE-ONLY in both repos, so the expected change is an
 // APPEND — and an append in Lens is silent everywhere: this BFF refuses the new
 // size before any dial and the screen never offers it.

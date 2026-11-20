@@ -18,6 +18,15 @@ package main
 //	POST /auth/unlock/challenge {}                            a challenge for the phone's key (Face ID)
 //	POST /auth/unlock        {passcode} | {the key's answer}  the phone app's lock opens
 //
+// B61.105 — Settings, Security, for a person's session (talyvor-lens B61.23, B61.24, B61.81, B61.104):
+//
+//	GET  /auth/passkey/keys                                   the person's sign-in keys
+//	POST /auth/passkey/keys/remove {key_id, passcode?}        one removed, proved by the passcode or the session's key
+//	                                                          sign-in; Lens refuses the last way in
+//	POST /auth/passcode/change {old_passcode, passcode}       the passcode changed
+//	POST /auth/phone/change-number {check, passcode}          the new number's check (start and finish for it) and the
+//	                                                          passcode: the person's number becomes the new one
+//
 // LENS HOLDS EVERY RULE. The codes, the tickets, the passcode's hash and its wrong tries, and the keys live in Lens, on
 // the provision secret; the BFF passes the caller's address for Lens's limits and keeps only an opaque check id that
 // names Lens's one-use ticket. A ticket alone signs in nobody who has a passcode (Lens refuses it), and the passcode is
@@ -70,6 +79,10 @@ const (
 	lockPath                     = "/auth/lock"
 	unlockChallengePath          = "/auth/unlock/challenge"
 	unlockPath                   = "/auth/unlock"
+	passkeyKeysPath              = "/auth/passkey/keys"
+	passkeyKeyRemovePath         = "/auth/passkey/keys/remove"
+	passcodeChangePath           = "/auth/passcode/change"
+	phoneChangeNumberPath        = "/auth/phone/change-number"
 
 	// phoneLockAfter is how long a phone session may be away, or quiet, before it locks.
 	phoneLockAfter = 2 * time.Minute
@@ -106,6 +119,7 @@ func (c phoneCheck) expiresAt() time.Time { return c.expires }
 type lensPerson struct {
 	ID       string `json:"id"`
 	Identity string `json:"identity"`
+	Phone    string `json:"phone"`
 }
 
 // identityOf is the identity POST /v1/provision is given for sub: a person who joined by phone is their own identity,
@@ -196,7 +210,8 @@ func (a *app) lensDoor(ctx context.Context, path string, body, out any) error {
 	}
 	var said map[string]any
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-		if json.Unmarshal(got, &said) == nil && said["reason"] != nil {
+		// B61.93 — a finding route's refusal is worded without a reason, and relayed the same.
+		if json.Unmarshal(got, &said) == nil && (said["reason"] != nil || findingWordsPath(path) && said["error"] != nil) {
 			return doorRefusal{status: resp.StatusCode, body: said, retryAfter: resp.Header.Get("Retry-After")}
 		}
 	}
@@ -234,8 +249,13 @@ func writeDoorFailure(w http.ResponseWriter, what string, err error) {
 // doorUnavailable answers for the door when it cannot work here: 404 with sign-in off, 503 without the provision
 // secret. True if it wrote a response.
 func (a *app) doorUnavailable(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
+	return a.doorUnavailableFor(w, r, http.MethodPost)
+}
+
+// doorUnavailableFor is doorUnavailable for a route answering method.
+func (a *app) doorUnavailableFor(w http.ResponseWriter, r *http.Request, method string) bool {
+	if r.Method != method {
+		methodNotAllowed(w, method)
 		return true
 	}
 	if a.cfg.authMode == authModeDisabled || a.auth == nil {
@@ -743,6 +763,116 @@ func (a *app) handlePasskeyRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, out)
+}
+
+// handlePasskeyKeys lists the person's sign-in keys, as Lens keeps them.
+func (a *app) handlePasskeyKeys(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailableFor(w, r, http.MethodGet) {
+		return
+	}
+	_, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var out map[string]any
+	if err := a.lensDoor(r.Context(), "/v1/auth/passkey/keys", map[string]string{"person_id": s.personID}, &out); err != nil {
+		writeDoorFailure(w, "key list", err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handlePasskeyKeyRemove removes one of the person's keys, proved as a new key is: the passcode, or the key sign-in
+// that opened this session. Lens refuses the last way in.
+func (a *app) handlePasskeyKeyRemove(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailable(w, r) {
+		return
+	}
+	sid, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		KeyID    string `json:"key_id"`
+		Passcode string `json:"passcode"`
+	}
+	if !a.decodeDoor(w, r, &in) {
+		return
+	}
+	body := map[string]any{"person_id": s.personID, "key_id": in.KeyID, "passcode": in.Passcode, "caller_address": waitlistClientIP(r)}
+	if in.Passcode == "" && s.keyTicket.ticket != "" && time.Now().Before(s.keyTicket.expires) {
+		body["key_ticket"] = s.keyTicket.ticket
+		a.auth.sessions.update(sid, func(cur session) session { cur.keyTicket = keyTicket{}; return cur })
+	}
+	if err := a.lensDoor(r.Context(), "/v1/auth/passkey/keys/remove", body, nil); err != nil {
+		writeDoorFailure(w, "key remove", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"removed": true})
+}
+
+// handlePasscodeChange changes the person's passcode: the old one, checked by Lens with its wrong tries, and the new.
+func (a *app) handlePasscodeChange(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailable(w, r) {
+		return
+	}
+	_, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		OldPasscode string `json:"old_passcode"`
+		Passcode    string `json:"passcode"`
+	}
+	if !a.decodeDoor(w, r, &in) {
+		return
+	}
+	if err := a.lensDoor(r.Context(), "/v1/auth/passcode/change", map[string]string{"person_id": s.personID,
+		"old_passcode": in.OldPasscode, "passcode": in.Passcode, "caller_address": waitlistClientIP(r)}, nil); err != nil {
+		writeDoorFailure(w, "passcode change", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"changed": true})
+}
+
+// handlePhoneChangeNumber moves the person onto a new number: its check, from the door's start and finish, and their
+// passcode. Every refusal leaves Lens's ticket unused, so the check is kept but for an ended ticket; the change spends it.
+func (a *app) handlePhoneChangeNumber(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailable(w, r) {
+		return
+	}
+	_, s, ok := a.personSession(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Check    string `json:"check"`
+		Passcode string `json:"passcode"`
+	}
+	if !a.decodeDoor(w, r, &in) {
+		return
+	}
+	c, ok := a.takeCheck(w, in.Check)
+	if !ok {
+		return
+	}
+	var out struct {
+		MoveID string     `json:"move_id"`
+		Person lensPerson `json:"person"`
+	}
+	err := a.lensDoor(r.Context(), "/v1/auth/phone/change-number", map[string]string{"person_id": s.personID,
+		"ticket": c.ticket, "passcode": in.Passcode, "caller_address": waitlistClientIP(r)}, &out)
+	var refused doorRefusal
+	if err == nil || errors.As(err, &refused) && refused.body["reason"] == "ticket_ended" {
+		a.auth.endCheck(in.Check, c)
+	}
+	if err != nil {
+		writeDoorFailure(w, "number change", err)
+		return
+	}
+	log.Printf("bff: person changed their number (person=%s move=%s)", s.personID, out.MoveID)
+	writeJSON(w, http.StatusOK, map[string]any{"changed": true, "phone": out.Person.Phone})
 }
 
 // lockableSession is the phone app's session of a person, or a refusal written: 401 with no session, 409 for any

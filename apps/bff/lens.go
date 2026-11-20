@@ -121,6 +121,13 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/auth/lock", a.handleLock)
 	a.mux.HandleFunc("/auth/unlock/challenge", a.doorPerIP(a.handleUnlockChallenge))
 	a.mux.HandleFunc("/auth/unlock", a.doorPerIP(a.handleUnlock))
+	// B61.93 — Settings, Privacy: the session's own person's Talyvor name and who can find them. See people_finding.go.
+	a.mux.HandleFunc("/api/people/finding", a.handlePeopleFinding)
+	// B61.105 — Settings, Security: the person's keys, their passcode and their number. See phone_signin.go.
+	a.mux.HandleFunc("/auth/passkey/keys", a.handlePasskeyKeys)
+	a.mux.HandleFunc("/auth/passkey/keys/remove", a.doorPerIP(a.handlePasskeyKeyRemove))
+	a.mux.HandleFunc("/auth/passcode/change", a.doorPerIP(a.handlePasscodeChange))
+	a.mux.HandleFunc("/auth/phone/change-number", a.doorPerIP(a.handlePhoneChangeNumber))
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY
 	// is set. See synthetic.go.
 	a.mux.HandleFunc("/auth/synthetic", a.handleSyntheticSignIn)
