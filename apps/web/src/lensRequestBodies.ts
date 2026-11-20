@@ -1332,6 +1332,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/money/instant-transfers", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensInstantSendBody",
   },
+  // B48.36 — Send USDC from an agent's crypto wallet (Lens B48.9): the quote and the send carry one body, and the owner's
+  // approve its test amount.
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/crypto-sends",
+    file: "apps/bff/crypto_sends.go",
+    kind: "anon-struct",
+    fn: "func cryptoSendBody(",
+    anchor: "var in struct {",
+    upstreamFile: "internal/economy/agent_crypto_sends.go",
+    upstreamAnchor: "type CryptoSendRequest struct {",
+    subject: "lensCryptoSendBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/crypto-sends/{sendID}/approve",
+    file: "apps/bff/crypto_sends.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleCryptoSendApprove(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/agent_crypto_sends_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/crypto-sends/{sendID}/"+answer, func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensCryptoSendApproveBody",
+  },
   // B59.52 — Wallets' top up, withdraw and convert, for the web and the phone (Lens B17.255 and B59.51).
   {
     route: "POST /v1/money/accounts/{id}/test-money",

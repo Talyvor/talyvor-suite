@@ -29,6 +29,7 @@ const ROWS = [
   ['loans', 'Loans', 'Loans'],
   ['credit', 'Credit line', 'Credit line'],
   ['wallet', 'Its wallet', 'Researcher’s wallet'],
+  ['crypto-send', 'Send USDC', 'Send USDC'],
   ['investing', 'Investing, simulated', 'Investing, simulated'],
 ] as const
 
@@ -86,8 +87,8 @@ describe('An agent’s money features, on its page (B57.21)', () => {
   })
 
   // B61.14 — the LXC credit wallet's rows (address, send, requests, transfers, recurring, pots, escrow, cash out, credit
-  // line) are the gateway area's: a workspace without it is left with its wallet alone.
-  it('has only Its wallet for a workspace without the gateway, credit and trading', async () => {
+  // line) are the gateway area's: a workspace without it is left with its wallet alone, and (B48.36) Send USDC from it.
+  it('has only Its wallet and Send USDC for a workspace without the gateway, credit and trading', async () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
     populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
     const { read, initial } = areaSource
@@ -96,7 +97,7 @@ describe('An agent’s money features, on its page (B57.21)', () => {
     try {
       await mount()
       const card = screen.getByTestId('agent-page-money')
-      expect(within(card).getAllByRole('button').map((b) => b.textContent)).toEqual(['Its wallet'])
+      expect(within(card).getAllByRole('button').map((b) => b.textContent)).toEqual(['Its wallet', 'Send USDC'])
       expect(screen.queryByTestId('money-row-pots')).toBeNull()
     } finally {
       areaSource.read = read

@@ -21,7 +21,7 @@ import {
 } from './AgentBank'
 import { approvalDeclineTo, approvalSheetTo, expiresText } from './ApprovalSheet'
 import { DownloadFailed } from './AgentStatement'
-import { agentBankApi, type Agent, type AgentApproval, type PaymentRequest } from './agentBankApi'
+import { agentBankApi, useAccount, type Agent, type AgentApproval, type PaymentRequest } from './agentBankApi'
 import { formatDecided } from './format'
 import { signApproval } from './passkeys'
 import { AccountStatement, accountTitle, useAccountMonthCsv } from './AccountStatement'
@@ -30,6 +30,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
 import { TaskSays } from './PaymentProof'
 import { ListFileDownload } from './ListFile'
+import { CryptoSendsWaiting } from './AgentCryptoSend'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
@@ -208,6 +209,7 @@ function ApprovalsPage() {
   const mandateRequests = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const keys = useKeys()
+  const { shows } = useAccount()
   const agents = book.data?.agents ?? []
   const agentOf = (id: string) => agents.find((x) => x.id === id)
   const nameOf = (id: string) => agentOf(id)?.name ?? 'Your agent'
@@ -376,6 +378,8 @@ function ApprovalsPage() {
               </>
             )}
           </Card>
+          {/* B48.36 — an agent's first send to a new address, for a workspace with the on-chain side. */}
+          {shows?.onChain ? <CryptoSendsWaiting agents={agents} /> : null}
           {list.isSuccess ? (
             <Card aria-label="Decided">
               <Title>Decided</Title>
