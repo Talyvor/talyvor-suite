@@ -8,6 +8,7 @@ import { Lxc } from './money'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
 import { CardDisputesAndRefunds, CardExport } from './CardDisputes'
+import { SingleUseCards } from './SingleUseCards'
 import { DESIGN_ATTR } from '../../pocketPending'
 
 // AgentCardPanel.tsx — B19.24: an agent's card on Agent Wallets. Lens (B19.12) issues an agent a virtual
@@ -221,6 +222,10 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
       ) : (
         <IssueCard agent={agent} />
       )}
+      {/* B28.49 — cards for one purchase each, whether or not the agent has its own card. */}
+      <div className="-mx-6 border-t border-line px-2">
+        <SingleUseCards agent={agent} />
+      </div>
     </div>
   )
 }
