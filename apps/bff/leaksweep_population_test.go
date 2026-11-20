@@ -650,9 +650,13 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	//
 	// THE TWO-HUNDRED-AND-FIRST IS B28.61'S, DELETE only: /api/money/low-balance/{id} removes a low-balance alert, read back
 	// through GET /api/money/low-balance, in the sweep's reach.
-	if len(methodOnly) > 201 {
+	//
+	// THE TWO-HUNDRED-AND-SECOND TO FOURTH ARE B52.36'S: DELETE /api/workspace/member-invites/{id} revokes an invite link,
+	// read back through GET /api/workspace/member-invites; DELETE /api/workspace/members/{id} removes a member, read back
+	// through GET /api/workspace/members; POST /api/invites/accept joins a workspace and holds nothing to read.
+	if len(methodOnly) > 204 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 201 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 204 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}
