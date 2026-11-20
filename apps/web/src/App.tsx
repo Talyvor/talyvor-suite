@@ -47,6 +47,7 @@ import { Keys } from './areas/lens/Keys'
 import { Setup } from './areas/lens/Setup'
 import { Spend } from './areas/lens/Spend'
 import { Members } from './areas/lens/Members'
+import { JoinWorkspace } from './areas/lens/JoinWorkspace'
 import { Settings, TeamOnly } from './areas/lens/Sharing'
 import { WELCOME_PATH, Welcome, WelcomeRedirect } from './areas/auth/Welcome'
 import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/HelpAndAccount'
@@ -261,6 +262,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/setup', title: 'Connect an agent', element: <Setup /> },
   { path: '/spend', title: 'Spend and routing', element: <Spend /> },
   { path: '/members', title: 'Members', element: <Members /> },
+  // B52.36 — a workspace's invite link opens here, signed in: Join adds the session's person to that workspace.
+  { path: '/join', title: 'Join a workspace', element: <JoinWorkspace /> },
   { path: '/settings', title: 'Settings', element: <Settings /> },
   // B57.43 — every passkey and the phone's key by name, added and removed, the waiting phone and Stop everything.
   { path: '/settings/devices', title: 'Approvals and devices', element: <DevicesScreen />, panel: '/settings' },

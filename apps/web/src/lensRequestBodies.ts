@@ -265,6 +265,17 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/workspaces/{wsID}/name", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensWorkspaceNameBody",
   },
+  // B52.36 — Settings → Members makes an invite link into the workspace.
+  {
+    route: "POST /v1/workspaces/{wsID}/member-invites",
+    file: "apps/bff/workspace_members.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"max_uses": in.MaxUses, "expires_at": in.ExpiresAt})',
+    upstreamFile: "cmd/lens/workspace_members_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/member-invites", keyOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMemberInviteBody",
+  },
   // B19.4 — the Agent Bank: creating an agent (B57.124: with its helper's colour; B61.102: or its picture), issuing it a key, moving LXC, its rules, paying.
   {
     route: "POST /v1/workspaces/{wsID}/agents",
@@ -1701,6 +1712,10 @@ export const NON_LENS_ANON_SITES = [
   {
     file: "phone_signin.go",
     what: "lensDoor (B61.25) marshals whichever body one of the phone door's handlers built and posts it to Lens's sign-in routes (/v1/auth/phone/*, /v1/auth/passcode/check, /v1/auth/passkey/*) on the provision secret. Those ARE key sets talyvor-lens binds — the request structs in cmd/lens/phone_signin_routes.go and passkey_signin_routes.go — and no row here asks about them yet: this site is exempt from the table because it is one relay for eight bodies, not because there is nothing to ask. A renamed key upstream reads as absent, and on every one of these routes absent is a refusal (no caller_address, no ticket, no person_id, a passcode needed), never a silent default; b6125_phone_signin_test.go drives each body against a stand-in of those structs.",
+  },
+  {
+    file: "workspace_members.go",
+    what: "provisionSecretPost (B52.36) marshals whichever body its caller built and posts it to Lens's member routes on the provision secret: {identity, token} to /v1/provision/invites/accept and {identity} to /v1/provision/workspaces. Those ARE key sets talyvor-lens binds — the inline structs in cmd/lens/workspace_members_handler.go mountMemberProvisionRoutes — and this site is exempt from the table because it is one relay for two bodies, not because there is nothing to ask. A renamed identity is Lens's 400 \"identity required\" and a renamed token is a 404, never a silent default; workspace_members_test.go reads both keys as Lens received them.",
   },
   {
     file: "session_seal.go",

@@ -103,6 +103,8 @@ const PINNED: Readonly<Record<string, string>> = {
   '/setup': 'Connect an agent',
   '/spend': 'Spend and routing',
   '/members': 'Members',
+  // B52.36 — a workspace's invite link opens here.
+  '/join': 'Join a workspace',
   '/operator': 'Operator',
   '/operator/tax': 'Tax',
   '/operator/compliance': 'Compliance',

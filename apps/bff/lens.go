@@ -488,6 +488,12 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/features/deletion-requests", a.requireTenant(a.handleDeletionRequests))
 	// B46.16 — the workspace's name, asked at sign-up and shown in the sidebar. See workspace_name.go.
 	a.mux.HandleFunc("/api/workspace/name", a.requireTenant(a.handleWorkspaceName))
+	// B52.36 — invite links into the workspace, who joined by one, and accepting one. See workspace_members.go.
+	a.mux.HandleFunc("/api/workspace/member-invites", a.requireTenant(a.handleMemberInvites))
+	a.mux.HandleFunc("/api/workspace/member-invites/{id}", a.requireTenant(a.handleMemberInvite))
+	a.mux.HandleFunc("/api/workspace/members", a.requireTenant(a.handleWorkspaceMembers))
+	a.mux.HandleFunc("/api/workspace/members/{id}", a.requireTenant(a.handleWorkspaceMember))
+	a.mux.HandleFunc("/api/invites/accept", a.requireSession(a.handleInviteAccept))
 	// B19.4 — the Agent Bank: agents, their balances and rules, payments between them, and the
 	// approvals inbox. See agent_bank.go.
 	a.mux.HandleFunc("/api/agents", a.requireTenant(a.handleAgents))

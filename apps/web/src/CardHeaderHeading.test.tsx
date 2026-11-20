@@ -179,6 +179,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/spend': 5,
   // 1 → 0 at B57.44: drawn in Pocket, a white card of members with no header.
   '/members': 0,
+  '/join': 0, // B52.36: drawn in Pocket
   '/operator': 0,
   '/operator/tax': 0,
   '/operator/compliance': 0,
