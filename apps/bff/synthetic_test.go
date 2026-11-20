@@ -90,7 +90,7 @@ func syntheticApp(t *testing.T, lens *syntheticLens, key string) *app {
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 		syntheticKey: key,
 	}
-	a := newApp(cfg, newSessionOnlyAuthenticator(cfg))
+	a := newApp(cfg, newAuthenticator(cfg))
 	a.cfg.webDist = t.TempDir()
 	return a
 }

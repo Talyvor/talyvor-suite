@@ -7,6 +7,7 @@ import { AgentBankError, agentBankApi, type KeyRecovery } from './agentBankApi'
 import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from './AgentBank'
 import { getAKeyBack, makeNewRecoveryCode, passkeysSupported } from './passkeys'
 import { forgetRecoveryCode, onRecoveryCode, recoveryCodeShown } from './recoveryCodeStore'
+import { signInAgain, signInAgainHref } from '../auth/doorApi'
 
 // KeyRecovery.tsx — B55.54: the web's half of Lens's B55.48. A workspace's first key comes with a recovery code, shown
 // once; Approvals and devices makes a new one, signed as any key change is. A workspace whose every key was removed
@@ -36,8 +37,8 @@ function readyWords(iso: string): { date: string; time: string } {
 }
 
 /**
- * What went wrong, in words; a sign-in too old for a recovery says so with the click that fixes it. The click asks
- * for a real sign-in (reauth=1), not the one the identity provider remembers (B50.49).
+ * What went wrong, in words; a sign-in too old for a recovery says so with the click that fixes it. The click ends
+ * this session and opens the door, so the next one is a real sign-in (B50.49, B61.29).
  */
 function Refused({ error, fallback }: { error: unknown; fallback: string }) {
   if (error instanceof AgentBankError && error.sentence === SIGN_IN_AGAIN) {
@@ -45,7 +46,14 @@ function Refused({ error, fallback }: { error: unknown; fallback: string }) {
     return (
       <p role="alert" className="text-body text-ink">
         {SIGN_IN_AGAIN}{' '}
-        <a className={inlineLink} href={`/auth/login?reauth=1&return_to=${encodeURIComponent(returnTo)}`}>
+        <a
+          className={inlineLink}
+          href={signInAgainHref(returnTo)}
+          onClick={(e) => {
+            e.preventDefault()
+            void signInAgain(returnTo)
+          }}
+        >
           Sign in again
         </a>
       </p>

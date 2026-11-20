@@ -100,7 +100,7 @@ func checkoutApp(t *testing.T, up *checkoutUpstream) (*app, *http.Cookie) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "bill-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()
@@ -454,7 +454,7 @@ func TestTopUpOptionsAssumesOnWhenTheProbeIsInconclusive(t *testing.T) {
 			authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 			publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 		}
-		auth := newSessionOnlyAuthenticator(cfg)
+		auth := newAuthenticator(cfg)
 		seedProvisionedSession(auth, "bill-sid", "u1", "ng@example.com", "u-test-workspace")
 		a := newApp(cfg, auth)
 		a.cfg.webDist = t.TempDir()
@@ -545,7 +545,7 @@ func TestCheckoutSurfacesUnreachableLens(t *testing.T) {
 		authMode: authModeOIDC, oidcIssuer: "https://idp.example.com",
 		publicBaseURL: "https://app.talyvor.com", sessionTTL: time.Hour,
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "bill-sid", "u1", "ng@example.com", "u-test-workspace")
 	a := newApp(cfg, auth)
 	a.cfg.webDist = t.TempDir()

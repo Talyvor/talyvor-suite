@@ -224,7 +224,7 @@ func productApp(t *testing.T, track, docs *captureUpstream) (*app, *http.Cookie)
 			cfg.trackGatewaySecret = testTrackSecret
 		}
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "prod-sid", "user-123", "ng@example.com", "u-test-workspace")
 	if track != nil || docs != nil {
 		// The session's Track workspace, as a completed login leaves it. DOCS NEEDS IT TOO now:

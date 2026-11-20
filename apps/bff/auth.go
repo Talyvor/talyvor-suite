@@ -1,39 +1,23 @@
 package main
 
-// OIDC authentication for the BFF: authorization code + PKCE against ANY
-// standards-compliant provider (Keycloak, Authentik, Dex, Clerk acting as an
-// OIDC IdP, …), configured entirely by environment. The product is
-// self-hostable, so no hosted-SaaS dependency is baked into the code — a
-// self-hoster points OIDC_ISSUER at their own IdP and nothing else changes.
+// Sessions for the BFF. People join and sign in by phone number, a texted code, a passcode and a passkey
+// (phone_signin.go, B61.25); Google sign-in is gone (B61.29). The Connect grants' own OAuth server (oauth.go) is how
+// assistants connect, not how people sign in, and stays.
 //
-// The browser ends up holding exactly one thing: an opaque __Host- session
-// cookie. ID tokens, access tokens, the client secret and the Lens workspace
-// key all live and die server-side.
-//
-// Identity → workspace mapping, this increment: every identity the allowlist
-// admits uses THE one configured workspace credential (LENS_WORKSPACE_KEY /
-// LENS_WORKSPACE_ID) — one user, one workspace. Multi-workspace is a mapping
-// (OIDC sub → workspace credential) that belongs in a store the BFF consults
-// per-request, with per-workspace JWTs minted via Lens's admin token endpoint;
-// the session already carries the stable `sub` that mapping will key on.
+// The browser ends up holding exactly one thing: an opaque __Host- session cookie; the phone app, a Bearer token.
+// The Lens workspace token lives and dies server-side.
 
 import (
 	"context"
 	"crypto/rand"
 	_ "embed"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/coreos/go-oidc/v3/oidc"
-	"golang.org/x/oauth2"
 )
 
 const (
@@ -42,11 +26,6 @@ const (
 	// sibling subdomain (anything.talyvor.com) cannot plant one that
 	// app.talyvor.com would trust. setCookie encodes those attributes once.
 	sessionCookieName = "__Host-talyvor_session"
-	pendingCookieName = "__Host-talyvor_authstate"
-
-	// pendingTTL bounds one login round-trip, not a session: login page → IdP →
-	// callback. Generous for a human typing a password; useless to an attacker.
-	pendingTTL = 10 * time.Minute
 )
 
 // session is a server-side login: the browser holds only the opaque id.
@@ -79,12 +58,11 @@ type session struct {
 	synthetic bool
 
 	// signedInAt is when this person signed in (B55.54): getting a key back needs a sign-in within the last 10
-	// minutes, so it goes to Lens with the recovery routes (key_recovery.go). It is the identity provider's auth_time
-	// (B50.49), never when this session was made: a browser still signed in at the provider gets a new session
-	// without anyone signing in. Zero when the provider did not say, and then no recovery.
+	// minutes, so it goes to Lens with the recovery routes (key_recovery.go). It is when the passcode or the passkey
+	// opened this session (phone_signin.go). Zero for a session no one signed in to, and then no recovery.
 	signedInAt time.Time
 
-	// B61.25 (phone_signin.go). personID is the person Lens knows, empty for a Google sign-in that has not moved;
+	// B61.25 (phone_signin.go). personID is the person Lens knows;
 	// joining is a sign-up session with no account yet, which may only finish sign-up. phone is the phone app's
 	// session, whose lock is the server's: locked, and lastSeen and awayAt, which lock it after phoneLockAfter.
 	personID string
@@ -98,19 +76,6 @@ type session struct {
 }
 
 func (s session) expiresAt() time.Time { return s.expires }
-
-// pendingLogin is the state of one in-flight OIDC flow, bound to one browser via
-// the pending cookie. Single-use: consumed on the first callback that presents it.
-type pendingLogin struct {
-	state    string        // CSRF token, round-trips via the IdP
-	verifier string        // PKCE code verifier; its S256 hash went to the IdP
-	nonce    string        // binds the id_token to this flow
-	returnTo string        // sanitised same-app path to land on
-	signup   signupAccount // B59.8: sign-up's answers, empty on a sign-in
-	expires  time.Time
-}
-
-func (p pendingLogin) expiresAt() time.Time { return p.expires }
 
 type expirable interface{ expiresAt() time.Time }
 
@@ -230,18 +195,11 @@ func (s *ttlMap[T]) matching(keep func(T) bool) []T {
 	return out
 }
 
-// authenticator owns the OIDC round-trip and both stores.
+// authenticator owns the sign-in stores: sessions, and the phone checks waiting for their passcode. People join and
+// sign in by phone number, passcode and passkey (phone_signin.go); Google sign-in is gone (B61.29).
 type authenticator struct {
 	cfg      config
-	verifier *oidc.IDTokenVerifier
-	// mobileVerifier checks the phone app's ID tokens (mobile_session.go). Nil while
-	// OIDC_MOBILE_CLIENT_IDS is empty, and then POST /auth/mobile/session refuses.
-	mobileVerifier *oidc.IDTokenVerifier
-	spentIDTokens  *ttlMap[spentIDToken]
-	oauth          oauth2.Config
-	httpClient     *http.Client
-	pending        *ttlMap[pendingLogin]
-	sessions       *ttlMap[session]
+	sessions *ttlMap[session]
 	// phoneChecks are right codes waiting for their passcode (phone_signin.go, B61.25).
 	phoneChecks *ttlMap[phoneCheck]
 	// checkSealer makes a check id carry its check, so a restart keeps a confirmed number (B61.115).
@@ -252,41 +210,13 @@ type authenticator struct {
 	sealer *sessionSealer
 }
 
-// newAuthenticator discovers the issuer and builds the OIDC client. It is called
-// at boot in oidc mode, so an unreachable/misconfigured IdP refuses to start.
-// ctx should be long-lived (main passes Background): go-oidc retains it for
-// later JWKS refreshes, and per-request timeouts come from httpClient instead.
-func newAuthenticator(ctx context.Context, cfg config) (*authenticator, error) {
-	a := newSessionOnlyAuthenticator(cfg)
-	a.httpClient = &http.Client{Timeout: 10 * time.Second}
-	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, a.httpClient), cfg.oidcIssuer)
-	if err != nil {
-		return nil, fmt.Errorf("OIDC discovery against %s: %w", cfg.oidcIssuer, err)
-	}
-	a.verifier = provider.Verifier(&oidc.Config{ClientID: cfg.oidcClientID})
-	if len(cfg.oidcMobileClientIDs) > 0 {
-		// go-oidc checks one audience; the phone has one per platform, so mobileAudienceOK checks them.
-		a.mobileVerifier = provider.Verifier(&oidc.Config{SkipClientIDCheck: true})
-	}
-	a.oauth = oauth2.Config{
-		ClientID:     cfg.oidcClientID,
-		ClientSecret: cfg.oidcClientSecret,
-		Endpoint:     provider.Endpoint(),
-		RedirectURL:  cfg.publicBaseURL + "/auth/callback",
-		Scopes:       []string{oidc.ScopeOpenID, "email", "profile"},
-	}
-	return a, nil
-}
-
-// newSessionOnlyAuthenticator builds an authenticator with live stores but no
-// provider — session middleware works, the login machinery answers 503. Used
-// directly by tests; production always goes through newAuthenticator.
-func newSessionOnlyAuthenticator(cfg config) *authenticator {
-	return &authenticator{cfg: cfg, pending: newTTLMap[pendingLogin](), sessions: newTTLMap[session](),
-		spentIDTokens: newTTLMap[spentIDToken](),
-		phoneChecks:   newTTLMap[phoneCheck](),
-		checkSealer:   newCheckSealer(cfg.provisionSecret),
-		sealer:        newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
+// newAuthenticator builds the stores. It reaches nothing: OIDC_ISSUER is only the namespace the identities of people
+// who first signed in with Google were made under (identityOf), and nothing is fetched from it.
+func newAuthenticator(cfg config) *authenticator {
+	return &authenticator{cfg: cfg, sessions: newTTLMap[session](),
+		phoneChecks: newTTLMap[phoneCheck](),
+		checkSealer: newCheckSealer(cfg.provisionSecret),
+		sealer:      newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
 }
 
 // session returns the session stored under sid, restoring it from its seal when this process has
@@ -317,7 +247,7 @@ func (auth *authenticator) endSession(sid string) {
 
 // sessionAndIDFrom is sessionFrom plus the session id, for callers that must write the session
 // back (the pooling choice).
-// A Bearer token naming a session (the phone app, mobile_session.go) wins over the cookie; any other
+// A Bearer token naming a session (the phone app, phone_signin.go) wins over the cookie; any other
 // Bearer (an assistant's OAuth token, oauth.go) leaves the cookie to decide.
 func (auth *authenticator) sessionAndIDFrom(r *http.Request) (string, session, bool) {
 	if sid, s, ok := auth.bearerSession(r); ok {
@@ -356,26 +286,11 @@ func randomToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// sanitizeReturnTo confines return_to to a same-app path: it must be absolute
-// within the app ("/…") and must not be scheme-relative ("//host") or contain a
-// backslash (browsers normalise "\" to "/" in URLs, which would reopen the
-// scheme-relative hole). Anything else lands on "/". The login endpoint must
-// never be usable as an open redirector.
-func sanitizeReturnTo(raw string) string {
-	if raw == "" || !strings.HasPrefix(raw, "/") ||
-		strings.HasPrefix(raw, "//") || strings.Contains(raw, "\\") ||
-		// Browsers drop tab/CR/LF from a Location, so "/\t/evil.example" lands on //evil.example.
-		strings.IndexFunc(raw, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
-		return "/"
-	}
-	return raw
-}
-
 // setCookie writes a __Host--compatible cookie: Secure, HttpOnly, SameSite=Lax,
-// Path=/, no Domain. Lax (not Strict) because the OIDC callback arrives as a
-// top-level cross-site navigation from the IdP — Strict would strip the state
-// cookie exactly when it is needed; Lax still withholds cookies from cross-site
-// subresources and POSTs, which is what CSRF needs.
+// Path=/, no Domain. Lax (not Strict) because a link to the app opened from an
+// email or another site is a top-level cross-site navigation, and Strict would
+// arrive signed out; Lax still withholds cookies from cross-site subresources
+// and POSTs, which is what CSRF needs.
 func setCookie(w http.ResponseWriter, name, value string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
@@ -401,269 +316,35 @@ func (a *app) handleAuthUnavailable(w http.ResponseWriter) bool {
 		})
 		return true
 	}
-	if a.auth == nil || a.auth.verifier == nil {
+	if a.auth == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "authentication misconfigured"})
 		return true
 	}
 	return false
 }
 
-// handleLogin starts one flow: mint state+nonce+PKCE verifier, park them
-// server-side keyed by a random pending id, hand the browser that id in a
-// short-lived __Host- cookie, and send it to the provider.
-func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w, http.MethodGet)
-		return
-	}
-	if a.googleOff(w) || a.handleAuthUnavailable(w) {
-		return
-	}
-	q := r.URL.Query()
-	signup, err := parseSignupAccount(q.Get("account_type"), q.Get("money_kind"), q.Get("name"), q.Get("country"), q.Get("registration_number"))
-	if err == nil && signup != (signupAccount{}) && signupFromAnotherSite(r) {
-		err = errors.New("start sign-up at /signup")
-	}
-	// B61.8: for someone already signed in, sign-up answers open ANOTHER account, so only our own /signup page
-	// (same-origin) may carry them. A link opened from an email or a chat app ("none"), or a browser that says nothing,
-	// signs the person in to the account they had; opening another from anywhere else is POST /api/accounts.
-	if _, live := a.auth.sessionFrom(r); live && r.Header.Get("Sec-Fetch-Site") != "same-origin" {
-		signup = signupAccount{}
-	}
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	state, err1 := randomToken()
-	nonce, err2 := randomToken()
-	pendingID, err3 := randomToken()
-	if err1 != nil || err2 != nil || err3 != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
-		return
-	}
-	verifier := oauth2.GenerateVerifier()
-	a.auth.pending.put(pendingID, pendingLogin{
-		state:    state,
-		verifier: verifier,
-		nonce:    nonce,
-		returnTo: sanitizeReturnTo(q.Get("return_to")),
-		signup:   signup,
-		expires:  time.Now().Add(pendingTTL),
-	})
-	setCookie(w, pendingCookieName, pendingID, int(pendingTTL.Seconds()))
-	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce)}
-	// The denied page's "sign in with a different account" restart. Gated to this
-	// ONE literal — arbitrary client input never reaches the IdP URL. Standard
-	// OIDC prompt value; providers that don't support it ignore it harmlessly.
-	if q.Get("prompt") == "select_account" {
-		opts = append(opts, oauth2.SetAuthURLParam("prompt", "select_account"))
-	}
-	// B50.49: key recovery's "Sign in again" asks for a real sign-in, not the provider's remembered one, so the
-	// id_token's auth_time is now.
-	if q.Get("reauth") == "1" {
-		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
-	}
-	http.Redirect(w, r, a.auth.oauth.AuthCodeURL(state, opts...), http.StatusFound)
-}
-
-// handleCallback finishes the flow: consume the pending login (single use),
-// check state, exchange the code (with the PKCE verifier), verify the id_token
-// (signature, issuer, audience, expiry — then nonce), authorise the identity
-// against the allowlist, and only then create a session.
-func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w, http.MethodGet)
-		return
-	}
-	if a.googleOff(w) || a.handleAuthUnavailable(w) {
-		return
-	}
-
-	ck, err := r.Cookie(pendingCookieName)
-	if err != nil || ck.Value == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "no login in progress in this browser — start at /auth/login"})
-		return
-	}
-	// Whatever happens from here, this flow is spent: the pending record is
-	// consumed and the browser's state cookie cleared. A replayed callback dies
-	// on the next line no matter how it went the first time.
-	p, ok := a.auth.pending.take(ck.Value)
-	clearCookie(w, pendingCookieName)
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "login flow expired or already used — start again at /auth/login"})
-		return
-	}
-
-	q := r.URL.Query()
-	if e := q.Get("error"); e != "" {
-		// The provider itself refused (user cancelled, policy, …). Surface it.
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "identity provider refused: " + e, "description": q.Get("error_description")})
-		return
-	}
-	if q.Get("state") == "" || q.Get("state") != p.state {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "state mismatch — possible cross-site forgery; start again at /auth/login"})
-		return
-	}
-	code := q.Get("code")
-	if code == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "identity provider sent no code"})
-		return
-	}
-
-	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, a.auth.httpClient)
-	tok, err := a.auth.oauth.Exchange(ctx, code, oauth2.VerifierOption(p.verifier))
-	if err != nil {
-		log.Printf("bff: oidc code exchange failed: %v", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error": "code exchange with the identity provider failed"})
-		return
-	}
-	rawID, ok := tok.Extra("id_token").(string)
-	if !ok || rawID == "" {
-		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error": "identity provider returned no id_token"})
-		return
-	}
-	idt, err := a.auth.verifier.Verify(ctx, rawID)
-	if err != nil {
-		log.Printf("bff: id_token rejected: %v", err)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id_token failed verification"})
-		return
-	}
-	if idt.Nonce != p.nonce {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id_token nonce mismatch"})
-		return
-	}
-
-	var claims struct {
-		Email         string `json:"email"`
-		EmailVerified *bool  `json:"email_verified"`
-	}
-	if err := idt.Claims(&claims); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id_token claims unreadable"})
-		return
-	}
-	if reason, allowed := authorizeIdentity(a.cfg.allowedEmails, idt.Subject, claims.Email, claims.EmailVerified); !allowed {
-		// The precise cause goes to the LOG ONLY. The human gets the uniform
-		// denied page: their identity echoed (authentication worked), the
-		// refusal, the way forward — and nothing that distinguishes WHY.
-		//
-		// THE LOG LINE IS AN OPERATOR SURFACE and its job is to make admitting the
-		// person a copy-paste. So it leads with the ADDRESS: OIDC_ALLOWED_EMAILS is
-		// keyed on email, and an operator holding only `sub=1180024…` has nothing
-		// they can act on — they would have to decode an id_token they never see to
-		// find the one string the variable actually takes. It was the subject alone
-		// before, for every refusal cause; the address only ever appeared as an
-		// accident of one reason string's wording, and the two causes that name no
-		// address (unverified email, absent claim) named nothing at all.
-		//
-		// ABSENT IS ITS OWN WORD. An identity with no email claim must not render as
-		// `email=` — a blank field reads as a display bug, and "no address was sent"
-		// and "the address is not on the list" are different problems with different
-		// fixes. emailForLog says which one it is.
-		//
-		// THE REMEDY TRAVELS WITH IT, because the fix is not only "edit the variable":
-		// config is read once at boot, so an operator who adds the address and waits
-		// watches nothing happen. A line that names the variable but not the restart
-		// sends someone to do half a fix and conclude the product is broken.
-		log.Printf("bff: login DENIED — email=%s sub=%s reason=%s | to admit them, add that "+
-			"address to OIDC_ALLOWED_EMAILS and RESTART the BFF (config is read at boot); "+
-			"or set OIDC_ALLOWED_EMAILS=* to admit every identity this issuer authenticates",
-			emailForLog(claims.Email), idt.Subject, reason)
-		writeDeniedPage(w, claims.Email, emailUnverified(claims.Email, claims.EmailVerified))
-		return
-	}
-
-	// B61.8: a sign-up by someone this browser is already signed in as opens another account (accounts.go).
-	_, signedIn, _ := a.auth.sessionAndIDFrom(r)
-	another := signedIn.sub == idt.Subject && !signedIn.synthetic
-	// Rotate: any previous session this browser presented dies with the new
-	// login — one live session per browser, and no fixation via a stale id.
-	if old, err := r.Cookie(sessionCookieName); err == nil {
-		a.auth.endSession(old.Value)
-	}
-	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email, p.signup, another)
-	if perr != nil {
-		writeProvisionFailed(w, perr)
-		return
-	}
-	s.signedInAt = authTimeOf(idt)
-	if err := a.startSession(w, r, s, int(a.cfg.sessionTTL.Seconds())); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
-		return
-	}
-	log.Printf("bff: session created for sub=%s", idt.Subject)
-	// nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- returnTo passed sanitizeReturnTo at login: a same-app path, never a host
-	http.Redirect(w, r, p.returnTo, http.StatusFound)
-}
-
-// provisionSession turns an identity the allowlist admitted into a session, not yet stored: the
-// browser callback and the phone sign-in (mobile_session.go) both come through here, with sign-up's answers (B59.8).
-// another is a sign-up by someone already signed in as this identity: it opens another account (B61.8) rather than
-// answering the one they already have.
-func (a *app) provisionSession(ctx context.Context, sub, email string, signup signupAccount, another bool) (session, error) {
-	// PROVISION: turn this identity into a tenant before the session exists. The workspace id is
-	// derived by LENS from the identity we present — the BFF never names a workspace, so no bug
-	// here can aim at another tenant. A provisioning failure is a hard stop: falling back to a
-	// shared workspace is the exact state this replaced, so there is no fallback path at all.
-	var ask provisionAsk
-	if another && signup != (signupAccount{}) {
-		ask.mode = "open"
-	}
-	prov, perr := a.provisionAs(ctx, a.identityOf(sub), ask, nil, signup)
-	if perr != nil {
-		log.Printf("bff: provisioning FAILED for sub=%s: %s", sub, redactSecret(perr.Error()))
-		return session{}, perr
-	}
-	// TRACK: bootstrap this identity's Track workspace too. Deliberately NOT a hard stop,
-	// unlike the Lens provisioning above — Lens is the tenancy root, Track is one product of
-	// several, and a Track blip taking out Lens access is worse than no Track workspace. An
-	// empty result is stored as empty and re-asked on first use, never treated as settled.
+// signInProducts readies the person's Track workspace and asks Docs to read its roster, at sign-in (landPerson,
+// phone_signin.go), so a new person's first Docs write is not refused (FULL-STACK-DEPLOY.md STEP 3a-bis). Google's
+// callback did this until B61.29 removed it. NEITHER IS A HARD STOP: Lens is the tenancy root, and a Track or Docs
+// blip must not fail the sign-in. An empty Track workspace is kept as empty and re-asked on first use
+// (track_tenant.go), and Docs' own sweep is the backstop (docs_membersync.go). Nothing about Docs is kept.
+func (a *app) signInProducts(ctx context.Context, sub, email string) string {
 	trackWS, terr := a.bootstrapTrackWorkspace(ctx, strings.ToLower(email), sub, a.cfg.oidcIssuer)
 	if terr != nil && !errors.Is(terr, errTrackNotConfigured) {
-		log.Printf("bff: track bootstrap FAILED for sub=%s (login continues): %s",
-			sub, redactSecret(terr.Error()))
+		log.Printf("bff: track bootstrap FAILED for sub=%s (sign-in continues): %s", sub, redactSecret(terr.Error()))
 	}
-	// DOCS: ask Docs to read this workspace's roster from Track NOW, rather than on its next
-	// periodic sweep. Without this, a person who signs up and goes straight to Docs finds their
-	// own workspace refusing writes for as long as the sweep interval — the workspace exists and
-	// Docs can see it, but Docs has not read the membership yet.
-	//
-	// BEST-EFFORT, and even less negotiable than the Track bootstrap above: Docs' own sweep is
-	// the backstop, so a failure here costs minutes of latency on ONE product, and failing the
-	// login over that would take out Lens, billing, keys and Track as well. Nothing is recorded
-	// in the session — see docs_membersync.go, rule 2.
 	if trackWS != "" {
 		if derr := a.nudgeDocsMemberSync(ctx, trackWS); derr != nil && !errors.Is(derr, errDocsNotConfigured) {
-			log.Printf("bff: docs member-sync nudge failed for sub=%s (login continues; Docs' own "+
+			log.Printf("bff: docs member-sync nudge failed for sub=%s (sign-in continues; Docs' own "+
 				"sweep will reconcile within its interval): %s", sub, redactSecret(derr.Error()))
 		}
 	}
-
-	return session{
-		sub:     sub,
-		email:   strings.ToLower(email),
-		expires: time.Now().Add(a.cfg.sessionTTL),
-
-		workspaceID:  prov.WorkspaceID,
-		lensToken:    prov.Token,
-		lensTokenExp: parseExpiry(prov.ExpiresAt),
-
-		trackWorkspaceID: trackWS,
-
-		cachePoolable: prov.CachePoolable,
-		// Ask the pooling question exactly once: on the login that CREATED the workspace.
-		needsPoolingChoice: prov.Created,
-	}, nil
+	return trackWS
 }
 
 // startSession stores a new session and hands the browser its id. It is the one place a whole
-// session is stored (session_clobber_test.go): the OIDC callback and the synthetic sign-in
-// (synthetic.go) both create theirs here. Any session this browser already held dies with it.
+// session is stored (session_clobber_test.go): the synthetic sign-in (synthetic.go) creates its
+// session here. Any session this browser already held dies with it.
 func (a *app) startSession(w http.ResponseWriter, r *http.Request, s session, maxAge int) error {
 	if old, err := r.Cookie(sessionCookieName); err == nil {
 		a.auth.endSession(old.Value)
@@ -674,29 +355,6 @@ func (a *app) startSession(w http.ResponseWriter, r *http.Request, s session, ma
 	}
 	setCookie(w, sessionCookieName, sid, maxAge)
 	return nil
-}
-
-// authTimeOf is when the person signed in at the identity provider: the verified id_token's auth_time, never later
-// than now. Zero when the token does not carry one.
-func authTimeOf(idt *oidc.IDToken) time.Time {
-	var c struct {
-		AuthTime json.Number `json:"auth_time"`
-	}
-	if idt.Claims(&c) != nil {
-		return time.Time{}
-	}
-	secs, err := c.AuthTime.Int64()
-	if err != nil || secs <= 0 {
-		return time.Time{}
-	}
-	return minTime(time.Unix(secs, 0), time.Now())
-}
-
-func minTime(a, b time.Time) time.Time {
-	if a.Before(b) {
-		return a
-	}
-	return b
 }
 
 // storeSession stores a new session and returns its id. A cookie or a phone's bearer token carries it.
@@ -715,81 +373,6 @@ func (auth *authenticator) storeSession(s session) (string, error) {
 	return sid, nil
 }
 
-// deniedPageTmpl is the ENTIRE first impression for an authenticated-but-unauthorised identity —
-// the second trial user's whole experience when the operator forgot to extend the allowlist. It is
-// served BY THE BFF, mid-redirect from the IdP, because no alternative works without weakening
-// something: the SPA cannot know WHO was refused (no session exists — that is the security
-// property), a query-string echo would put the identity in histories and logs, and a cookie is
-// exactly what a refusal must not set. Self-contained (inline style, no assets): it must render
-// even when the web bundle was never built.
-//
-// SAYS, in order: you are signed in as <identity> (the login WORKED; this is authorisation, not a
-// broken password) → this workspace has not granted you access → contact whoever runs it (there is
-// no self-service path; pretending otherwise would be worse) → sign in with a different account.
-//
-// LEAKS NOTHING: no allowlist name, size, membership, or refusal cause. Not-on-list and an empty
-// list render this same page, so a refused stranger learns only that they were refused. An email
-// the provider has not confirmed gets its one sentence instead (B58.9) — that check runs before the
-// list is read, so the listed and the unlisted see the same page. The precise cause stays in the
-// server log.
-//
-// IN POCKET (B57.49): the sign-in pages' auth card — a white card with its large shadow on the cloud page, ink words
-// and one ink pill action, Figtree — with the logo's small drawing at the top (B57.79), the kit's files themselves,
-// embedded, never redrawn. Light is primary, as Pocket's is; a dark-scheme browser gets Pocket's dark tokens and the
-// on-dark logo.
-var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
-<html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<meta name="theme-color" content="#F3F4F6">
-<title>Access not granted | Talyvor</title>
-<style>
-  :root { color-scheme: light dark;
-          --pk-page: #FFFFFF; --pk-cloud: #F3F4F6; --pk-ink: #111216; --pk-ink-2: #4A5061;
-          --pk-primary: #111216; --pk-on-primary: #FFFFFF; --pk-control: #7A8192;
-          --pk-shadow-lg: 0 2px 6px rgba(17,18,22,.08), 0 24px 60px rgba(17,18,22,.14); }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center;
-         font: 15px/1.45 "Figtree", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased;
-         background: var(--pk-cloud); color: var(--pk-ink); }
-  main { box-sizing: border-box; width: calc(100% - 2.5rem); max-width: 28rem; padding: 32px;
-         display: grid; gap: 14px; justify-items: start;
-         background: var(--pk-page); border-radius: 28px; box-shadow: var(--pk-shadow-lg); }
-  .logo-dark { display: none; }
-  .logo-dark svg, .logo-light svg { display: block; width: 144px; height: auto; margin: 9px; }
-  h1 { font-family: "Bricolage Grotesque", "Figtree", "Helvetica Neue", Arial, sans-serif;
-       font-size: 24px; line-height: 1.2; font-weight: 750; letter-spacing: -0.015em; margin: 16px 0 0; }
-  p { margin: 0; }
-  .muted { color: var(--pk-ink-2); }
-  strong { font-weight: 650; overflow-wrap: anywhere; }
-  a.switch { justify-self: stretch; display: flex; align-items: center; justify-content: center; height: 54px;
-             padding: 0 26px; border-radius: 999px; background: var(--pk-primary); color: var(--pk-on-primary);
-             font: 650 17px/1 "Figtree", "Helvetica Neue", Arial, sans-serif; text-decoration: none; }
-  a.switch:focus-visible { outline: 2px solid var(--pk-ink); outline-offset: 3px; }
-  /* last, so the dark scheme wins the cascade */
-  @media (prefers-color-scheme: dark) {
-    :root { --pk-page: #0F1013; --pk-cloud: #181A1F; --pk-ink: #F2F3F5; --pk-ink-2: #A6ACB9;
-            --pk-primary: #F2F3F5; --pk-on-primary: #111216; --pk-control: #6E7482;
-            --pk-shadow-lg: 0 2px 6px rgba(0,0,0,.5), 0 24px 60px rgba(0,0,0,.55); }
-    .logo-light { display: none; }
-    .logo-dark { display: block; }
-  }
-</style>
-<main>
-  <div class="logo-light">{{.LogoLight}}</div>
-  <div class="logo-dark">{{.LogoDark}}</div>
-  <h1>Access not granted</h1>
-  {{if .Email}}<p>You are signed in as <strong>{{.Email}}</strong>. The sign-in itself worked.</p>
-  {{else}}<p>Your sign-in itself worked.</p>{{end}}
-  {{if .Unverified}}<p>{{.Unverified}}</p>
-  {{else}}<p>This workspace has not granted you access.</p>
-  <p class="muted">If you believe you should have access, contact the person who runs this
-  workspace and ask them to add you. There is no self-service signup.</p>{{end}}
-  <a class="switch" href="/auth/login?prompt=select_account">Sign in with a different account</a>
-</main>
-</html>
-`))
-
 // The logo's small drawing for this page and the OAuth consent page (oauth.go), both versions, copied byte for byte
 // from brand/logo/svg (their ids differ, so both can sit in one page). Embedded, so neither page needs an asset request.
 var (
@@ -799,98 +382,16 @@ var (
 	logoLight string
 )
 
-// writeDeniedPage renders the refusal. 403 stays 403 — the page is for the human, the status for
-// the tooling. No session was created and none of this response's headers may set one (the only
-// Set-Cookie a refusal carries is the pending-flow CLEAR the callback already wrote). no-store:
-// a shared machine must not cache someone else's identity echo.
-func writeDeniedPage(w http.ResponseWriter, email string, unverified bool) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusForbidden)
-	data := struct {
-		Email               string
-		Unverified          string
-		LogoDark, LogoLight template.HTML
-	}{Email: email, LogoDark: template.HTML(logoDark), LogoLight: template.HTML(logoLight)}
-	if unverified {
-		data.Unverified = unverifiedEmailSentence
-	} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
-	if err := deniedPageTmpl.Execute(w, data); err != nil {
-		log.Printf("bff: denied page render: %v", err)
-	}
-}
-
 // signupIsOpen reports whether a person NOBODY HAS ADDED can complete signup on this
 // deployment — i.e. whether the allowlist delegates wholly to the issuer.
 //
-// It is the same predicate authorizeIdentity gates on, and authorizeIdentity calls it
-// rather than repeating it. That is deliberate: this one bit is now also rendered as
+// This one bit is rendered as
 // PROSE on the marketing and signup pages ("anyone can start" vs "access is by
 // invitation"), and a page whose sentence is computed from a second, parallel copy of
 // the rule is a page that will eventually contradict the door it describes. One
 // predicate, two readers.
 func signupIsOpen(allowed []string) bool {
 	return len(allowed) == 1 && allowed[0] == "*"
-}
-
-// emailForLog renders an address for the operator-facing refusal log, with an explicit
-// WORD for absence. A missing claim must never print as an empty field: `email=` reads
-// as a broken log line, and it collapses "the issuer sent no address" into the same
-// visual as "the address is not listed" — two different faults with two different fixes.
-func emailForLog(email string) string {
-	if strings.TrimSpace(email) == "" {
-		return "(none — the id_token carried no email claim)"
-	}
-	return email
-}
-
-// unverifiedEmailSentence is the whole refusal a person sees when their provider has not
-// confirmed their email (B58.9): the browser's denied page and the phone's 403 both say it.
-const unverifiedEmailSentence = "Your sign-in provider has not confirmed this email address, so you cannot sign in with it."
-
-// emailUnverified reports whether the id_token carries an email its issuer has not said is
-// verified. Absent counts as unverified (B58.9): the BFF hands this address to Track and Docs as
-// X-User-Email and they decide membership by it, so an address nobody confirmed must never get in.
-func emailUnverified(email string, verified *bool) bool {
-	return email != "" && (verified == nil || !*verified)
-}
-
-// authorizeIdentity is OUR authorization on top of the IdP's authentication.
-// An email counts only when the issuer says email_verified is true; an email it
-// marks unverified, or leaves unmarked, is refused before anything else, with
-// sign-up open or not, so the refusal says nothing about the list. "*" then
-// delegates to the issuer (any authenticated subject, with or without an email).
-// Otherwise the identity must carry an email on the allowlist.
-func authorizeIdentity(allowed []string, sub, email string, verified *bool) (reason string, ok bool) {
-	if emailUnverified(email, verified) {
-		if verified == nil {
-			return "the id_token does not say this email is verified (email_verified absent)", false
-		}
-		return "the issuer marks this email as unverified", false
-	}
-	// B61.25: a sub in the form Lens names a person who joined by phone would be taken for that person (identityOf).
-	if strings.HasPrefix(sub, personIdentityPrefix) {
-		return "the issuer's subject has the form of a phone person's identity", false
-	}
-	if signupIsOpen(allowed) {
-		if sub == "" {
-			return "issuer returned an empty subject", false
-		}
-		return "", true
-	}
-	if email == "" {
-		return "the id_token carries no email claim to match against OIDC_ALLOWED_EMAILS", false
-	}
-	e := strings.ToLower(email)
-	for _, a := range allowed {
-		if a == e {
-			return "", true
-		}
-	}
-	// The address itself is NOT repeated here: handleCallback logs it as its own `email=`
-	// field, and a line that prints it twice is a line an operator has to read twice to be
-	// sure they are looking at one refusal and not two.
-	return "the address is not on OIDC_ALLOWED_EMAILS", false
 }
 
 // handleLogout kills the session server-side and expires the cookie. POST only:
@@ -946,11 +447,8 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 			// B20.12 — whether THIS person is on OPERATOR_SUBS, so the sidebar offers the review
 			// queue only to someone it will admit. About the asker alone; requireOperator still decides.
 			"operator": a.isOperator(s),
-			// B61.25 — a Google sign-in still to take a number and a passcode (the move), and a sign-up still to
-			// choose its account. google_signin says whether the Google button is offered at all.
-			"phone_needed":      !a.cfg.googleSignInOff && s.personID == "" && !s.synthetic,
+			// B61.25 — a sign-up still to choose its account.
 			"signup_unfinished": s.joining,
-			"google_signin":     !a.cfg.googleSignInOff,
 		})
 		return
 	}
@@ -970,7 +468,7 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 	// about to do anyway.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"mode": authModeOIDC, "authenticated": false, "user": nil,
-		"signup_open": signupIsOpen(a.cfg.allowedEmails), "google_signin": !a.cfg.googleSignInOff})
+		"signup_open": signupIsOpen(a.cfg.allowedEmails)})
 }
 
 // requireSession gates every /api route. Disabled mode passes through — the
@@ -990,7 +488,7 @@ func (a *app) requireSession(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if _, ok := a.auth.sessionFrom(r); !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "authentication required — sign in at /auth/login"})
+				"error": "authentication required — sign in at /signin"})
 			return
 		}
 		next(w, r)
