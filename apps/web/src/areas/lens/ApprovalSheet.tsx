@@ -81,7 +81,7 @@ const DECIDED: Record<string, string> = { approved: 'approved', used: 'approved 
 /** The frame while there is no approval to fill it: reading, unreadable, or not this workspace's. */
 function SheetLine({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <Layer label="Approval" onClose={onClose}>
+    <Layer label="Approval" onClose={onClose} position="panel">
       <SheetFrame head={<span className="font-semibold text-ink">Approval</span>} amount={null} only={children} onClose={onClose} />
     </Layer>
   )
@@ -251,7 +251,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
   const ownAgent = (id: string) => agents.some((x) => x.id === id)
 
   return (
-    <Layer labelledBy={titleId} onClose={onClose}>
+    <Layer labelledBy={titleId} onClose={onClose} position="panel">
       <SheetFrame
         onClose={onClose}
         head={
