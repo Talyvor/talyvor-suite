@@ -953,6 +953,21 @@ export interface Cardholder {
   country: string
 }
 
+/** B61.93 — how the signed-in person is found on Talyvor, to be paid: each switch off until they turn it on. */
+export interface PersonFinding {
+  /** their Talyvor name, "" until they choose one */
+  name: string
+  /** the email Talyvor confirmed, "" with none */
+  email: string
+  phone: string
+  by_name: boolean
+  by_phone: boolean
+  by_email: boolean
+}
+
+/** A change to PersonFinding: what is left out stays as it is. */
+export type PersonFindingChange = Partial<Pick<PersonFinding, 'name' | 'by_name' | 'by_phone' | 'by_email'>>
+
 /** A refusal, with the sentence Lens gave for it. */
 export class AgentBankError extends ApiError {
   constructor(
@@ -966,6 +981,14 @@ export class AgentBankError extends ApiError {
   ) {
     super(status, path)
   }
+}
+
+/** B61.93 — an answer that is not a person's settings reads as a failed read, never as switches drawn from nothing. */
+function asFinding(v: PersonFinding): PersonFinding {
+  const strings = [v?.name, v?.email, v?.phone].every((x) => typeof x === 'string')
+  const switches = [v?.by_name, v?.by_phone, v?.by_email].every((x) => typeof x === 'boolean')
+  if (!strings || !switches) throw new AgentBankError(502, '/api/people/finding', '')
+  return v
 }
 
 async function send<T>(method: string, path: string, body: object = {}, headers: Record<string, string> = {}): Promise<T> {
@@ -1564,6 +1587,10 @@ export const agentBankApi = {
   // B61.33 — Pay, to a person on Talyvor (BFF B61.33, Lens B61.32): find answers their shown name and nothing else, or
   // Lens's one answer for nobody found; a payment is signed over its own challenge and paid once under its key.
   findPerson: (to: string) => send<FoundPerson>('POST', '/api/money/people/find', { to }),
+  // B61.93 — how the signed-in person is found on Talyvor (BFF B61.93, Lens B61.32): their Talyvor name and the three
+  // switches, each off until they press it; a refused name comes back in Lens's words.
+  personFinding: () => getSaid<PersonFinding>('/api/people/finding').then(asFinding),
+  changePersonFinding: (change: PersonFindingChange) => send<PersonFinding>('POST', '/api/people/finding', change).then(asFinding),
   personPaymentChallenge: (body: PersonPaymentRequest) =>
     send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/people/pay/challenge', body),
   payPerson: (body: PersonPaymentRequest, assertion?: PasskeyAssertion) =>

@@ -415,6 +415,9 @@ const BODIES: Record<string, unknown> = {
     data: { byok: false, providers: ['anthropic', 'google', 'groq', 'mistral', 'openai'], keys: [] },
   },
 
+  // B61.93 — Settings, Privacy: a person with a Talyvor name, found by phone number only.
+  '/api/people/finding': { name: 'maya.l', email: 'maya@example.com', phone: '+447700900456', by_name: false, by_phone: true, by_email: false },
+
   '/api/earnings': {
     workspace_id: 'ws-fixture',
     contribution_settled_ulens: 6_000_000,

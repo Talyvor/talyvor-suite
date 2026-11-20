@@ -210,7 +210,8 @@ func (a *app) lensDoor(ctx context.Context, path string, body, out any) error {
 	}
 	var said map[string]any
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-		if json.Unmarshal(got, &said) == nil && said["reason"] != nil {
+		// B61.93 — a finding route's refusal is worded without a reason, and relayed the same.
+		if json.Unmarshal(got, &said) == nil && (said["reason"] != nil || findingWordsPath(path) && said["error"] != nil) {
 			return doorRefusal{status: resp.StatusCode, body: said, retryAfter: resp.Header.Get("Retry-After")}
 		}
 	}
