@@ -104,7 +104,7 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	}
 
 	swept := 0
-	var methodOnly, refusedEverywhere []string
+	var refusedEverywhere []string
 	for _, pat := range patterns {
 		if !strings.HasPrefix(pat, "/api/") || strings.HasSuffix(pat, "/") {
 			continue // the /api/ catch-all is not a route with a response of its own
@@ -139,7 +139,7 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 		}
 		switch {
 		case !answered:
-			methodOnly = append(methodOnly, pat)
+			// write-only: TestLeakSweep_CoversEveryMountedWriteRoute accounts for it (see below)
 		case !reached:
 			refusedEverywhere = append(refusedEverywhere, pat)
 		default:
@@ -166,496 +166,16 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 			"no responses, so the assertions above checked almost nothing", swept)
 	}
 
-	// ⚠ THE UPPER BOUND IS THE OTHER HALF, and without it the floor is escapable. A route that
-	// stops answering GET leaves the swept population SILENTLY: the floor still passes while
-	// coverage shrinks. ELEVEN are write-only today, and each of them is NAMED AND JUSTIFIED in the
-	// numbered notes below — the fifth through the eleventh, the first four being the ones this
-	// bound was born with (/api/keys/{id}, /api/lens/convert, /api/lxc/checkout, /api/pooling). A
-	// twelfth is a change in what this guard can see, and it has to be looked at. Their WRITE
-	// responses are searched by the write sweep below — for the year this bound existed the excuse
-	// was "the Origin sweep covers them", and it did not.
-	//
-	// ⚠ THIS PARAGRAPH USED TO RESTATE THE LIST AND THE COUNT, AND BOTH HAD GONE FALSE: it said
-	// "SIX are write-only today" and named six while the bound below was 10 and the population was
-	// 10. A count and a list written twice are two things that can disagree, and these did — so
-	// the second copy is gone rather than corrected. The notes below are the list.
-	//
-	// ⚠ THE FIFTH, /api/docs/ai/ask, WAS LOOKED AT RATHER THAN WAVED THROUGH. It is POST-only
-	// because an ask has a body and no idempotent reading — GET would have to carry the question
-	// in a query string, where it would land in every access log. It is NOT outside the sweep:
-	// the write half below derives its population from mountedPatterns(), so it drives POST at
-	// this route in all three fixtures and searches what comes back, including the Docs upstream
-	// bytes the productApp fixture streams.
-	//
-	// ⚠ THE SIXTH, /api/docs/pages/{pageID}/summarize, WAS LOOKED AT ON THE SAME TERMS AND FOR A
-	// STRONGER REASON THAN ASK'S. It is POST-only because the thing it sends is a whole page of
-	// text: as a GET that body would have to be a query string, which means a customer's document
-	// in every access log and proxy buffer along the way — the leak this file exists to hunt,
-	// created by the shape of the route rather than by anything in a response. It is METERED, so
-	// it is also not idempotent in the way a GET promises: each call is a Lens completion the
-	// workspace pays for and Docs attributes to that page. Like ask, it is inside the write half
-	// below, which drives POST at every mounted pattern in all three fixtures.
-	// ⚠ THE SEVENTH, /api/docs/pages/{pageID}/translate, WAS LOOKED AT ON THE SAME TERMS AS
-	// SUMMARISE'S AND FOR THE SAME REASON. It sends a whole page of text, so as a GET that body
-	// would be a query string — a customer's document in every access log and proxy buffer on the
-	// way, which is the leak this file hunts, created by the shape of the route rather than by
-	// anything in a response. It is METERED too: each call is a Lens completion the workspace pays
-	// for and Docs attributes to the named page, so it is not idempotent in the way a GET promises.
-	// Its POST response is searched by the write half below.
-	//
-	// ⚠ THE EIGHTH, /api/docs/spaces/{spaceID}/pages/{pageID}/changelog/generate, WAS LOOKED AT
-	// AND ITS REASON IS THE ONE THE SEVEN ABOVE DO NOT HAVE. The other seven are POST-only
-	// because of what they CARRY (a question, a document) or what they SPEND. This one is
-	// POST-only because of what it LEAVES BEHIND: measured against talyvor-docs' own route on
-	// real Postgres, every call INSERTs a changelog_entries row, and a later `…/publish` puts
-	// that row into the workspace's public RSS feed. A GET that writes a durable, publishable row
-	// is the one thing a GET may never be — it would be retried by any proxy, prefetched by any
-	// browser, and re-run by any crawler, each time leaving another release note behind. It also
-	// carries a list of issue ids, which as a query string would put a workspace's unreleased
-	// issue keys in every access log. Its POST response is searched by the write half below.
-	//
-	// ⚠ THE NINTH, /api/track/issues/{id}/find-duplicates, IS POST-ONLY BECAUSE UPSTREAM MOUNTS
-	// IT THAT WAY AND BECAUSE IT SPENDS. talyvor-track mounts `POST
-	// /v1/workspaces/{wsID}/issues/{id}/find-duplicates` (internal/ai/handler.go Mount), so a GET
-	// here would have nowhere honest to go. It carries NOTHING — no body, no query, measured: the
-	// upstream handler decodes neither — so unlike ask/summarise/translate there is no payload
-	// that a query string would leak. What makes a GET wrong is the METER: each press is a Lens
-	// completion the workspace pays for and Track attributes to this issue (measured: the request
-	// reaching Lens carries `X-Talyvor-Feature: <the issue's identifier>`), and a GET that spends
-	// is retried by proxies, prefetched by browsers and re-run by crawlers, each time billing
-	// someone. Its POST response is searched by the write half below, in all three fixtures.
-	// ⚠ THE TENTH, /api/track/issues/{id}/triage, IS POST-ONLY FOR THE NINTH'S REASON PLUS ONE THE
-	// OTHER NINE DO NOT HAVE. talyvor-track mounts `POST /v1/workspaces/{wsID}/issues/{id}/triage`
-	// and each press is a `claude-haiku-4-6` completion the workspace pays for and Track attributes
-	// to this issue (measured: `X-Talyvor-Feature: <the issue's identifier>`), so a GET that spends
-	// would be retried by proxies, prefetched by browsers and re-run by crawlers, each time billing
-	// someone. THE EXTRA REASON IS WHAT UPSTREAM DOES WITH A QUERY STRING: `?apply=true` makes
-	// Triage OVERWRITE the issue's priority and labels with the model's suggestion, discarding the
-	// write error. This BFF forwards NO query, so that is unreachable here — but a GET is the verb a
-	// browser follows from a link, and the one thing this route must never look like is safe to
-	// prefetch. It carries NOTHING (no body, no query, measured: the upstream handler decodes
-	// neither), so there is no payload a query string would leak. Its POST response is searched by
-	// the write half below.
-	// ⚠ THE ELEVENTH, /api/docs/pages/{pageID}/suggest-title, WAS LOOKED AT ON SUMMARISE'S AND
-	// TRANSLATE'S TERMS, WHICH IT SHARES EXACTLY. It sends a whole page of stored text, so as a GET
-	// that body would have to be a query string — a customer's document in every access log and
-	// proxy buffer along the way, which is the leak this file hunts, created by the shape of the
-	// route rather than by anything in a response. It is METERED: each call is a Lens completion
-	// the workspace pays for and Docs attributes to the named page under the feature tag
-	// `docs-ai-title` (measured against docs' real handler over a counting fake Lens — every body
-	// it was given, including three that carry no readable content, produced one completion). And
-	// upstream mounts it POST-only (`POST /workspaces/{wsID}/ai/suggest-title`), so a GET here
-	// would have nowhere honest to go. ⚠ WHAT IT DOES NOT DO IS LEAVE A ROW BEHIND: unlike the
-	// changelog route above, the suggestion is returned and nothing is written — applying it is a
-	// separate PATCH on the page route, which answers GET and is inside the sweep. Its POST
-	// response is searched by the write half below, in all three fixtures.
-	// ⚠ THE TWELFTH, /api/ai/stream/{provider}/{rest...}, IS POST-ONLY AND ITS REASON IS THE
-	// STRONGEST IN THIS LIST. It is a model completion the workspace pays for, with a
-	// CALLER-CHOSEN prompt and a caller-chosen model, so a GET would be prefetched by browsers,
-	// retried by proxies and re-run by crawlers — each time spending someone's balance on an
-	// arbitrary request. And the prompt is the BODY: as a GET it would have to travel as a query
-	// string, putting whatever the user typed into every access log and proxy buffer on the path,
-	// which is precisely the leak this file hunts, created by the shape of the route.
-	// ⚠ WHAT IT RETURNS CARRIES NO BFF-ORIGINATED SECRET, checked rather than assumed: the handler
-	// copies the upstream Content-Type and relays the upstream body verbatim, and the only
-	// credential it holds — the narrow session key — travels in a REQUEST header (stream.go). It
-	// adds no field of its own to the response at all.
-	//
-	// THE THIRTEENTH AND FOURTEENTH, /api/docs/pages/{pageID}/rewrite and /write (B2.3), ARE
-	// POST-ONLY FOR SUMMARIZE'S REASON: a metered completion on caller-supplied text, so a GET would
-	// re-spend on every prefetch and put the writer's words in a query string. Each relays Docs'
-	// `{"text": …}` body verbatim and adds nothing of its own.
-	//
-	// THE FIFTEENTH AND SIXTEENTH, /api/features/tare and /api/features/cost-optimize-routing (B8.2),
-	// ARE POLICY WRITES: their state is READ on GET /api/features, which the sweep reaches. Each
-	// answers only the one field Lens recorded.
-	//
-	// THE SEVENTEENTH, /api/features/distill-poolable (B11.2), IS THE SAME KIND: the shared-
-	// conversions consent, read back through GET /api/features as distill_poolable.
-	//
-	// THE EIGHTEENTH, /api/billing/subscribe (B13.3), IS /api/lxc/checkout'S KIND: it starts a
-	// Stripe Checkout, so a GET would open a payable session on a prefetch. Its answer is the
-	// session URL and nothing the BFF holds.
-	//
-	// THE NINETEENTH AND TWENTIETH, /api/features/tare/preview and /api/features/conversion/preview
-	// (B11.3), ARE POST-ONLY BECAUSE THEIR INPUT IS THE BODY: a pasted tool output or an uploaded
-	// document, which a GET would put in a query string. Each relays Lens's preview answer verbatim
-	// (or its 4xx reason) and adds nothing the BFF holds.
-	//
-	// THE TWENTY-FIRST AND TWENTY-SECOND, /api/features/guardrails and /api/features/logging (B18.22),
-	// ARE /api/features/tare'S KIND: a switch whose state is read back through GET /api/features
-	// (guardrails, logging_policy); each answers only what Lens recorded.
-	//
-	// /api/features/pattern-mining (B18.55) IS THE SAME KIND: its state is read back through GET
-	// /api/features as pattern_mining; it answers only what Lens reads back.
-	//
-	// /api/ai/feedback (B23.12) IS POST ONLY BECAUSE IT DELETES: Lens removes the stored answer the
-	// request id names. It answers Lens's counts of what went and adds nothing the BFF holds.
-	//
-	// THE TWENTY-THIRD AND TWENTY-FOURTH, DELETE /api/track/workspaces/{id} and POST
-	// /api/track/workspaces/{id}/restore (B18.53), ARE WRITES WHOSE STATE IS READ BACK THROUGH GETs
-	// THE SWEEP ALREADY REACHES — /api/track/workspaces and /api/track/workspaces/deleted. Each relays
-	// Track's own answer (the workspace, or its refusal) and adds nothing the BFF holds.
-	//
-	// THE TWENTY-FIFTH, /api/docs/spaces/{spaceID}/pages/{pageID}/pin (B18.27), IS PUT AND DELETE ONLY:
-	// a pin's state is read back through GET /api/docs/pins, which the sweep reaches. It relays Docs'
-	// answer ({"pinned": bool}) and adds nothing the BFF holds.
-	//
-	// THE TWENTY-SIXTH, /api/features/stored-answers/delete (B21.4), IS POST ONLY: what is left is read
-	// back through GET /api/features/stored-answers, which the sweep reaches. It relays Lens's counts of
-	// what it deleted (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE TWENTY-SEVENTH TO THIRTY-SECOND ARE THE AGENT BANK'S SIX WRITES (B19.4): /api/agents/{id}/fund,
-	// /withdraw, /keys and /pay, and /api/agents/approvals/{id}/approve and /deny, all POST only. What
-	// they change is read back through GET /api/agents, /api/agents/{id}/statement and
-	// /api/agents/approvals, which the sweep reaches. Each relays Lens's answer (or its refusal) and
-	// adds nothing the BFF holds.
-	//
-	// THE THIRTY-THIRD TO THIRTY-FIFTH ARE B19.10'S FACE ID AND PUSH WRITES: /api/agents/passkeys/challenge
-	// and /api/agents/approvals/{id}/challenge (POST only — a fresh single-use challenge, useless read
-	// twice) and /api/agents/push/subscriptions (POST and DELETE). What they change is read back through
-	// GET /api/agents/passkeys and /api/agents/approvals, which the sweep reaches; a subscription is
-	// never read back at all. Each relays Lens's answer (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE THIRTY-SIXTH IS B20.3'S /api/marketplace/listings/{id}/use, POST only: a use runs a listing and
-	// answers its output once. What it bills is read back through GET /api/marketplace/earnings on the
-	// seller's side, which the sweep reaches. It relays Lens's answer (or its refusal) and adds nothing
-	// the BFF holds.
-	//
-	// THE THIRTY-SEVENTH AND THIRTY-EIGHTH ARE B18.61'S /api/billing/subscription/cancel and /resume,
-	// POST only. What they change is read back through GET /api/billing/subscription, which the sweep
-	// reaches. Each relays Lens's answer (Stripe's state after the change, or its refusal) and adds
-	// nothing the BFF holds.
-	//
-	// THE THIRTY-NINTH TO FORTY-SECOND ARE B19.20'S PAUSES: /api/agents/pause-all and /resume-all, and
-	// /api/agents/{id}/pause and /resume, all POST only. What they change is read back through GET
-	// /api/agents (all_paused_at, and each agent's paused_at), which the sweep reaches. Each relays
-	// Lens's answer (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE FORTY-THIRD AND FORTY-FOURTH ARE B19.21'S /api/agents/{id}/schedules and
-	// /api/agents/schedules/{sid}/stop, POST only. What they change is read back through GET
-	// /api/agents/schedules and /api/agents/schedules/{sid}/runs, which the sweep reaches. Each relays
-	// Lens's answer (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE FORTY-FIFTH IS B20.11'S /api/marketplace/listings/{id}/reports, POST only: a report goes to
-	// Talyvor's review and is read back only by an admin, through Lens, never through this BFF. It relays
-	// Lens's answer (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE FORTY-SIXTH IS B19.23'S /api/agents/{id}/claim, POST only. What it changes is read back through
-	// GET /api/agents (each agent's owner_user_id and verified), which the sweep reaches. It relays Lens's
-	// answer (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE FORTY-SEVENTH AND FORTY-EIGHTH ARE B20.6'S /api/marketplace/payouts/connect and
-	// /api/marketplace/payouts/credits, POST only. What they change is read back through GET
-	// /api/marketplace/payouts (the account, the balance and every payout), which the sweep reaches.
-	// Each relays Lens's answer (Stripe's onboarding link, or the credits payout) or its refusal, and
-	// adds nothing the BFF holds.
-	//
-	// THE FORTY-NINTH AND FIFTIETH ARE B20.12'S /api/admin/marketplace/listings/{id}/approve and
-	// …/takedown, POST only and operator only. What they change is read back through GET
-	// /api/admin/marketplace/review, which the operator fixture reaches; each relays Lens's answer (the
-	// listing, and for a takedown the refunds it wrote) or its refusal, and adds nothing the BFF holds.
-	//
-	// THE FIFTY-FIRST TO FIFTY-NINTH ARE B22.10'S MONEY BETWEEN OWNERS, each write only: PUT
-	// /api/agents/{id}/handle, POST /api/agents/{id}/send, …/requests and …/loans, and POST
-	// /api/wallets/requests/{rid}/accept and …/decline, and /api/wallets/loans/{lid}/accept, …/decline and
-	// …/withdraw. What they change is read back through GET /api/agents (the handle), GET
-	// /api/agents/{id}/transfers, GET /api/wallets/requests and GET /api/wallets/loans, which the sweep
-	// reaches. Each relays Lens's answer (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE SIXTIETH TO SIXTY-EIGHTH ARE B22.12'S ESCROW, POTS, ORDERS AND CASH-OUT, each write only: POST
-	// /api/agents/{id}/escrows and …/cash-outs, POST /api/wallets/escrows/{eid}/confirm and …/dispute, POST
-	// /api/agents/{id}/pots/{pid}/in and …/out, PUT …/pots/{pid}/lock, and POST
-	// /api/agents/{id}/portfolios/{pfid}/orders and …/orders/{oid}/cancel. What they change is read back
-	// through GET /api/wallets/escrows, /api/wallets/cash-outs, /api/agents/{id}/pots and
-	// /api/agents/{id}/portfolios, which the sweep reaches. Each relays Lens's answer (or its refusal) and
-	// adds nothing the BFF holds.
-	//
-	// THE SIXTY-NINTH IS B18.20'S PLAN CHANGE, write only: POST /api/billing/subscription/plan. What it
-	// changes is read back through GET /api/billing/subscription and /api/billing/allowance, which the
-	// sweep reaches. It relays Lens's answer (or its refusal) and adds nothing the BFF holds.
-	//
-	// THE SEVENTIETH IS B18.24'S DOCUMENT UPLOAD, write only: POST /api/documents. Lens has no read of an
-	// uploaded document but the chat that references it by id, and the BFF relays Lens's answer (the id,
-	// or its refusal) and holds nothing.
-	//
-	// THE SEVENTY-THIRD IS B27.19'S PARKED-USE RETRY, POST only and operator only:
-	// /api/admin/marketplace/parked-uses/{id}/retry. What it changes is read back through GET
-	// /api/admin/marketplace/parked-uses, which the sweep reaches. It relays Lens's answer (or its
-	// refusal) and adds nothing the BFF holds.
-	//
-	// THE SEVENTY-FOURTH IS B27.30'S BOARD-LINK REVOKE, DELETE only: /api/track/boards/{id}. What it
-	// changes is read back through GET /api/track/boards, which the sweep reaches. It relays Track's
-	// answer and holds nothing.
-	//
-	// THE SEVENTY-FIFTH IS B27.27'S PROVIDER KEY, PUT and DELETE only: /api/provider-keys/{provider}. What
-	// it changes is read back through GET /api/provider-keys, which the sweep reaches. It relays Lens's
-	// answer — the provider and the last four characters — and holds nothing.
-	//
-	// THE SEVENTY-SIXTH IS B27.37'S PROSE-MODEL SWITCH, /api/features/tare-model: /api/features/tare'S
-	// KIND, read back through GET /api/features as tare_model; it answers only what Lens recorded.
-	//
-	// THE SEVENTY-SEVENTH AND SEVENTY-EIGHTH ARE B28.21'S AGENT LIFECYCLE, write only: PATCH
-	// /api/agents/{id} (its name and description) and POST /api/agents/{id}/archive. What they change is
-	// read back through GET /api/agents (each agent's name, description and archived_at) and its
-	// statement, which the sweep reaches. Each relays Lens's answer (or its refusal) and holds nothing.
-	//
-	// THE SEVENTY-NINTH IS B28.23'S GIVE-BACK, write only: POST /api/wallets/transfers/{tid}/refund. What it
-	// changes is read back through GET /api/agents/{id}/transfers (the refund, and the original's refunded_by)
-	// and GET /api/agents, which the sweep reaches. It relays Lens's answer (or its refusal) and holds nothing.
-	//
-	// THE EIGHTIETH IS B28.30'S RULE SIMULATOR, POST only: /api/agents/{id}/rules/simulate. It changes nothing —
-	// Lens judges the request inside a transaction it always rolls back — and answers only Lens's verdict, reason
-	// and the agent's balance, which GET /api/agents and GET /api/agents/{id}/rules already show the sweep.
-	//
-	// THE EIGHTY-FIRST IS B28.349'S CHAT TOOL CALL, POST only: /api/chat/tools/call. It runs one read-only Lens MCP
-	// tool (chat_tools.go's chatTools: what the agents spent) and changes nothing; what it answers is the agents'
-	// statement lines, which GET /api/agents/{id}/statement already shows the sweep.
-	//
-	// THE EIGHTY-SECOND IS B28.31'S RULES ROLLBACK, POST only: /api/agents/{id}/rules/rollback. It writes an earlier
-	// version of the agent's rules back and answers the rules now in force, which GET /api/agents/{id}/rules and
-	// GET /api/agents/{id}/rules/history already show the sweep.
-	//
-	// THE EIGHTY-THIRD IS B32.14'S BYOK ADD-ON, POST and DELETE only: /api/billing/subscription/byok. It adds or
-	// removes Team's BYOK add-on and relays Lens's subscription state, which GET /api/billing/subscription already
-	// shows the sweep.
-	//
-	// THE EIGHTY-FOURTH IS B28.32'S END OF A LIMIT BOOST, DELETE only: /api/agents/{id}/rules/boosts/{rule}. It ends
-	// one boost and answers nothing; the boosts in force are read back through GET /api/agents/{id}/rules/boosts,
-	// which the sweep reaches.
-	//
-	// THE EIGHTY-FIFTH IS B28.359'S TASK FROM CHAT, POST only: /api/agents/{id}/tasks. It runs one task on the agent's
-	// wallet and answers the model's answer; what the task cost is read back through GET /api/agents/{id}/statement,
-	// which the sweep reaches. The key it runs on is revoked before it answers and never leaves the BFF.
-	//
-	// THE EIGHTY-SIXTH AND EIGHTY-SEVENTH ARE B28.360'S CARD FREEZE, POST only: /api/agents/{id}/card/freeze and
-	// /card/unfreeze. Each relays Lens's answer — the card — and holds nothing; whether the card is frozen is read
-	// back through GET /api/agents/{id}/card, which the sweep reaches.
-	//
-	// THE EIGHTY-EIGHTH IS B32.53'S JOINING A ROOM, POST only: /api/rooms/{id}/join. It relays Lens's answer — the
-	// membership — and holds nothing; who is in the room is read back through GET /api/rooms/{id}, which the sweep
-	// reaches.
-	//
-	// THE EIGHTY-NINTH TO NINETY-FIRST ARE B32.54'S ROOM SCREEN: a fork (POST /api/rooms/{id}/contributions/{cid}/fork),
-	// a vote (PUT …/vote) and a run (POST /api/rooms/{id}/runs). Each relays Lens's answer and holds nothing; the
-	// contributions and their tallies are read back through GET /api/rooms/{id}/contributions, and a run's message
-	// through GET /api/rooms/{id}/messages, which the sweep reaches.
-	//
-	// THE NINETY-SECOND TO NINETY-SIXTH ARE B32.55'S ROOM SETTINGS: a member's change (PATCH /api/rooms/{id}/members/{ws}),
-	// the terms (PUT /api/rooms/{id}/terms), an invite's revoke (DELETE /api/rooms/{id}/invites/{iid}), a prize's award
-	// (POST /api/rooms/{id}/prizes/{pid}/award) and a join through a link (POST /api/room-invites/{token}/join). Each
-	// relays Lens's answer and holds nothing; the members and terms are read back through GET /api/rooms/{id}, the
-	// invites through GET /api/rooms/{id}/invites and the prizes through GET /api/rooms/{id}/prizes, which the sweep reaches.
-	//
-	// THE NINETY-SEVENTH AND NINETY-EIGHTH ARE B28.122'S CONNECTORS, POST only: /api/chat/connectors/tools and
-	// /api/chat/connectors/call. Each relays what the person's own MCP server answered for the connector the body names,
-	// and holds nothing: the connectors are kept in the person's browser, and the BFF stores none of them.
-	//
-	// THE NINETY-NINTH AND HUNDREDTH ARE B28.377'S PROMPT SCHEDULES, POST only: /api/agents/{id}/prompt-schedules and
-	// /api/agents/prompt-schedules/{sid}/stop. Each relays Lens's answer — the schedule — and holds nothing; the schedules,
-	// each run's answer and its charge are read back through GET /api/agents/prompt-schedules, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-FIRST AND HUNDRED-AND-SECOND ARE B32.59'S LICENCES, POST only: a cancel
-	// (/api/marketplace/licences/{id}/cancel) and a renewal (/api/marketplace/listings/{id}/licences). Each relays Lens's
-	// answer — the licence — and holds nothing; the licences are read back through GET /api/marketplace/licences, which
-	// the sweep reaches.
-	//
-	// THE HUNDRED-AND-THIRD IS B28.127'S SHARE LINK TURNED OFF, DELETE only: /api/chat/shares/{id}. It relays Lens's
-	// answer and holds nothing; the live links are read back through GET /api/chat/shares, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-FOURTH IS B32.63'S TAX RATES IMPORT, POST only and operator only: /api/admin/tax/rates/import. It
-	// relays Lens's answer — how many rates and jurisdictions were loaded — and holds nothing; the rates are read back
-	// through GET /api/admin/tax/rates, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-FIFTH IS B32.58'S REMIX, POST only: /api/marketplace/listings/{id}/remix. It relays Lens's answer —
-	// the remix licence's grant and the artifact to build on — and holds nothing; the remix itself is published through
-	// POST /api/marketplace/listings and read back through the listing's GET, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-SIXTH TO HUNDRED-AND-EIGHTH ARE B30.116'S VERIFICATION CHECKS, POST only:
-	// /api/verification/contact, …/identity and …/company. Each relays Lens's answer — the check and the record — and
-	// holds nothing; the record is read back through GET /api/verification, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-NINTH AND HUNDRED-AND-TENTH ARE B30.103'S, POST only: /api/terms/{capability}/accept relays Lens's
-	// acceptance, which is read back through GET /api/terms and GET /api/terms/{capability}, both in the sweep's reach;
-	// /api/kya/verify relays Lens's public answer on a credential the caller already holds, and stores nothing.
-	//
-	// THE HUNDRED-AND-ELEVENTH IS B28.162'S NEW VERSION, POST only: /api/marketplace/listings/{id}/versions. It relays
-	// Lens's answer — the version it wrote — and holds nothing; the versions are read back through the listing's GET,
-	// which the sweep reaches.
-	//
-	// THE HUNDRED-AND-TWELFTH IS B28.447'S DOCS SHARE LINK, POST only: /api/docs/spaces/{spaceID}/pages/{pageID}/share. It
-	// relays Docs' answer — the link and its token — and holds nothing; the shared page is read back through GET
-	// /api/public/docs/{token}, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-THIRTEENTH IS B28.450'S DOCS TEAM ROSTER, PUT and DELETE only:
-	// /api/docs/teams/{teamID}/members/{memberID}. It relays Docs' answer and holds nothing; who is on each team is read
-	// back through GET /api/docs/teams, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-FOURTEENTH IS B27.38'S TARE TRAINING SWITCH, /api/features/tare-training: /api/features/tare-model'S
-	// KIND, read back through GET /api/features as tare_training; it answers only what Lens recorded.
-	//
-	// THE HUNDRED-AND-FIFTEENTH TO HUNDRED-AND-EIGHTEENTH ARE B30.97'S, POST only: /api/money/invoices/{id}/send and …/void
-	// relay Lens's answer — the invoice as it now reads — which is read back through GET /api/money/invoices, in the sweep's
-	// reach; /api/money/pay/{token}/agent relays an agent's payment, read back the same way; /api/public/pay/{token}/card relays
-	// the Checkout URL Lens opened for the payer and stores nothing, and the page itself is GET /api/public/pay/{token}.
-	//
-	// THE HUNDRED-AND-NINETEENTH TO HUNDRED-AND-TWENTY-SECOND ARE B30.96'S, POST only: /api/money/payees/{id}/challenge answers
-	// a one-time challenge and stores nothing readable; …/{id}/confirm relays the payee as it now reads, read back through GET
-	// /api/money/payees; /api/money/mandates/{id}/revoke the mandate, read back through GET /api/money/mandates; and
-	// /api/money/payouts/{id}/approve the batch, read back through GET /api/money/payouts/{id} — all in the sweep's reach.
-	//
-	// THE HUNDRED-AND-TWENTY-THIRD AND TWENTY-FOURTH ARE B39.23'S TRACK WEBHOOKS: POST /api/track/webhooks and DELETE
-	// /api/track/webhooks/{id}. Each relays Track's answer — the webhook with its secret, shown once by design, or
-	// nothing — and holds nothing; Track lists no secret on any read.
-	//
-	// THE HUNDRED-AND-TWENTY-FIFTH TO TWENTY-SEVENTH ARE B39.24'S DOCS ROUTES: POST /api/docs/webhooks, DELETE
-	// /api/docs/webhooks/{id} and POST /api/docs/spaces/{spaceID}/pages/{pageID}/approval. The first two relay Docs'
-	// answer as Track's do; the third relays the approval request Docs made, and holds nothing. B39.25 put GET on
-	// /api/docs/webhooks (the list, no secret on it, now in the sweep's reach) and took its place with POST
-	// /api/docs/webhooks/{id}/rotate, which relays the new secret, shown once like the create's.
-	//
-	// THE HUNDRED-AND-TWENTY-EIGHTH IS B41.60'S ASKING THE ROOM'S AI, POST only: /api/rooms/{id}/ask. It relays Lens's
-	// answer and holds nothing; the question and the answer are read back as a run message through
-	// GET /api/rooms/{id}/messages, which the sweep reaches.
-	//
-	// THE HUNDRED-AND-TWENTY-NINTH TO THIRTY-FIRST ARE B40.35'S, POST only: /api/money/assistant-requests/{id}/dismiss
-	// answers nothing; …/{id}/prepare relays the drafted mandate's canonical terms and a one-time challenge, holding
-	// nothing new; and …/{id}/sign relays the mandate Lens kept, read back through the MCP's list_mandates. The waiting
-	// requests themselves are GET /api/money/assistant-requests, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-THIRTY-SECOND AND THIRD ARE B40.9'S, POST only: /api/money/payment-requests/{id}/approval relays the
-	// statement and a one-time challenge, holding nothing; …/{id}/approve relays the request Lens approved, which is
-	// read back through GET /api/money/payment-requests/{id}, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-THIRTY-FOURTH AND FIFTH ARE B40.12'S, POST only: /api/chat/voice/transcriptions and …/speech relay
-	// Lens's transcript and audio and hold nothing. (/api/money/payment-requests answers GET since B40.39.)
-	//
-	// THE HUNDRED-AND-THIRTY-SIXTH TO EIGHTH ARE B40.31'S, POST only: /api/money/devices/challenge relays a one-time
-	// challenge and holds nothing; …/{id}/revoke and …/{id}/push-token relay the device key Lens changed, which is read
-	// back through GET /api/money/devices, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-THIRTY-NINTH IS B41.2'S, POST only: /api/money/bills/pay relays the payment request Lens prepared,
-	// read back through GET /api/money/payment-requests/{id}; the bills it pays read back through GET /api/money/bills.
-	//
-	// THE HUNDRED-AND-FORTIETH IS B45.2'S, POST only: /api/money/payment-requests/{id}/cancel relays the request Lens
-	// cancelled, which is read back through GET /api/money/payment-requests/{id}, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FORTY-FIRST AND SECOND ARE B41.8'S, POST only: /api/agents/{id}/resume-challenge and
-	// /api/agents/resume-all/challenge relay a one-time challenge and hold nothing.
-	//
-	// THE HUNDRED-AND-FORTY-THIRD AND FOURTH ARE B41.11'S, POST only: /api/money/payees/{id}/called/challenge relays a
-	// one-time challenge, and /api/money/payees/{id}/called the payee it confirms, read back through GET /api/money/payees.
-	//
-	// THE HUNDRED-AND-FORTY-FIFTH IS B41.39'S, DELETE only: /api/money/budgets/{id} removes a budget, and what is left is read
-	// back through GET /api/money/budgets, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FORTY-SIXTH AND SEVENTH ARE B53.8'S, PUT only: /api/money/spending/merchants corrects a merchant's
-	// category, read back through GET /api/money/spending, and /api/money/notices/settings the notice settings, read back
-	// through GET /api/money/notices — both in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FORTY-EIGHTH IS B53.16'S, PUT only: /api/money/plan/income sets the payday, read back through GET
-	// /api/money/plan, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FORTY-NINTH IS B41.15'S, POST only: /api/money/permission-mandates/{id}/revoke revokes a mandate, read
-	// back through GET /api/money/access, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FIFTIETH TO FIFTY-SECOND ARE B41.48'S: a hand-over (POST /api/rooms/{id}/owner), a vote for a lead
-	// (PUT /api/rooms/{id}/takeover/vote) and a fork of the room (POST /api/rooms/{id}/fork). Each relays Lens's answer
-	// and holds nothing; the owner and the members are read back through GET /api/rooms/{id}, and the votes and tally
-	// through GET /api/rooms/{id}/takeover, both in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FIFTY-THIRD AND FOURTH ARE B41.12'S, POST only: /api/money/payees/{id}/details/challenge relays a
-	// one-time challenge, and /api/money/payees/{id}/details the payee it changes, read back through GET /api/money/payees.
-	//
-	// THE HUNDRED-AND-FIFTY-FIFTH AND SIXTH ARE B52.28'S: POST /api/agents/{id}/scan-watches gives a Scan agent a watch and
-	// DELETE /api/scan/watches/{id} stops one, both read back through GET /api/scan/watches, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FIFTY-SEVENTH AND EIGHTH ARE B53.12'S, POST only: /api/money/physical-cards/{id}/activate and
-	// /api/money/physical-cards/{id}/replace, both read back through GET /api/money/physical-cards, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-FIFTY-NINTH IS B41.42'S, PUT only: /api/rooms/{id}/contributions/{cid}/size claims a contribution's
-	// size, read back through GET /api/rooms/{id}/contributions, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SIXTIETH AND SIXTY-FIRST ARE B41.44'S: POST /api/rooms/{id}/contributions/{cid}/reviewers draws a
-	// contribution's reviewers and PUT .../review scores it, both read back through GET .../reviews, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SIXTY-SECOND IS B41.46'S, PUT only: /api/rooms/{id}/gate-thresholds raises the room's Gate thresholds,
-	// read back through GET /api/rooms/{id}/gate, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SIXTY-THIRD AND FOURTH ARE B41.47'S: POST /api/rooms/{id}/leaderboard/freeze freezes the leaderboard
-	// and PUT /api/rooms/{id}/objections/{oid}/vote votes on an objection, both read back through GET
-	// /api/rooms/{id}/objections, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SIXTY-FIFTH IS B41.52'S, POST and DELETE: /api/rooms/{id}/tasks/{tid}/claim claims a task and lets it
-	// go, read back through GET /api/rooms/{id}/tasks, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SIXTY-SIXTH AND SEVENTH ARE B41.85'S: PUT /api/marketplace/listings/{id}/content-labels relabels a
-	// listing, read back through GET /api/marketplace/listings/{id}, and PUT and DELETE /api/marketplace/blocked-listings/{id}
-	// block a listing and show it again, read back through GET /api/marketplace/content-filter, both in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SIXTY-EIGHTH IS B28.66'S, DELETE only: /api/money/alerts/channels/{id} removes an alert channel, read
-	// back through GET /api/money/alerts/channels, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SIXTY-NINTH IS B54.35'S, POST only: /api/money/payments/challenge relays a one-time challenge for the
-	// payment it names and holds nothing; the payment it signs is read back through GET /api/money/payments.
-	//
-	// THE HUNDRED-AND-SEVENTIETH TO SEVENTY-SECOND ARE B55.3'S, POST only: /api/agents/keys/enrolments/{id}/challenge,
-	// .../approve and .../decline let in or turn away a key waiting from another device, read back through GET
-	// /api/agents/keys/enrolments/{id}, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SEVENTY-THIRD IS B58.6'S, POST only: /api/money/payouts/{id}/approve/challenge relays a one-time
-	// challenge for the batch it names and holds nothing; the batch it signs is read back through GET /api/money/payouts/{id}.
-	// THE HUNDRED-AND-SEVENTY-FOURTH TO SEVENTY-EIGHTH ARE B55.54'S, POST only: /api/agents/keys/recovery-code/challenge
-	// and /api/agents/keys/recovery-code make a new recovery code, shown once and never read back; /api/agents/keys/recover/
-	// start, .../cancel and .../complete start, cancel and end a recovery, read back through GET /api/agents/keys/recover,
-	// in the sweep's reach.
-	//
-	// THE HUNDRED-AND-SEVENTY-NINTH IS B55.14'S, POST only: /api/agents/{id}/rules-challenge relays what a change would do
-	// to the rules and a one-time challenge, and saves nothing; the rules are read back through GET /api/agents/{id}/rules.
-	//
-	// THE HUNDRED-AND-EIGHTIETH TO EIGHTY-SECOND ARE B55.56'S, POST only: /api/money/mandates/challenge relays a
-	// one-time challenge for the grant or approval it names and holds nothing; /api/money/mandates/{id}/approve and
-	// .../decline decide an agent's requested mandate, read back through GET /api/money/mandates, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-EIGHTY-THIRD IS B55.28'S, POST only: /api/rooms/{id}/payouts pays a room's members by its terms, and
-	// each payout is read back through GET /api/money/earnings-payouts, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-EIGHTY-FOURTH AND FIFTH ARE B59.19'S, POST only: /api/money/instant-transfers/quote relays a quote
-	// locked for 30 seconds, and /api/agents/{id}/instant-transfers sends one; each transfer is read back through GET
-	// /api/money/instant-transfers/{id}, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-EIGHTY-SIXTH AND SEVENTH ARE B59.12'S: PUT /api/workspace/account/money-kind changes the kind of
-	// money, read back through GET /api/workspace/account, in the sweep's reach; POST .../money-kind/challenge relays a
-	// one-time challenge and holds nothing.
-	//
-	// THE HUNDRED-AND-EIGHTY-EIGHTH TO NINETY-THIRD ARE B59.52'S, POST only: /api/money/accounts/{id}/top-up and
-	// .../withdraw move money in and out of a company account, read back through GET /api/money/accounts and its
-	// statement, in the sweep's reach; /api/money/convert/quote, /api/money/convert and their /challenge routes (and
-	// .../withdraw/challenge) relay a quote, a conversion or a one-time challenge, the conversion read back through the
-	// same accounts.
-	//
-	// THE HUNDRED-AND-NINETY-FOURTH AND FIFTH ARE B61.38'S, POST only: /api/help/ask asks the Help chat and
-	// /api/help/team files it as a support request; the chat is read back through GET /api/help/chat, in the sweep's
-	// reach, and the request through GET /api/workspace/requests.
-	//
-	// THE HUNDRED-AND-NINETY-SIXTH IS B61.8'S, POST only: /api/accounts/switch moves the session to another of the
-	// person's accounts, read back through GET /api/accounts, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-NINETY-SEVENTH IS B61.84'S, POST only: /api/money/accounts/{id}/funding moves money between the
-	// company's account and an agent's, both read back through GET /api/money/accounts, in the sweep's reach.
-	//
-	// THE HUNDRED-AND-NINETY-EIGHTH TO TWO-HUNDREDTH ARE B61.33'S, POST only: /api/money/people/find answers a person's
-	// shown name and holds nothing; /api/money/people/pay/challenge relays a one-time challenge for the payment it names;
-	// /api/money/people/pay pays the person, read back through the account's statement (GET /api/money/accounts/{id}/statement).
-	//
-	// THE TWO-HUNDRED-AND-FIRST IS B28.61'S, DELETE only: /api/money/low-balance/{id} removes a low-balance alert, read back
-	// through GET /api/money/low-balance, in the sweep's reach.
-	if len(methodOnly) > 201 {
-		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 201 — a route left the leak sweep's "+
-			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
-			len(methodOnly), strings.Join(methodOnly, "\n  "))
-	}
+	// ⚠ A ROUTE THAT ANSWERS 405 TO GET IS OUTSIDE THIS SWEEP, AND THE WRITE HALF BELOW SAYS
+	// WHY, ROUTE BY ROUTE, FROM THE ROUTE'S OWN ANSWER. Until B66.3 this was an upper bound written
+	// by hand ("want at most 201"), raised by one in every pull request that added a write route,
+	// with a paragraph naming the route — so every BFF route PR edited the same two lines and
+	// conflicted with every other one. The notes it carried are in git history (b0ccc7cb). What the
+	// bound asked a person to confirm, "it is genuinely write-only", is now asserted for each such
+	// route by TestLeakSweep_CoversEveryMountedWriteRoute: its 405 names the verbs it serves in
+	// Allow, GET is not among them, and the write sweep, which searches those answers, finds one of
+	// them served. A route that stops answering GET by accident and names GET in Allow, names
+	// nothing, or serves none of what it names fails there, naming itself.
 }
 
 // ── THE WRITE HALF ───────────────────────────────────────────────────────────
@@ -741,12 +261,39 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 		"/auth/logout-everywhere", "/auth/logout")
 
 	reached, succeeded := map[string]bool{}, map[string]bool{}
-	accepted := map[string]bool{}
+	accepted, served := map[string]bool{}, map[string]bool{}
+	// writeOnly holds, for each /api route that answers 405 to GET in every fixture, the Allow
+	// header of each of those answers — read before the writes, because the last two routes end
+	// the fixtures' sessions.
+	writeOnly := map[string][]string{}
 	for _, pat := range patterns {
 		if strings.HasSuffix(pat, "/") {
 			continue // the /api/ catch-all and the SPA root are not routes with verbs of their own
 		}
 		path := regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(pat, "x1")
+		if strings.HasPrefix(pat, "/api/") {
+			var allows []string
+			for _, f := range fixtures {
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				if f.origin != "" {
+					req.Header.Set("Origin", f.origin)
+				}
+				req.AddCookie(f.cookie)
+				if f.bearer != "" {
+					req.Header.Set("Authorization", "Bearer "+f.bearer)
+				}
+				rec := httptest.NewRecorder()
+				f.a.ServeHTTP(rec, req)
+				if rec.Code != http.StatusMethodNotAllowed {
+					allows = nil
+					break
+				}
+				allows = append(allows, rec.Header().Get("Allow"))
+			}
+			if allows != nil {
+				writeOnly[pat] = allows
+			}
+		}
 		for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 			for _, f := range fixtures {
 				req := httptest.NewRequest(m, path, strings.NewReader(probeBody))
@@ -765,6 +312,9 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 				// this verb. Neither is a response this route produces, so there is nothing of its
 				// own to search. EVERY OTHER CODE IS SWEPT, including 401/403 — a refusal is still
 				// bytes the browser receives.
+				if rec.Code != http.StatusMethodNotAllowed {
+					served[m+" "+pat] = true // the verb is served, even where the answer is a 404 for the probe's id
+				}
 				if rec.Code == http.StatusMethodNotAllowed || rec.Code == http.StatusNotFound {
 					continue
 				}
@@ -803,6 +353,50 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 	if len(reached) < 30 {
 		t.Fatalf("write shapes reaching a handler = %d, want at least 30 — the probe found almost no "+
 			"write responses, so the assertions above checked almost nothing", len(reached))
+	}
+
+	// ⚠ B66.3: A ROUTE THE GET SWEEP CANNOT SEE MUST SAY, IN ITS OWN ANSWER, THAT IT IS WRITE-ONLY,
+	// AND BE SEEN HERE. This replaces the GET sweep's hand-written "at most N answer 405 to GET",
+	// which every route PR raised by one. Each such route is checked from what it answers: every
+	// fixture's 405 carries an Allow header, no Allow names GET or HEAD, and at least one verb it
+	// names is served (answers something other than 405) above, where that answer is searched
+	// unless it is a 404 for the probe's id. A route that stops
+	// answering GET by accident fails on one of the three, naming itself.
+	var notWriteOnly []string
+	for pat, allows := range writeOnly {
+		problem, serves := "", false
+		for _, allow := range allows {
+			if allow == "" {
+				problem = "a 405 to GET with no Allow header"
+				break
+			}
+			for _, v := range strings.Split(allow, ",") {
+				v = strings.TrimSpace(v)
+				if v == http.MethodGet || v == http.MethodHead {
+					problem = "answers 405 to GET while its Allow names " + allow
+				}
+				if served[v+" "+pat] {
+					serves = true
+				}
+			}
+		}
+		if problem == "" && !serves {
+			problem = "answers 405 to every verb its Allow names (" + allows[0] + ")"
+		}
+		if problem != "" {
+			notWriteOnly = append(notWriteOnly, pat+" — "+problem)
+		}
+	}
+	if len(notWriteOnly) > 0 {
+		sort.Strings(notWriteOnly)
+		t.Fatalf("route(s) answering 405 to GET that are not shown write-only — the GET sweep cannot "+
+			"search them and this sweep cannot vouch for them:\n  %s", strings.Join(notWriteOnly, "\n  "))
+	}
+	// A literal floor on that population, never len() of anything compared with itself: 201 /api
+	// routes answered 405 to GET when this was written, and an empty map would pass the loop above.
+	if len(writeOnly) < 150 {
+		t.Fatalf("/api routes answering 405 to GET = %d, want at least 150 — the probe saw almost none, "+
+			"so the write-only check above checked almost nothing", len(writeOnly))
 	}
 
 	// ⚠ THE 2xx FLOOR IS A SEPARATE ASSERTION AND IT IS THE LOAD-BEARING ONE. Every route in this

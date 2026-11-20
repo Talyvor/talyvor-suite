@@ -126,6 +126,9 @@ const SELF = 'apps/web/src/pointerAudit.test.ts'
  * The same sentence cites `TopUp.tsx:24` in the SAME PARENTHESIS, and that one has been pinned
  * here since it was written. One citation checked, one invisible, one line of prose — and the
  * invisible one is the one that rotted.
+ *
+ * Since B66.3 the census still MATCHES a Go line, so that it can refuse it: this repository's Go
+ * is cited by name (`ANCHOR` below), and a line citation of it fails the first B66.3 rule.
  */
 const POINTER = /\b([A-Za-z0-9_.\-/]+\.(?:tsx|ts|css|mjs|js|go)):(\d+)\b/g
 
@@ -139,6 +142,45 @@ const POINTER = /\b([A-Za-z0-9_.\-/]+\.(?:tsx|ts|css|mjs|js|go)):(\d+)\b/g
  * below become filed-but-not-seen.
  */
 const IN_REPO_GO = /^apps\/[A-Za-z0-9_.\-/]+\.go$/
+
+/**
+ * ⚠ B66.3: THIS REPOSITORY'S GO IS CITED BY NAME, NEVER BY LINE. `apps/bff/lens.go:1102` was
+ * pinned here and checked, and it was still the wrong tool: lens.go holds the route table, so
+ * every pull request that mounts a route moved every line below it, and every such PR had to
+ * edit this table, the sentence that cited the line and the area note together — and then
+ * conflicted with every other open BFF PR in those same files (suite #1198: lens.go:1095 to 1100
+ * and lens.go:220 to 225, across three files, in one merge). So a Go pointer names a function, a
+ * method, or a top-level const, var or type — `apps/bff/lens.go#proxyPaged` — and its LIVE
+ * fragment must sit inside what that name declares (its doc comment and its body). A line
+ * citation of in-repo Go is refused outright, and a name the file no longer declares fails
+ * naming it. Cross-repo Go (`internal/…#Name`) is not `apps/…`, so it stays out, as before.
+ */
+const ANCHOR = /\b(apps\/[A-Za-z0-9_.\-/]+\.go)#([A-Za-z_][A-Za-z0-9_]*)\b/g
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The declaration line of a Go name: `func name(`, `func (r T) name(`, or `const|var|type name`. */
+const goDecl = (name: string) =>
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the name comes from this repo's own citations, never from a person's input
+  new RegExp(`^(?:func (?:\\([^)]*\\) )?${escapeRe(name)}\\(|(?:const|var|type) ${escapeRe(name)}\\b)`)
+
+/**
+ * What a Go name declares: the doc comment directly above it, and the declaration through its
+ * closing brace at column 0 (one line, for a declaration that opens no block). null when the
+ * file declares no such name — the loud failure a renamed or deleted anchor must produce.
+ */
+function goSpan(text: string, name: string): string | null {
+  const lines = text.split('\n')
+  const at = lines.findIndex((l) => goDecl(name).test(l))
+  if (at < 0) return null
+  let start = at
+  while (start > 0 && lines[start - 1].startsWith('//')) start -= 1
+  let end = at
+  if (lines[at].trimEnd().endsWith('{') || lines[at].trimEnd().endsWith('(')) {
+    while (end < lines.length - 1 && lines[end] !== '}' && lines[end] !== ')') end += 1
+  }
+  return lines.slice(start, end + 1).join('\n')
+}
 
 type Kind = 'LIVE' | 'HISTORICAL'
 interface Pin {
@@ -429,22 +471,22 @@ const PINS: Record<string, Pin> = {
     fragment: 'The payment happens THERE',
     why: 'why "nothing was charged" is honest for a call that never completed — the charge happens after the redirect',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:65|apps/bff/billing.go:300': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:65|apps/bff/billing.go#handleLXCCheckout': {
     kind: 'LIVE',
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1102': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go#proxyPaged': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
   },
-  'apps/web/src/upstreamCitations.test.ts:56|apps/bff/billing.go:300': {
+  'apps/web/src/upstreamCitations.test.ts:56|apps/bff/billing.go#handleLXCCheckout': {
     kind: 'LIVE',
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1102': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go#proxyPaged': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
@@ -464,22 +506,22 @@ const PINS: Record<string, Pin> = {
   // A deployer following one of these is mid-deploy and checking a refusal before they trip it.
   // The fragment is the REFUSAL ITSELF: a claim that the BFF stops for a variable is worth
   // exactly the line that stops it, so deleting the refusal reds the runbook that promises it.
-  'deploy/README.md:317|apps/bff/main.go:170': {
+  'deploy/README.md:317|apps/bff/main.go#loadConfig': {
     kind: 'LIVE',
     fragment: 'TRACK_WORKSPACE_ID must not be set',
     why: 'the ~~TRACK_WORKSPACE_ID~~ row promises "the BFF now REFUSES TO START if this is set"; it cited 112, which is a closing brace',
   },
-  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go:164': {
+  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go#loadConfig': {
     kind: 'LIVE',
     fragment: 'LENS_PROVISION_SECRET is required',
     why: '"BFF requires LENS_PROVISION_SECRET … Refuses to start, names itself" — it cited 94, a comment line naming a test',
   },
-  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go:173': {
+  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go#loadConfig': {
     kind: 'LIVE',
     fragment: 'LENS_API_KEY must not be set',
     why: '"BFF refuses to boot if LENS_API_KEY is set" — it cited 96, the docsGatewaySecret field',
   },
-  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:227': {
+  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go#newApp': {
     kind: 'LIVE',
     fragment: '"/api/docs/spaces"',
     why: 'the Docs proxy mechanics are "same as the existing route"; it cited lens.go:74, which is /api/bonds — three more Docs routes were mounted above it',
@@ -621,7 +663,10 @@ describe('the sweep reads the whole tree', () => {
 interface Found {
   key: string
   target: string
-  line: number
+  /** The cited line, for a pointer into TypeScript or CSS. */
+  line?: number
+  /** The cited name, for a pointer into this repository's Go (B66.3). */
+  anchor?: string
   source: string
 }
 
@@ -641,13 +686,14 @@ function resolveTarget(written: string, all: string[]): string | null {
   return hits.length === 1 ? relative(REPO, hits[0]) : null
 }
 
-function census(): { found: Found[]; unresolved: string[] } {
+function census(): { found: Found[]; unresolved: string[]; goByLine: string[] } {
   const all = sourceFiles()
   // Sources: both packages' source AND every markdown file. Targets resolve against `all` (and
   // the disk, for Go), so widening the SOURCE set cannot widen what counts as a target.
   const sources = [...all, ...docFiles()]
   const found: Found[] = []
   const unresolved: string[] = []
+  const goByLine: string[] = []
   for (const p of sources) {
     const rel = relative(REPO, p)
     const text = readFileSync(p, 'utf8')
@@ -655,6 +701,10 @@ function census(): { found: Found[]; unresolved: string[] } {
     lines.forEach((line, i) => {
       for (const m of line.matchAll(POINTER)) {
         if (m[1].endsWith('.go') && !IN_REPO_GO.test(m[1])) continue
+        if (m[1].endsWith('.go')) {
+          goByLine.push(`${rel}:${i + 1} -> ${m[0]}`)
+          continue
+        }
         const target = resolveTarget(m[1], all)
         if (target === null) {
           unresolved.push(`${rel}:${i + 1} -> ${m[1]} (no unique file)`)
@@ -662,12 +712,53 @@ function census(): { found: Found[]; unresolved: string[] } {
         }
         found.push({ key: `${rel}:${i + 1}|${target}:${m[2]}`, target, line: Number(m[2]), source: rel })
       }
+      for (const m of line.matchAll(ANCHOR)) {
+        if (!existsSync(resolve(REPO, m[1]))) {
+          unresolved.push(`${rel}:${i + 1} -> ${m[1]} (no such file)`)
+          continue
+        }
+        found.push({ key: `${rel}:${i + 1}|${m[1]}#${m[2]}`, target: m[1], anchor: m[2], source: rel })
+      }
     })
   }
-  return { found, unresolved }
+  return { found, unresolved, goByLine }
 }
 
-const { found, unresolved } = census()
+const { found, unresolved, goByLine } = census()
+
+const readRepo = (target: string) => readFileSync(resolve(REPO, target), 'utf8')
+
+/**
+ * Every LIVE pin whose cited place no longer holds its fragment, read through `read` — the disk
+ * in the rule below, an edited copy in the B66.3 rules that prove a BFF edit moves no pin.
+ */
+function staleLive(read: (target: string) => string): string[] {
+  const stale: string[] = []
+  for (const f of found) {
+    const pin = PINS[f.key]
+    if (!pin || pin.kind !== 'LIVE') continue
+    const text = read(f.target)
+    if (f.anchor !== undefined) {
+      const span = goSpan(text, f.anchor)
+      if (span === null) {
+        stale.push(`${f.key} — ${f.target} no longer declares ${f.anchor}`)
+      } else if (!span.includes(pin.fragment)) {
+        stale.push(`${f.key} — expected ${JSON.stringify(pin.fragment)} inside ${f.anchor}, which no longer holds it`)
+      }
+      continue
+    }
+    const lines = text.split('\n')
+    const body = lines[f.line! - 1]
+    if (body === undefined) {
+      stale.push(`${f.key} — line ${f.line} is past EOF (${lines.length} lines)`)
+      continue
+    }
+    if (!body.includes(pin.fragment)) {
+      stale.push(`${f.key} — expected ${JSON.stringify(pin.fragment)}, line holds ${JSON.stringify(body.trim().slice(0, 80))}`)
+    }
+  }
+  return stale
+}
 
 describe('every file:line pointer names a line that holds what the sentence promises', () => {
   it('excludes exactly this file, and this file is really there', () => {
@@ -687,26 +778,25 @@ describe('every file:line pointer names a line that holds what the sentence prom
   it('classifies every pointer found, and finds every pointer classified', () => {
     const seen = found.map((f) => f.key).sort()
     const filed = Object.keys(PINS).sort()
-    expect(seen.filter((k) => !filed.includes(k))).toEqual([])
+    // A Go name needs no pin to be checked: the rule below fails it the moment the file stops
+    // declaring it. It is pinned only where a sentence quotes what the name holds (B66.3), so a
+    // BFF PR that cites a new name has nothing to add to this table.
+    expect(seen.filter((k) => !filed.includes(k) && !k.includes('.go#'))).toEqual([])
     expect(filed.filter((k) => !seen.includes(k))).toEqual([])
   })
 
-  it('every LIVE pointer names a line that CONTAINS its fragment', () => {
-    const stale: string[] = []
-    for (const f of found) {
-      const pin = PINS[f.key]
-      if (!pin || pin.kind !== 'LIVE') continue
-      const lines = readFileSync(resolve(REPO, f.target), 'utf8').split('\n')
-      const body = lines[f.line - 1]
-      if (body === undefined) {
-        stale.push(`${f.key} — line ${f.line} is past EOF (${lines.length} lines)`)
-        continue
-      }
-      if (!body.includes(pin.fragment)) {
-        stale.push(`${f.key} — expected ${JSON.stringify(pin.fragment)}, line holds ${JSON.stringify(body.trim().slice(0, 80))}`)
-      }
-    }
-    expect(stale).toEqual([])
+  it('every Go name cited anywhere is declared in the file it names', () => {
+    const anchors = found.filter((f) => f.anchor !== undefined)
+    // The floor: eighteen at B66.3. A rule over no citation passes free.
+    expect(anchors.length).toBeGreaterThan(10)
+    const missing = anchors
+      .filter((f) => goSpan(readRepo(f.target), f.anchor!) === null)
+      .map((f) => `${f.key} — ${f.target} declares no ${f.anchor}`)
+    expect(missing).toEqual([])
+  })
+
+  it('every LIVE pointer names a line, or a Go name, that CONTAINS its fragment', () => {
+    expect(staleLive(readRepo)).toEqual([])
   })
 
   /**
@@ -744,7 +834,7 @@ describe('every file:line pointer names a line that holds what the sentence prom
       if (!pin || pin.kind !== 'HISTORICAL') continue
       examined += 1
       const lines = readFileSync(resolve(REPO, f.target), 'utf8').split('\n')
-      if (lines[f.line - 1] === undefined) {
+      if (f.line !== undefined && lines[f.line - 1] === undefined) {
         misfiled.push(`${f.key} — line ${f.line} is past EOF (${lines.length} lines)`)
         continue
       }
@@ -765,5 +855,48 @@ describe('every file:line pointer names a line that holds what the sentence prom
     // all read as a clean bill. Six at this commit; the floor leaves room for one honest
     // deletion and no room for the set collapsing.
     expect(examined).toBeGreaterThan(4)
+  })
+})
+
+/**
+ * B66.3 — A BFF PULL REQUEST MOVES NO PIN. The three rules below are what make "cite by name"
+ * hold: no in-repo Go is cited by line, a line added at the top of every cited BFF file leaves
+ * every pin true (so no PR that mounts a route has to touch this table, the sentences that cite
+ * the BFF, or the area notes), and a name that is deleted or renamed fails naming itself.
+ */
+describe('BFF code is cited by name, so a BFF pull request moves no pin', () => {
+  it('no source cites this repository’s Go by line number', () => {
+    expect(
+      goByLine,
+      'a line citation of this repository’s Go. Every route a PR mounts moves the lines below it, ' +
+        'so the citation goes false or every open BFF PR edits it — cite the name instead: ' +
+        '`apps/bff/lens.go#proxyPaged`, and pin that key here.',
+    ).toEqual([])
+  })
+
+  it('a line added at the top of every cited BFF file leaves every pin true', () => {
+    const cited = new Set(found.filter((f) => f.target.startsWith('apps/bff/')).map((f) => f.target))
+    // The floor: today lens.go, billing.go and main.go are cited. A rule over no cited file passes free.
+    expect(cited.size).toBeGreaterThan(2)
+    const shifted = (target: string) => (cited.has(target) ? '\n' + readRepo(target) : readRepo(target))
+    expect(staleLive(shifted)).toEqual([])
+  })
+
+  it('a cited Go name that is deleted fails, naming it', () => {
+    const anchored = found.filter((f) => f.anchor !== undefined && PINS[f.key]?.kind === 'LIVE')
+    expect(anchored.length).toBeGreaterThan(4)
+    for (const f of anchored) {
+      const gone = (target: string) => {
+        const text = readRepo(target)
+        if (target !== f.target) return text
+        return text
+          .split('\n')
+          .map((l) => (goDecl(f.anchor!).test(l) ? l.replace(f.anchor!, `${f.anchor}Gone`) : l))
+          .join('\n')
+      }
+      expect(staleLive(gone), `deleting ${f.anchor} from ${f.target}`).toContain(
+        `${f.key} — ${f.target} no longer declares ${f.anchor}`,
+      )
+    }
   })
 })
