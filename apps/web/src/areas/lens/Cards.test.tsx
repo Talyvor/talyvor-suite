@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -127,7 +127,9 @@ describe('Cards on the web', () => {
     expect(researcher.textContent).not.toContain('4242')
     fireEvent.click(within(researcher).getByRole('button', { name: 'Show card details' }))
 
-    const details = await within(researcher).findByTestId('card-details')
+    // B61.121 — they open in the right panel over Cards, and hiding them closes it.
+    const panel = await screen.findByRole('dialog', { name: 'Card details' })
+    const details = within(panel).getByTestId('card-details')
     expect(details.textContent).toContain('•••• 4242')
     expect(details.textContent).toContain('expires 09/29 · GBP')
     expect(get).toHaveBeenCalledTimes(1)
@@ -135,8 +137,10 @@ describe('Cards on the web', () => {
     expect(asked.userVerification).toBe('required')
     expect(asked.allowCredentials?.map((c) => Array.from(new Uint8Array(c.id as ArrayBuffer)))).toEqual([[1, 2, 3]])
 
-    fireEvent.click(within(researcher).getByRole('button', { name: 'Hide card details' }))
-    expect(researcher.textContent).not.toContain('4242')
+    fireEvent.click(within(panel).getByRole('button', { name: 'Hide card details' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.body.textContent).not.toContain('4242')
+    expect(within(researcher).getByTestId('card-details-row')).toBeTruthy()
   })
 
   it('shows no details without a passkey, and says where to add one', async () => {

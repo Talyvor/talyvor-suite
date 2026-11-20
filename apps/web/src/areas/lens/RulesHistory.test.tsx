@@ -93,7 +93,7 @@ describe('an agent’s rules history', () => {
     expect((await screen.findByTestId('rules-version-3')).textContent).toContain('Rolled back to version 1 by you')
     expect(screen.getByText('Researcher’s rules are back as they were at version 1')).toBeInTheDocument()
     expect(screen.getByText('The rollback is kept as version 3.')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('dialog', { name: /^Roll Researcher’s rules back/ })).toBeNull() // B61.121: the rules' own panel stays
     await waitFor(() => expect((screen.getByLabelText('At most a day for Researcher, in dollars') as HTMLInputElement).value).toBe('0.5'))
     expect(screen.getByRole('switch', { name: 'Asks you above' }).getAttribute('aria-checked')).toBe('false')
 
@@ -135,7 +135,7 @@ describe('an agent’s rules history', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Roll Researcher’s rules back to version 1' }))
     const dialog = await screen.findByRole('dialog', { name: 'Roll Researcher’s rules back to version 1?' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('dialog', { name: /^Roll Researcher’s rules back/ })).toBeNull() // B61.121: the rules' own panel stays
     expect(sent).toEqual([{ method: 'POST', url: '/api/agents/agt_1/rules-challenge', body: { rollback_to: 1 } }])
   })
 })

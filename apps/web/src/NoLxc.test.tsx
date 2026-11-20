@@ -44,6 +44,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   queryClient.clear()
+  cleanup()
   document.body.replaceChildren()
 })
 
@@ -64,6 +65,7 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
       cleanup()
       vi.restoreAllMocks()
       queryClient.clear()
+      cleanup()
       document.body.replaceChildren()
     }
     expect(found).toEqual([])
