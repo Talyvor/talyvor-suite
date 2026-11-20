@@ -3076,3 +3076,71 @@ export function usePersonal(): boolean {
     }).data === true
   )
 }
+
+// B48.36 — Send USDC from an agent's crypto wallet (Lens B48.9, the BFF's crypto_sends.go).
+
+/** What is asked to be sent: to a 0x address, on a network, in USDC's six-decimal minor units. */
+export interface CryptoSendRequest {
+  to: string
+  network: string
+  token: 'USDC'
+  amount_minor: number
+}
+
+/** Lens economy.CryptoSendQuote: a send before it is made. */
+export interface CryptoSendQuote {
+  network: string
+  token: string
+  token_address: string
+  amount_minor: number
+  to: string
+  to_kind: 'agent' | 'address'
+  /** another Talyvor agent's trust level: "Verified agent of <business>" or "Unverified agent" */
+  to_label?: string
+  /** the workspace never paid it: a send the agent asks for waits for the owner */
+  new_address: boolean
+  /** the most the network fee can be, in wei of the network's coin */
+  max_fee_wei: string
+  fee_paid_by: 'workspace_gas_budget' | 'agent_account'
+  arrival_seconds?: number
+}
+
+/** Lens economy.CryptoSend: one send and how it ended. */
+export interface CryptoSend extends CryptoSendQuote {
+  id: string
+  agent_id: string
+  /** in: another agent sent this one; `to` is then the sender's account */
+  direction: 'out' | 'in'
+  status: 'awaiting_owner' | 'sending' | 'sent' | 'landed' | 'failed' | 'refused'
+  reason?: string
+  requested_by: string
+  approved_by?: string
+  tx_hash?: string
+  explorer_url?: string
+  created_at: string
+  updated_at: string
+}
+
+export const cryptoSendApi = {
+  /** The agent's crypto wallet, for its address; 404 while it has none. */
+  smartAccount: (id: string) => getSaid<{ agent_id: string; address: string }>(`/api/agents/${e(id)}/smart-account`),
+  /** Nothing moves: the amount, the most the fee can be and who pays it, the arrival and who it is. */
+  quote: (id: string, body: CryptoSendRequest) => send<CryptoSendQuote>('POST', `/api/agents/${e(id)}/crypto-sends/quote`, body),
+  /** Sent once however many times `key` arrives: a retry after no answer sends the same one again. */
+  send: (id: string, body: CryptoSendRequest, key: string) =>
+    send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends`, body, { 'Idempotency-Key': key }),
+  /** What the agent sent and was sent, newest first. */
+  list: (id: string) => getSaid<{ sends: CryptoSend[] }>(`/api/agents/${e(id)}/crypto-sends`),
+  /** The owner says yes to a send to a new address; with a test amount, that much goes first. */
+  approve: (id: string, sendID: string, testAmountMinor?: number) =>
+    send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends/${e(sendID)}/approve`, testAmountMinor ? { test_amount_minor: testAmountMinor } : {}),
+  decline: (id: string, sendID: string) => send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends/${e(sendID)}/decline`),
+}
+
+/** "2.5" → 2500000: an amount typed in USDC, to its six-decimal minor unit; null when it is not a positive amount. */
+export function usdcMinorOf(text: string): number | null {
+  const m = /^\s*(\d+)(?:\.(\d{1,6}))?\s*$/.exec(text)
+  if (m === null) return null
+  const minor = Number(m[1]) * 1e6 + Number((m[2] ?? '').padEnd(6, '0'))
+  return Number.isSafeInteger(minor) && minor > 0 ? minor : null
+}

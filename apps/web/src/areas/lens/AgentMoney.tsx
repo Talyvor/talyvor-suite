@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Card, Dialog, Icon, KindTile, Money, pocketFocusRing, type IconName } from '@talyvor/ui/pocket'
 import { IfArea } from '../../lib/workspaceAreas'
 import { walletKey, AgentMoneyWalletCard } from './AgentMoneyWallet'
+import { AgentCryptoSend } from './AgentCryptoSend'
 import { type Agent, agentBankApi, useAccount } from './agentBankApi'
 import { CASH_OUTS_KEY, CashOutCard, CashOuts, ESCROWS_KEY, Escrows, PayIntoEscrow, Portfolios, Pots, potsKey } from './WalletHoldings'
 import {
@@ -26,7 +27,7 @@ import {
 
 const BOOK_KEY = ['agent-book']
 
-type Panel = 'address' | 'send' | 'requests' | 'transfers' | 'recurring' | 'pots' | 'escrow' | 'cash-out' | 'loans' | 'credit' | 'wallet' | 'investing'
+type Panel = 'address' | 'send' | 'crypto-send' | 'requests' | 'transfers' | 'recurring' | 'pots' | 'escrow' | 'cash-out' | 'loans' | 'credit' | 'wallet' | 'investing'
 
 /**
  * A row of the Money card: the whole row opens its panel. The button's name is the title alone; the line under it
@@ -182,6 +183,16 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
           }
           onOpen={() => setOpen('wallet')}
         />
+        {/* B48.36 — USDC out of the agent's crypto wallet, for a workspace with the on-chain side. */}
+        {shows?.onChain ? (
+          <MoneyRow
+            testId="money-row-crypto-send"
+            icon="send"
+            title="Send USDC"
+            line={`From ${name}’s crypto wallet to any wallet address or another agent, with the network fee shown first`}
+            onOpen={() => setOpen('crypto-send')}
+          />
+        ) : null}
         <IfArea area="trading">
           <MoneyRow
             testId="money-row-investing"
@@ -231,6 +242,7 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
       )}
       {panel('credit', 'Credit line', <CreditLinePanel />)}
       {panel('wallet', `${name}’s wallet`, <AgentMoneyWalletCard agent={agent} />)}
+      {panel('crypto-send', 'Send USDC', <AgentCryptoSend agent={agent} agents={agents} />)}
       {panel('investing', 'Investing, simulated', <Portfolios agent={agent} />)}
     </Card>
   )
