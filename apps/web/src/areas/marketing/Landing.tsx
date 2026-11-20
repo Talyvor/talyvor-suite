@@ -164,7 +164,7 @@ function Nav() {
     <header className="nav">
       <div className="wrap">
         <a className="logo" href="/marketing" aria-label="Talyvor home">
-          <img {...smallLogoSrc('dark')} alt="Talyvor" width={240} height={76} />
+          <img {...smallLogoSrc('dark')} alt="Talyvor" width={240} height={76} data-brand="logo" />
         </a>
         <nav className="links" aria-label="Main">
           <a href="#how">How it works</a>
@@ -1161,7 +1161,7 @@ function Footer() {
   return (
     <footer>
       <div className="wrap">
-        <img {...smallLogoSrc('dark')} alt="Talyvor" width={240} height={76} />
+        <img {...smallLogoSrc('dark')} alt="Talyvor" width={240} height={76} data-brand="logo" />
         <nav aria-label="Footer">
           <a href="#how">How it works</a>
           <a href="#try">Try it</a>

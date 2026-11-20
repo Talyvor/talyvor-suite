@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COMPANY_LINE, type Look, type ReportLook, brandFaults, companyFaults, docsBrandFaults, exportBrandFaults, heroFadeFaults, readingFaults, roiBrandFaults } from '../src/brand.ts'
+import { COMPANY_LINE, LOGO_FILE, type Look, type ReportLook, brandFaults, companyFaults, docsBrandFaults, exportBrandFaults, heroFadeFaults, readingFaults, roiBrandFaults } from '../src/brand.ts'
 
 const brand: Look = {
   scroll: 390, client: 390, logos: ['svg mark', 'svg wordmark'], tiles: [], amberCount: 0, amber: [], inter: [],
@@ -23,6 +23,14 @@ describe("the brand-visual oracle (B29.21)", () => {
       '#f0a030 on 7 element(s): button.bg-amber color',
       'a font stack with Inter: Inter, sans-serif (body)',
     ])
+  })
+})
+
+describe('a logo file (B17.497)', () => {
+  it('is a logo .svg or the kit\'s small-logo PNG B64.11 shows under 240 px, never another image', () => {
+    const files = ['/site/logo.ee7e151a.svg', '/brand/logo/talyvor-logo-small-on-dark-240.png', '/brand/logo/talyvor-logo-small-on-light-480.png',
+      '/brand/logo/talyvor-logo-small-on-dark-240.png.jpg', '/site/hero-loop-poster.cf75267b.jpg', '/brand/logo/other.png']
+    expect(files.filter((f) => LOGO_FILE.test(f))).toEqual(files.slice(0, 3))
   })
 })
 
