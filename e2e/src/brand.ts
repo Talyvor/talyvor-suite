@@ -49,6 +49,29 @@ export interface Look {
  *  (Safari draws the SVG's glow soft there). B17.497: talyvor.com's header and footer and the app header draw it. */
 export const LOGO_FILE = /\.svg$|^\/brand\/logo\/talyvor-logo-small-on-(light|dark)-(240|480)\.png$/
 
+/** B17.401 — one logo the brand-logo scenario saw: its file, whether it loaded, and the plane behind it. */
+export interface ShownLogo {
+  src: string
+  loaded: boolean
+  plane: 'dark' | 'light'
+}
+
+/** A file of the chosen kit, and the version it is: its .svg drawings and B64.11's small-logo PNGs. */
+const KIT_LOGO = /^\/brand\/logo\/talyvor-[a-z-]+-on-(dark|light)(?:-(?:240|480))?\.(?:svg|png)$/
+
+/** The brand-logo oracle: each logo is a kit file in the version for the plane it sits on, and it loaded. The plane,
+ *  not the theme: talyvor.com's v4 header is #0F1013 in both themes, so its on-dark logo is right there in each. */
+export function logoFaults(path: string, theme: 'dark' | 'light', shown: ShownLogo[], old: string[] = []): string[] {
+  const faults: string[] = []
+  if (shown.length === 0) faults.push(`${path} ${theme} shows no logo`)
+  for (const l of shown) {
+    if (KIT_LOGO.exec(l.src)?.[1] !== l.plane) faults.push(`${path} ${theme} shows ${l.src} on a ${l.plane} plane`)
+    if (!l.loaded) faults.push(`${path} ${theme} ${l.src} did not load`)
+  }
+  if (old.length > 0) faults.push(`${path} still asks for ${old.join(', ')}`)
+  return faults
+}
+
 /** B29.15, B17.388 — the light canvas, as the browser computes Pocket's `page` #FFFFFF. */
 const LIGHT_CANVAS = 'rgb(255, 255, 255)'
 

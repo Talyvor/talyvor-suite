@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COMPANY_LINE, LOGO_FILE, type Look, type ReportLook, brandFaults, companyFaults, docsBrandFaults, exportBrandFaults, heroFadeFaults, readingFaults, roiBrandFaults } from '../src/brand.ts'
+import { COMPANY_LINE, LOGO_FILE, type Look, type ReportLook, type ShownLogo, brandFaults, logoFaults, companyFaults, docsBrandFaults, exportBrandFaults, heroFadeFaults, readingFaults, roiBrandFaults } from '../src/brand.ts'
 
 const brand: Look = {
   scroll: 390, client: 390, logos: ['svg mark', 'svg wordmark'], tiles: [], amberCount: 0, amber: [], inter: [],
@@ -31,6 +31,31 @@ describe('a logo file (B17.497)', () => {
     const files = ['/site/logo.ee7e151a.svg', '/brand/logo/talyvor-logo-small-on-dark-240.png', '/brand/logo/talyvor-logo-small-on-light-480.png',
       '/brand/logo/talyvor-logo-small-on-dark-240.png.jpg', '/site/hero-loop-poster.cf75267b.jpg', '/brand/logo/other.png']
     expect(files.filter((f) => LOGO_FILE.test(f))).toEqual(files.slice(0, 3))
+  })
+})
+
+describe('the brand-logo oracle (B17.401)', () => {
+  const at = (src: string, plane: 'dark' | 'light', loaded = true): ShownLogo => ({ src, loaded, plane })
+
+  it('passes the kit\'s small-logo PNG and the logo SVG, each the version for the plane it sits on', () => {
+    expect(logoFaults('/', 'light', [at('/brand/logo/talyvor-logo-small-on-light-240.png', 'light')])).toEqual([])
+    expect(logoFaults('/signin', 'dark', [at('/brand/logo/talyvor-logo-on-dark.svg', 'dark')])).toEqual([])
+    // talyvor.com's v4 header is #0F1013 in both themes, so its on-dark logo is right in the light theme too.
+    expect(logoFaults('/marketing', 'light', [at('/brand/logo/talyvor-logo-small-on-dark-240.png', 'dark')])).toEqual([])
+  })
+
+  it('names no logo, the wrong version for its plane, another file, a file that did not load, and the old brand-v4 logo', () => {
+    expect(logoFaults('/pricing', 'light', [])).toEqual(['/pricing light shows no logo'])
+    expect(logoFaults('/', 'light', [
+      at('/brand/logo/talyvor-logo-small-on-dark-240.png', 'light'),
+      at('/site/hero-loop-poster.jpg', 'light'),
+      at('/brand/logo/talyvor-logo-small-on-light-480.png', 'light', false),
+    ], ['/brand/svg/talyvor-mark.svg'])).toEqual([
+      '/ light shows /brand/logo/talyvor-logo-small-on-dark-240.png on a light plane',
+      '/ light shows /site/hero-loop-poster.jpg on a light plane',
+      '/ light /brand/logo/talyvor-logo-small-on-light-480.png did not load',
+      '/ still asks for /brand/svg/talyvor-mark.svg',
+    ])
   })
 })
 
