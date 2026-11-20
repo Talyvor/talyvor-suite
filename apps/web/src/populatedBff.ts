@@ -611,6 +611,13 @@ const BY_PATH: Record<string, unknown> = {
   },
   // B19.10 — no passkey yet, so approvals are sent unsigned, as B19.4 sends them.
   '/api/agents/passkeys': { passkeys: [] },
+  // B61.106 — the person's sign-in keys, for Settings, Security.
+  '/auth/passkey/keys': {
+    keys: [
+      { id: 'key_1', kind: 'passkey', name: 'Mac, Safari', created_at: '2026-10-14T09:00:00Z', last_used_at: '2026-10-20T08:00:00Z' },
+      { id: 'key_2', kind: 'device', name: 'iPhone', created_at: '2026-10-15T09:00:00Z' },
+    ],
+  },
   // B55.54 — no key recovery waits.
   '/api/agents/keys/recover': { recovery: null },
   '/api/agents/keys': { keys: [] }, // B55.16

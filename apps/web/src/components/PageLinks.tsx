@@ -86,6 +86,7 @@ export function SettingsCards({ links }: { links: readonly SettingsLink[] }) {
 /** Each settings page's tile. */
 const SETTINGS_ICON: Record<string, IconName> = {
   '/settings/devices': 'faceid',
+  '/settings/security': 'lock',
   '/settings/connect': 'model',
   '/members': 'rooms',
   '/billing': 'billing',
@@ -122,6 +123,8 @@ export function useSettingsLinks(): SettingsLink[] {
   const links: PageLink[] = [
     // B57.43 — the keys that approve, first, as w-settings draws it.
     { to: '/settings/devices', title: 'Approvals and devices', line: 'Your passkeys, your phone, and notifications' },
+    // B61.106 — how a person signs in.
+    { to: '/settings/security', title: 'Security', line: 'Your passkeys, passcode and phone number' },
     { to: '/settings/connect', title: 'Connect your AI', line: 'Use Talyvor from Claude, ChatGPT and others' },
     ...(team ? [{ to: '/members', title: 'Members', line: roster.data ? people(roster.data.length) : undefined }] : []),
     // B61.3 — Billing and Plans, as one row. B57.171 — in Pocket Live's w-settings words; the plan's name is on its page.

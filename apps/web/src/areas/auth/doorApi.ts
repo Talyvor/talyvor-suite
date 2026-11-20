@@ -33,6 +33,11 @@ async function door<T>(path: string, body: object = {}): Promise<T> {
   } catch {
     throw new DoorError(0, '', DOOR_FAILED)
   }
+  return answer<T>(res, path)
+}
+
+/** The door's answer: its body, or its refusal as a DoorError in Lens's words. */
+async function answer<T>(res: Response, path: string): Promise<T> {
   let got: Record<string, unknown> = {}
   try {
     got = ((await res.json()) as Record<string, unknown> | null) ?? {}
@@ -166,6 +171,37 @@ export async function makeSignInKey(name: string, passcode?: string): Promise<Ma
   await door('/auth/passkey/register', { name, passkey, ...(passcode ? { passcode } : {}) })
   return key
 }
+
+// ─── Settings, Security (B61.106, the BFF's B61.105 routes) ─────────────────
+
+/** One of the person's sign-in keys, as Lens keeps it: a passkey, or a phone's key. */
+export interface SignInKey {
+  id: string
+  kind: string
+  name: string
+  created_at: string
+  last_used_at?: string
+}
+
+/** The person's sign-in keys. */
+export async function signInKeys(): Promise<SignInKey[]> {
+  let res: Response
+  try {
+    res = await fetch('/auth/passkey/keys', { headers: { Accept: 'application/json' } })
+  } catch {
+    throw new DoorError(0, '', DOOR_FAILED)
+  }
+  const got = await answer<{ keys?: SignInKey[] | null }>(res, '/auth/passkey/keys')
+  if (got.keys !== null && !Array.isArray(got.keys)) throw new DoorError(0, '', 'Your passkeys could not be read. Reload the page to try again.')
+  return got.keys ?? []
+}
+
+/** Removes one sign-in key, proved by the passcode. Lens refuses the last way in. */
+export const removeSignInKey = (keyId: string, passcode: string) => door<{ removed: boolean }>('/auth/passkey/keys/remove', { key_id: keyId, passcode })
+/** The passcode changed: the old one, then the new. */
+export const changePasscode = (oldPasscode: string, passcode: string) => door<{ changed: boolean }>('/auth/passcode/change', { old_passcode: oldPasscode, passcode })
+/** The person's number becomes the new one: its check (phoneStart and phoneFinish for it) and the passcode. */
+export const changeNumber = (check: string, passcode: string) => door<{ changed: boolean; phone: string }>('/auth/phone/change-number', { check, passcode })
 
 /** The name a new passkey is kept under, so the person can tell their keys apart. */
 export function thisBrowserName(): string {
