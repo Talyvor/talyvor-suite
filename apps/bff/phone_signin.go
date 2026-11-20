@@ -885,7 +885,7 @@ func (a *app) handlePhoneChangeNumber(w http.ResponseWriter, r *http.Request) {
 
 // handlePasscodeReplace sets a forgotten passcode again, for a locked or signed-out phone: the number's check, from the
 // door's start and finish, and a key sign-in of the same person: the key's answer sent with it (Face ID on the lock's
-// challenge or the door's), or else the key sign-in that opened this session. Lens holds the rules and refuses either
+// challenge or the door's), or else, on a session not locked, the key sign-in that opened it. Lens holds the rules and refuses either
 // alone in words; a refusal leaves Lens's tickets unused, so the check is kept but for an ended ticket, and the new
 // passcode spends it. A locked session stays locked: the new passcode then opens it.
 func (a *app) handlePasscodeReplace(w http.ResponseWriter, r *http.Request) {
@@ -922,7 +922,8 @@ func (a *app) handlePasscodeReplace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		key = out.Ticket
-	case signedIn && s.keyTicket.ticket != "" && time.Now().Before(s.keyTicket.expires):
+	case signedIn && !s.locked && s.keyTicket.ticket != "" && time.Now().Before(s.keyTicket.expires):
+		// Not at the lock: the phone gets its own texts, so whoever holds a locked phone must answer Face ID.
 		key = s.keyTicket.ticket
 		a.auth.sessions.update(sid, func(cur session) session { cur.keyTicket = keyTicket{}; return cur })
 	}
