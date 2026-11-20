@@ -6,6 +6,7 @@ import { getJSONArray } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
 import { isSessionExpired, isUnconfigured } from '../../lib/productState'
 import { MemberAddError, addMember } from './membersApi'
+import { MemberInvites } from './MemberInvites'
 import { PLAN_KEY, readWorkspacePlan, type WorkspacePlan } from './agentBankApi'
 import { formatLimit, planName, usePricing, type PlanGates } from '../marketing/pricingApi'
 
@@ -302,6 +303,9 @@ export function Members() {
           Only an owner of this workspace can add members. Ask one of the owners above.
         </p>
       ) : null}
+
+      {/* B52.36 — invite links into this workspace and who joined by one: the owner's, from Lens. */}
+      {youAreNotOwner ? null : <MemberInvites />}
 
       {adding ? <AddMemberDialog members={roster.length} youAreIn={youAreIn} onClose={() => setAdding(false)} /> : null}
     </div>

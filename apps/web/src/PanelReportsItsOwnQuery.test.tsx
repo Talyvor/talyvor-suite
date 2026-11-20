@@ -179,7 +179,7 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
   '/keys': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/member-invites', '/api/workspace/members', '/api/workspace/name'],
   // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
   // B57.171 — Settings' Plan row says what the page holds, so /settings no longer reads the plan itself.
   '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/people/finding', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
@@ -289,7 +289,7 @@ describe('the swept set', () => {
     // allowance; /settings' Plan row reads the plan's name instead of the subscription.
     // 131 → 130 at B57.171: /settings' Plan row is Pocket Live's line, and the plan's name is on Settings, Plan.
     // 130 → 131 at B61.93: /settings' Privacy reads how the person is found.
-    expect(pairs).toBe(131)
+    expect(pairs).toBe(133) // 131 → 133 at B52.36: /members reads its invite links and who joined by one.
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
