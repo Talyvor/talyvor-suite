@@ -15,6 +15,7 @@ import { agentBankApi } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
 import { DESIGN_ATTR } from '../../pocketPending'
+import { usePanelName } from '../../lib/pagePanel'
 
 /**
  * B61.2 — /activity/<account>/<entry>: one payment, read from the same statement Activity lists it from.
@@ -38,6 +39,8 @@ export function ActivityPaymentScreen() {
   const amount = lines.reduce((sum, x) => sum + x.amount_minor, 0)
   const who = l ? lineWho(l, list, agents) : ''
   const [state, tone] = l ? lineState(l) : ['', 'plain' as ChipTone]
+  // B61.121 — on the web it opens in the right panel, named for who the payment was to or from.
+  usePanelName(who || 'Payment')
   const card = useRef<HTMLDivElement>(null)
   const download = () => {
     if (!card.current) return
