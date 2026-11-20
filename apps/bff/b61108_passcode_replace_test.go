@@ -95,15 +95,25 @@ func TestB61108_ALockedPhoneReachesItAndNothingElse(t *testing.T) {
 	s.door.people["+447700900032"].device = "dev-32"
 	s.door.people["+447700900033"].device = "dev-33"
 	s.door.mu.Unlock()
-	check, _ := s.confirm(nil, "+447700900032")
-	_, out, _ := s.post(nil, "", "/auth/phone/signin", map[string]string{"check": check, "passcode": "418263"})
+	// The phone signs in with its key, so its session holds the key sign-in's ticket, and then locks.
+	_, out, _ := s.post(nil, "", "/auth/passkey/challenge", map[string]string{})
+	first, _ := out["challenge"].(string)
+	_, out, _ = s.post(nil, "", "/auth/passkey/finish", keyAnswerFor("dev-32", first))
 	token, _ := out["token"].(string)
+	if token == "" {
+		t.Fatalf("the phone's key sign-in: %v", out)
+	}
 	if st, _, _ := s.post(nil, token, "/auth/lock", map[string]string{"state": "closed"}); st != http.StatusNoContent {
 		t.Fatalf("lock: %d", st)
 	}
 
+	// The phone gets its own texts, so at the lock the number and the session's key sign-in are not enough: Face ID is.
+	check, _ := s.confirm(nil, "+447700900032")
+	if st, out, _ := s.post(nil, token, "/auth/passcode/replace", map[string]string{"check": check, "passcode": "527094"}); st != http.StatusForbidden || out["reason"] != "key_needed" {
+		t.Fatalf("a new passcode at the lock on the session's key sign-in: %d %v", st, out)
+	}
+
 	// Another person's key on this phone's lock sets nothing.
-	check, _ = s.confirm(nil, "+447700900032")
 	_, out, _ = s.post(nil, "", "/auth/passkey/challenge", map[string]string{})
 	other, _ := out["challenge"].(string)
 	body := keyAnswerFor("dev-33", other)
