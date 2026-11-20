@@ -89,6 +89,11 @@ without.
 | `HELP_LENS_KEY` | unset | a Lens key on Talyvor's own account; the Help chat's model calls go on it, never on the customer's (B61.38). Unset ⇒ Help asks no model and offers "Send to our team" for every question |
 | `HELP_QUESTIONS_PER_DAY` | `20` | how many questions one account may ask the Help chat in a UTC day (B61.38); a whole number above 0 |
 | `HELP_MODEL` | unset | the model the Help chat asks on `HELP_LENS_KEY` (B61.69). Unset ⇒ Lens's catalog's newest Anthropic model, which Lens answers only where the old gateway's area is on; a 404 there is logged once, naming `HELP_MODEL` |
+| `BFF_SMTP_HOST` | unset | the SMTP server for the mail a moved phone number owes each address the person gave for their contact check (B61.91, number_moves.go). Unset (or `BFF_EMAIL_FROM` unset) ⇒ the mails are kept unsent in `number_move_mails` and go once it is set; the moved person is signed out everywhere either way |
+| `BFF_SMTP_PORT` | `465` | 465 speaks TLS from the first byte; any other port must offer STARTTLS (loopback excepted) |
+| `BFF_SMTP_USER` | unset | the SMTP sign-in name |
+| `BFF_SMTP_PASSWORD` | unset | the SMTP password (server-side only, never logged) |
+| `BFF_EMAIL_FROM` | unset | the From address of the BFF's mail; must be an email address |
 | `OPERATOR_SUBS` | — | OIDC `sub`s that may read every tenant. Unset means **nobody** |
 | `TRACK_BASE_URL` | — | optional pair with the secret below; `oidc` only |
 | `TRACK_GATEWAY_SECRET` | — | must equal Track's `GATEWAY_AUTH_SECRET` |
