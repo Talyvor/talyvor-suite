@@ -128,6 +128,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/auth/passkey/keys/remove", a.doorPerIP(a.handlePasskeyKeyRemove))
 	a.mux.HandleFunc("/auth/passcode/change", a.doorPerIP(a.handlePasscodeChange))
 	a.mux.HandleFunc("/auth/phone/change-number", a.doorPerIP(a.handlePhoneChangeNumber))
+	// B61.108 — a forgotten passcode, set again with the number and a key. See phone_signin.go.
+	a.mux.HandleFunc("/auth/passcode/replace", a.doorPerIP(a.handlePasscodeReplace))
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY
 	// is set. See synthetic.go.
 	a.mux.HandleFunc("/auth/synthetic", a.handleSyntheticSignIn)

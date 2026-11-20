@@ -27,6 +27,12 @@ package main
 //	POST /auth/phone/change-number {check, passcode}          the new number's check (start and finish for it) and the
 //	                                                          passcode: the person's number becomes the new one
 //
+// B61.108 — a forgotten passcode, for a locked or signed-out phone (talyvor-lens B61.107):
+//
+//	POST /auth/passcode/replace {check, passcode, the key's answer?}  the number's check and a key sign-in of the same
+//	                                                          person (the key's answer, or the session's key sign-in):
+//	                                                          the new passcode, with no old one
+//
 // LENS HOLDS EVERY RULE. The codes, the tickets, the passcode's hash and its wrong tries, and the keys live in Lens, on
 // the provision secret; the BFF passes the caller's address for Lens's limits and keeps only an opaque check id that
 // names Lens's one-use ticket. A ticket alone signs in nobody who has a passcode (Lens refuses it), and the passcode is
@@ -83,6 +89,7 @@ const (
 	passkeyKeyRemovePath         = "/auth/passkey/keys/remove"
 	passcodeChangePath           = "/auth/passcode/change"
 	phoneChangeNumberPath        = "/auth/phone/change-number"
+	passcodeReplacePath          = "/auth/passcode/replace"
 
 	// phoneLockAfter is how long a phone session may be away, or quiet, before it locks.
 	phoneLockAfter = 2 * time.Minute
@@ -94,7 +101,8 @@ const (
 // phoneDoorPath is every door route that the phone app calls before it holds a session, so sends no Origin.
 func phoneDoorPath(path string) bool {
 	switch path {
-	case phoneStartPath, phoneFinishPath, phoneSignInPath, phoneJoinPath, passkeyChallengePath, passkeyFinishPath:
+	case phoneStartPath, phoneFinishPath, phoneSignInPath, phoneJoinPath, passkeyChallengePath, passkeyFinishPath,
+		passcodeReplacePath:
 		return true
 	}
 	return false
@@ -875,6 +883,66 @@ func (a *app) handlePhoneChangeNumber(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"changed": true, "phone": out.Person.Phone})
 }
 
+// handlePasscodeReplace sets a forgotten passcode again, for a locked or signed-out phone: the number's check, from the
+// door's start and finish, and a key sign-in of the same person: the key's answer sent with it (Face ID on the lock's
+// challenge or the door's), or else the key sign-in that opened this session. Lens holds the rules and refuses either
+// alone in words; a refusal leaves Lens's tickets unused, so the check is kept but for an ended ticket, and the new
+// passcode spends it. A locked session stays locked: the new passcode then opens it.
+func (a *app) handlePasscodeReplace(w http.ResponseWriter, r *http.Request) {
+	if a.doorUnavailable(w, r) {
+		return
+	}
+	var in struct {
+		keyAnswer
+		Check    string `json:"check"`
+		Passcode string `json:"passcode"`
+	}
+	if !a.decodeDoor(w, r, &in) {
+		return
+	}
+	c, ok := a.takeCheck(w, in.Check)
+	if !ok {
+		return
+	}
+	address := waitlistClientIP(r)
+	sid, s, signedIn := a.auth.sessionAndIDFrom(r)
+	key := ""
+	switch {
+	case in.Signature != "":
+		var out keySignedIn
+		if err := a.lensDoor(r.Context(), "/v1/auth/passkey/finish", struct {
+			keyAnswer
+			Address string `json:"caller_address"`
+		}{in.keyAnswer, address}, &out); err != nil {
+			writeDoorFailure(w, "passcode replace key", err)
+			return
+		}
+		if signedIn && s.personID != "" && out.Person.ID != s.personID {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "That key is not yours.", "reason": "no_key"})
+			return
+		}
+		key = out.Ticket
+	case signedIn && s.keyTicket.ticket != "" && time.Now().Before(s.keyTicket.expires):
+		key = s.keyTicket.ticket
+		a.auth.sessions.update(sid, func(cur session) session { cur.keyTicket = keyTicket{}; return cur })
+	}
+	var out struct {
+		Person lensPerson `json:"person"`
+	}
+	err := a.lensDoor(r.Context(), "/v1/auth/passcode/replace", map[string]string{"ticket": c.ticket, "key_ticket": key,
+		"passcode": in.Passcode, "caller_address": address}, &out)
+	var refused doorRefusal
+	if err == nil || errors.As(err, &refused) && refused.body["reason"] == "ticket_ended" {
+		a.auth.endCheck(in.Check, c)
+	}
+	if err != nil {
+		writeDoorFailure(w, "passcode replace", err)
+		return
+	}
+	log.Printf("bff: person set a forgotten passcode again (person=%s)", out.Person.ID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // lockableSession is the phone app's session of a person, or a refusal written: 401 with no session, 409 for any
 // other session.
 func (a *app) lockableSession(w http.ResponseWriter, r *http.Request) (string, session, bool) {
@@ -983,7 +1051,7 @@ func (a *app) handleUnlock(w http.ResponseWriter, r *http.Request) {
 }
 
 // lockedOrJoining runs before the mux: a sign-up session reaches only sign-up's steps (403 otherwise), and a locked
-// phone session only unlock and signing out (423 otherwise). A phone session that has been away or quiet for
+// phone session only unlock, a forgotten passcode set again and signing out (423 otherwise). A phone session that has been away or quiet for
 // phoneLockAfter locks here, on its next request.
 func (a *app) lockedOrJoining(w http.ResponseWriter, r *http.Request) bool {
 	if a.cfg.authMode == authModeDisabled || a.auth == nil {
@@ -1015,7 +1083,7 @@ func (a *app) lockedOrJoining(w http.ResponseWriter, r *http.Request) bool {
 		return v
 	})
 	switch r.URL.Path {
-	case unlockPath, unlockChallengePath, "/auth/logout", lockPath:
+	case unlockPath, unlockChallengePath, passcodeReplacePath, "/auth/logout", lockPath:
 		return false
 	}
 	if cur.locked {
