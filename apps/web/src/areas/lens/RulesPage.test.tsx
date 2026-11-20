@@ -172,6 +172,33 @@ describe('an agent’s rules page', () => {
     expect(sent.find((s) => s.method === 'PUT')?.body).toEqual({ ...RULES, ...held, ...noULXC, ...inCents, payee_allowances: undefined })
   })
 
+  // B61.64 — Merchants and categories (Lens B61.43): a row with its choices, saved as allowed_merchant_categories, whose
+  // summary names the chosen categories in words.
+  it('saves an agent with only Software, and its Rules page reads Merchants and categories · Software after a reload', async () => {
+    const sent = mockBff({ allowed_merchant_categories: [], blocked_merchant_categories: [] })
+    window.history.pushState({}, '', '/agents/agt_1/rules')
+    const { unmount } = render(<App />)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Research’s rules' })).toBeInTheDocument()
+    const row = () => screen.getByRole('switch', { name: 'Merchants and categories' }).parentElement!
+    expect(row()).toHaveTextContent('Merchants and categoriesAny merchant')
+    turnOn('Merchants and categories')
+    fireEvent.click(within(screen.getByRole('group', { name: 'Merchants and categories Research may pay in' })).getByRole('button', { name: 'Software' }))
+    expect(row()).toHaveTextContent('Merchants and categoriesSoftware')
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await waitFor(() => expect(sent.some((s) => s.method === 'PUT')).toBe(true))
+    expect(sent.find((s) => s.method === 'PUT')?.body).toMatchObject({ allowed_merchant_categories: ['software'], blocked_merchant_categories: [] })
+    await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_1'))
+
+    unmount()
+    queryClient.clear()
+    window.history.pushState({}, '', '/agents/agt_1/rules')
+    render(<App />)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Research’s rules' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Merchants and categories' })).toBeChecked()
+    expect(row()).toHaveTextContent('Merchants and categoriesSoftware')
+  })
+
   it('has no control that does nothing', { timeout: 120_000 }, async () => {
     const report = await pressEverything('/agents/agt_research/rules')
     expect(report.dead).toEqual([])

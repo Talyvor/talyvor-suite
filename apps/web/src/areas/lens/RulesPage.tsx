@@ -11,6 +11,7 @@ import { isSessionExpired } from '../../lib/productState'
 import { PAYEES_KEY } from './Pay'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
 import { FX_KEY, fetchFX, pegQuery, useLensWords, useMoney, useMoneyFigures, type FXRates } from './money'
+import { MERCHANT_CATEGORIES, merchantCategoriesText, merchantCategoryName } from './merchantCategories'
 import { CURRENCY_WORDS, type MinorLimit, agentCurrency, convertDown, heldIn, parseRuleAmount, ruleAmountText } from './rulesCurrency'
 import {
   type Agent,
@@ -42,6 +43,9 @@ import {
 // and that save names every limit, as Lens requires on a change of currency. Payee caps and Always allow stay in dollars
 // at Lens's peg until Lens holds them in the rules' currency (B61.40). LXC is never shown. The model, provider and
 // requests-a-minute rules are the parked gateway's: they are not drawn, and a save sends back what Lens holds unchanged.
+//
+// B61.64 — Merchants and categories (Lens B61.43): the merchant categories the agent may pay in by card, a row with its
+// choices; a save names them only when they changed, and Lens judges allowing more as loosening, which asks the passkey.
 
 const MAIN_LIMITS = [
   ['approval_above_minor', 'Asks you above'],
@@ -54,7 +58,7 @@ const MORE_LIMITS = [
   ['weekly_limit_minor', 'At most a week'],
 ] as const
 type LimitField = MinorLimit
-type Switched = LimitField | 'hours' | 'payees' | 'allow' | 'models' | 'listings' | 'rate'
+type Switched = LimitField | 'hours' | 'payees' | 'allow' | 'models' | 'listings' | 'rate' | 'merchants'
 
 /** Each limit's µLXC form, which a Lens older than B61.12 names alone: dollars at the peg. */
 const ULXC_OF: Record<LimitField, keyof AgentRules> = {
@@ -90,6 +94,9 @@ interface Draft {
   listings: string[]
   allowed: string[]
   blocked: string[]
+  /** B61.64 — the merchant categories it may pay in by card, and those it never may */
+  merchants: string[]
+  blockedMerchants: string[]
   /** payee, amount in dollars as typed, per */
   allowances: [string, string, PayeeAllowance['per']][]
   modelCaps: [string, string][]
@@ -121,6 +128,7 @@ function draftOf(r: AgentRules, peg: number, currency: string, fx: FXRates | und
       models: (r.allowed_models ?? []).length > 0,
       listings: (r.allowed_listings ?? []).length > 0,
       rate: (r.requests_per_minute ?? 0) > 0,
+      merchants: (r.allowed_merchant_categories ?? []).length > 0,
     },
     rate: (r.requests_per_minute ?? 0) > 0 ? String(r.requests_per_minute) : '',
     from: r.active_from,
@@ -131,6 +139,8 @@ function draftOf(r: AgentRules, peg: number, currency: string, fx: FXRates | und
     listings: r.allowed_listings ?? [],
     allowed: r.allowed_payees ?? [],
     blocked: r.blocked_payees ?? [],
+    merchants: r.allowed_merchant_categories ?? [],
+    blockedMerchants: r.blocked_merchant_categories ?? [],
     allowances,
     modelCaps: Object.entries(r.model_daily_limits_ulxc ?? {}).map(([m, v]) => [m, limitText(v)]),
     payeeDay: Object.entries(r.payee_daily_limits_ulxc ?? {}).map(([id, v]) => [id, usd(v)]),
@@ -154,7 +164,7 @@ const amounts = (pairs: [string, string][], parse: (t: string) => number | null)
 
 /**
  * The rules body Lens takes, from the form: the currency and every limit in its minor units, and no µLXC limit. A rule
- * switched off is sent as none. Always allow and Instant transfer are sent only when they changed: absent, Lens keeps what
+ * switched off is sent as none. Always allow, Instant transfer and the merchant categories are sent only when they changed: absent, Lens keeps what
  * it holds, so a template or a save that does not touch them keeps them as they are.
  */
 function bodyOf(d: Draft, was: Draft, instantShown: boolean, peg: number): AgentRulesSave {
@@ -165,6 +175,9 @@ function bodyOf(d: Draft, was: Draft, instantShown: boolean, peg: number): Agent
         d.allowances.map(([id, t, per]) => [id, { amount_ulxc: usd(t) ?? 0, per }] as const).filter(([id, a]) => id !== '' && a.amount_ulxc > 0),
       )
     : {}
+  const merchants = d.on.merchants ? d.merchants : []
+  const sameList = (a: string[], b: string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
+  const merchantsChanged = !sameList(merchants, was.on.merchants ? was.merchants : []) || !sameList(d.blockedMerchants, was.blockedMerchants)
   const wasAllowances = was.on.allow ? Object.fromEntries(was.allowances.map(([id, t, per]) => [id, { amount_ulxc: usd(t) ?? 0, per }])) : {}
   return {
     currency: d.currency,
@@ -189,6 +202,7 @@ function bodyOf(d: Draft, was: Draft, instantShown: boolean, peg: number): Agent
     pause_on_unusual_spend: d.pause,
     ...(JSON.stringify(allowances) !== JSON.stringify(wasAllowances) ? { payee_allowances: allowances } : {}),
     ...(instantShown && d.instant !== was.instant ? { may_instant_transfer: d.instant } : {}),
+    ...(merchantsChanged ? { allowed_merchant_categories: merchants, blocked_merchant_categories: d.blockedMerchants } : {}),
   }
 }
 
@@ -260,6 +274,8 @@ function versionChanges(
     ['allowed_payees', 'Who it may pay', 'anyone', payeeName],
     ['blocked_payees', 'Never pays', 'nobody', payeeName],
     ['allowed_listings', 'Marketplace listings', 'any', (id) => id],
+    ['allowed_merchant_categories', 'Merchants and categories', 'any', merchantCategoryName],
+    ['blocked_merchant_categories', 'Never these merchants', 'none', merchantCategoryName],
   ]
   for (const [f, rule, none, name] of lists) {
     const text = (v: AgentRules[keyof AgentRules]) => {
@@ -415,8 +431,16 @@ function RulesEditor({
   }
   const fill = (t: RuleTemplate) => {
     const next = draftOf(t.rules, peg, currency, fx)
-    // A template names every rule but Always allow and Instant transfer, which it leaves as they are.
-    setD((x) => ({ ...next, converted: x.converted, allowances: x.allowances, on: { ...next.on, allow: x.on.allow }, instant: x.instant }))
+    // A template names every rule but Always allow, Instant transfer and the merchant categories, which it leaves as they are.
+    setD((x) => ({
+      ...next,
+      converted: x.converted,
+      allowances: x.allowances,
+      merchants: x.merchants,
+      blockedMerchants: x.blockedMerchants,
+      on: { ...next.on, allow: x.on.allow, merchants: x.on.merchants },
+      instant: x.instant,
+    }))
     setFilled(t)
     setUnchanged(false)
   }
@@ -511,6 +535,15 @@ function RulesEditor({
           >
             {d.on.allow ? <Allowances agent={agent} d={d} payees={payees} onChange={(allowances) => set({ allowances })} /> : null}
           </RuleRow>
+          <RuleRow title="Merchants and categories" line={merchantsLine(d)} on={d.on.merchants} onSwitch={(on) => turn('merchants', on)}>
+            {d.on.merchants ? (
+              <MerchantChoices
+                label={`Merchants and categories ${agent.name} may pay in`}
+                chosen={d.merchants}
+                onChange={(merchants) => set({ merchants, blockedMerchants: d.blockedMerchants.filter((b) => !merchants.includes(b)) })}
+              />
+            ) : null}
+          </RuleRow>
           <RuleRow title="Only these marketplace listings" on={d.on.listings} onSwitch={(on) => turn('listings', on)}>
             {d.on.listings ? (
               <IdList
@@ -555,6 +588,32 @@ function RulesEditor({
 function convertedLine(was: Draft, f: LimitField, inMoney: (minor: number, currency: string) => string): string | undefined {
   const c = was.converted
   return c && c.minor[f] > 0 ? `Held at ${inMoney(c.minor[f], c.from)}, rounded down at today’s rate` : undefined
+}
+
+/** B61.64 — what the Merchants and categories row says now: "Software, hosting, freight", or any merchant; and those it never pays in. */
+function merchantsLine(d: Draft): string {
+  const allowed = d.on.merchants && d.merchants.length > 0 ? merchantCategoriesText(d.merchants) : 'Any merchant'
+  return d.blockedMerchants.length > 0 ? `${allowed}. Never ${merchantCategoriesText(d.blockedMerchants).toLowerCase()}` : allowed
+}
+
+/** B61.64 — the merchant categories as choices, each pressed to allow it; a code Lens holds that is not one of them is a choice too. */
+function MerchantChoices({ label, chosen, onChange }: { label: string; chosen: string[]; onChange: (ids: string[]) => void }) {
+  const choices = [...MERCHANT_CATEGORIES.map((c) => c.id), ...chosen.filter((id) => !MERCHANT_CATEGORIES.some((c) => c.id === id))]
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+      {choices.map((id) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={chosen.includes(id)}
+          className={`inline-flex h-8.5 items-center whitespace-nowrap rounded-pill bg-cloud px-3.5 text-body font-semibold text-ink aria-pressed:bg-page aria-pressed:shadow-pick ${pocketFocusRing}`}
+          onClick={() => onChange(chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id])}
+        >
+          {merchantCategoryName(id)}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** A rule: its name over its line, its value, and the switch that turns it on. */

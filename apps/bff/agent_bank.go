@@ -339,6 +339,10 @@ func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 		// B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. Absent (null) keeps what Lens holds, so a
 		// save from a screen that does not show the switch never turns it off.
 		MayInstantTransfer *bool `json:"may_instant_transfer"`
+		// B61.64 — "Merchants and categories" (Lens B61.43): the merchant categories the agent may pay in by card and
+		// those it may never pay in. Absent (null) keeps what Lens holds; an empty list clears one.
+		AllowedMerchantCategories []string `json:"allowed_merchant_categories"`
+		BlockedMerchantCategories []string `json:"blocked_merchant_categories"`
 		// B61.87 — the currency the rules are held in and each limit in its minor units (Lens B61.12). Absent, Lens reads
 		// the µLXC limits as before; a change of currency names every limit in the new one, as Lens requires.
 		Currency           string `json:"currency,omitempty"`
