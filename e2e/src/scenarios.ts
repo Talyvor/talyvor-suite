@@ -1600,7 +1600,9 @@ export function marketingBoard(): Scenario {
 
 /** B57.49 — /signin and /signup are Pocket's auth card, as a signed-out stranger sees them: a white card on the cloud
  *  page with the kit's logo in it, above the heading; at 1440 the logo's streams flow into the card from the left; at
- *  390 the streams are not shown and nothing scrolls sideways. One ink action on each page. */
+ *  390 the streams are not shown and nothing scrolls sideways. One ink action on each page.
+ *  B17.519 — flowing in is B64.12's geometry: the streams hang off the card, not the window, so their right end (where
+ *  the three streams meet, 47.46% down the drawing) is on the card's left edge at the height of the card's logo. */
 export function signinBoard(): Scenario {
   return {
     id: 'signin-board',
@@ -1638,7 +1640,8 @@ export function signinBoard(): Scenario {
               const primary = Array.from(document.querySelectorAll<HTMLElement>('main a, main button')).filter((a) => a.textContent?.trim() === label)
               const ink = Array.from(document.querySelectorAll('a, button')).filter((el) => getComputedStyle(el).backgroundColor === 'rgb(17, 18, 22)')
               return {
-                streams: streams === undefined || s === undefined ? null : { left: s.left, right: s.right, loaded: streams.naturalWidth > 0, src: new URL(streams.src).pathname },
+                streams: streams === undefined || s === undefined ? null : { left: s.left, right: s.right, meet: s.top + s.height * 0.4746, loaded: streams.naturalWidth > 0, src: new URL(streams.src).pathname },
+                logoMiddle: logo === undefined ? null : (() => { const r = logo.getBoundingClientRect(); return r.top + r.height / 2 })(),
                 card: { bg: getComputedStyle(card).backgroundColor, page: getComputedStyle(document.querySelector('main')!.parentElement!).backgroundColor, left: c.left },
                 logo: logo === undefined ? '' : `${new URL(logo.src).pathname}${logo.naturalWidth > 0 ? '' : ' (not loaded)'}`,
                 logoInCardAboveH1: logo !== undefined && card.contains(logo) && logo.getBoundingClientRect().bottom <= h1.getBoundingClientRect().top,
@@ -1661,7 +1664,8 @@ export function signinBoard(): Scenario {
             if (width === 1440) {
               if (got.streams === null || !got.streams.loaded) wrong.push(`${at}: the streams are not shown`)
               else if (got.streams.src !== '/brand/logo/talyvor-streams-on-light.svg') wrong.push(`${at}: streams ${got.streams.src}`)
-              else if (got.streams.left > 1 || got.streams.right > got.card.left + 40) wrong.push(`${at}: the streams do not flow into the card from the left (${got.streams.left}–${got.streams.right}, card at ${got.card.left})`)
+              else if (Math.abs(got.streams.right - got.card.left) > 2) wrong.push(`${at}: the streams do not flow into the card from the left (${got.streams.left}–${got.streams.right}, card at ${got.card.left})`)
+              else if (got.logoMiddle === null || Math.abs(got.streams.meet - got.logoMiddle) > 3) wrong.push(`${at}: the streams meet the card at ${got.streams.meet.toFixed(1)}, not at the logo's middle (${got.logoMiddle?.toFixed(1)})`)
             } else if (got.streams !== null) wrong.push(`${at}: the streams show on a phone`)
           }
           await page.close()
