@@ -173,7 +173,7 @@
   "src/areas/lens/Scan.test.tsx": 3,
   "src/areas/lens/Setup.test.tsx": 34,
   "src/areas/lens/setupSnippets.test.ts": 14,
-  "src/areas/lens/SingleUseCards.test.tsx": 2,
+  "src/areas/lens/SingleUseCards.test.tsx": 3,
   "src/areas/lens/Spend.test.tsx": 8,
   "src/areas/lens/spendHolds.test.tsx": 2,
   "src/areas/lens/Spending.test.tsx": 5,
