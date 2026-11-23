@@ -38,7 +38,7 @@ import { agentApprovalDenied, lxcConvertBonds, marketRemixLicence, walletCardFre
 import { appShell, brandPlanes, chatBrand, chatHelpInFull, everyScreen, homeCards, lensReads, marketBrand, screensBrand, walletBrand } from './tour.ts'
 import { sdkWalletQuickstart } from './sdk.ts'
 import { featuresLeadWithWallets } from './features.ts'
-import { brandDocs, brandROI, brandVisual, companyLine, heroFade, logoFaults, readingPages } from './brand.ts'
+import { LOGO_SCREENS, brandDocs, brandROI, brandVisual, companyLine, heroFade, logoFaults, readingPages } from './brand.ts'
 import { b30Capabilities } from './clearances.ts'
 import { moneyRails } from './moneyRails.ts'
 import { dailyReconciliation } from './reconciliation.ts'
@@ -1454,42 +1454,52 @@ export function brandLogo(): Scenario {
     items: ['B57.79', 'B17.401'],
     title: 'the sidebar, sign-in and public headers carry the chosen logo, its own version in each theme',
     run: async (ctx) => {
+      const browser = ctx.app.context.browser()
+      if (browser === null) throw new CannotTest('no browser to open a signed-out context in')
+      const origin = new URL(ctx.app.page.url()).origin
       const seen: string[] = []
       const wrong: string[] = []
-      for (const path of ['/', '/signin', '/marketing', '/pricing', '/documentation']) {
-        const page = await ctx.app.tab(path)
-        try {
-          await page.locator('img[data-brand="logo"]').first().waitFor({ state: 'attached' })
-          for (const theme of ['dark', 'light'] as const) {
-            const got = await page.evaluate(async (t) => {
-              document.documentElement.dataset.theme = t
-              const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
-                .filter((i) => getComputedStyle(i).display !== 'none')
-              // B58.16: judged the moment the <img> was attached, the file was still on its way and every page read
-              // "did not load". decode() settles once the file is in or has failed; only then is it judged.
-              await Promise.all(imgs.map((i) => i.decode().catch(() => undefined)))
-              // B17.401: the plane is the first mostly opaque background behind the logo; none means the theme's page.
-              const plane = (i: HTMLImageElement): 'dark' | 'light' => {
-                for (let e: Element | null = i; e !== null; e = e.parentElement) {
-                  const c = getComputedStyle(e).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? []
-                  if (c.length >= 3 && (c[3] ?? 1) >= 0.5) return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] < 128 ? 'dark' : 'light'
+      // B17.528: sign-in and the public headers as a stranger sees them; signed in, /signin is on its way to Home.
+      const stranger = await browser.newContext()
+      try {
+        for (const { path, signedIn } of LOGO_SCREENS) {
+          const page = signedIn ? await ctx.app.tab(path) : await stranger.newPage()
+          try {
+            if (!signedIn) await page.goto(origin + path)
+            await page.locator('img[data-brand="logo"]').first().waitFor({ state: 'attached' })
+            for (const theme of ['dark', 'light'] as const) {
+              const got = await page.evaluate(async (t) => {
+                document.documentElement.dataset.theme = t
+                const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
+                  .filter((i) => getComputedStyle(i).display !== 'none')
+                // B58.16: judged the moment the <img> was attached, the file was still on its way and every page read
+                // "did not load". decode() settles once the file is in or has failed; only then is it judged.
+                await Promise.all(imgs.map((i) => i.decode().catch(() => undefined)))
+                // B17.401: the plane is the first mostly opaque background behind the logo; none means the theme's page.
+                const plane = (i: HTMLImageElement): 'dark' | 'light' => {
+                  for (let e: Element | null = i; e !== null; e = e.parentElement) {
+                    const c = getComputedStyle(e).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? []
+                    if (c.length >= 3 && (c[3] ?? 1) >= 0.5) return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] < 128 ? 'dark' : 'light'
+                  }
+                  return t
                 }
-                return t
-              }
-              const shown = imgs.map((i) => ({ src: new URL(i.currentSrc || i.src).pathname, loaded: i.complete && i.naturalWidth > 0, plane: plane(i) }))
-              const old = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
-                .map((i) => new URL(i.src, location.href).pathname)
-                .filter((s) => /\/brand\/svg\/(talyvor-|favicon)/.test(s))
-              return { shown, old }
-            }, theme)
-            seen.push(`${path} ${theme}: ${got.shown.map((g) => `${g.src} on ${g.plane}`).join(' ') || 'no logo'}`)
-            wrong.push(...logoFaults(path, theme, got.shown, got.old))
+                const shown = imgs.map((i) => ({ src: new URL(i.currentSrc || i.src).pathname, loaded: i.complete && i.naturalWidth > 0, plane: plane(i) }))
+                const old = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
+                  .map((i) => new URL(i.src, location.href).pathname)
+                  .filter((s) => /\/brand\/svg\/(talyvor-|favicon)/.test(s))
+                return { shown, old }
+              }, theme)
+              seen.push(`${path} ${theme}: ${got.shown.map((g) => `${g.src} on ${g.plane}`).join(' ') || 'no logo'}`)
+              wrong.push(...logoFaults(path, theme, got.shown, got.old))
+            }
+          } catch (e) {
+            wrong.push(`${path}: no logo (${(e as Error).message.split('\n')[0]})`)
+          } finally {
+            await page.close()
           }
-        } catch (e) {
-          wrong.push(`${path}: no logo (${(e as Error).message.split('\n')[0]})`)
-        } finally {
-          await page.close()
         }
+      } finally {
+        await stranger.close()
       }
       ctx.evidence.push({ note: seen.join('; ') })
       return wrong.length === 0
