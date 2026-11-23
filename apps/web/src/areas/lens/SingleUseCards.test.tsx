@@ -97,4 +97,25 @@ describe('single-use cards on the agent’s card', () => {
     expect(words(line)).toContain('£45.00')
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
   })
+
+  // B57.200 — drawn in Pocket as the card's "Disputes and refunds" rows are: the merchant is the row's title, where the
+  // card stands and its number under it, and the most it may spend on the right; the ask form fills the dialog's width.
+  it('draws each card as a Pocket row, its state under the merchant, and the ask form at the dialog’s width', async () => {
+    batches = [batch({ status: 'issued' }, [card({ status: 'active', last4: '7310', expires_at: '2026-11-20T09:05:00Z', merchant: 'City Taxis' })])]
+    show()
+    const line = await screen.findByTestId('single-use-card')
+    const title = await within(line).findByText('City Taxis')
+    expect(words(title.closest('.font-semibold'))).toBe('City Taxis')
+    const state = within(line).getByText('Ready for one purchase')
+    expect(state.closest('.text-ink-3')?.textContent).toContain('•••• 7310')
+
+    const form = screen.getByTestId('single-use-ask')
+    for (const label of ['For', 'Merchant', 'Up to', 'Currency']) {
+      expect(within(form).getByLabelText(label).closest('span')?.className ?? '').not.toMatch(/(^|\s)w-\d/)
+    }
+    const pair = within(form).getByLabelText('Up to').closest('.grid-cols-2')
+    expect(pair).not.toBeNull()
+    expect(pair?.contains(within(form).getByLabelText('Currency'))).toBe(true)
+    expect(pair?.contains(within(form).getByLabelText('Merchant'))).toBe(false)
+  })
 })
