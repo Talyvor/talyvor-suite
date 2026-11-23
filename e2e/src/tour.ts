@@ -191,6 +191,7 @@ export function brandPlanes(): Scenario {
  * B57.8 — Pocket's shell, as the browser paints it in the dark theme: every row in the sidebar carries its 20px line
  * icon, the selected row (Home, on /) sits on the cloud in ink, as Pocket's own colours read on the page, and the top
  * bar holds the search that opens ⌘K, Pause every agent and the avatar to Settings, with no page title or Sign out.
+ * B17.520 — the cloud is the row's own, or (B61.74) the sliding marker's while it sits under the row.
  */
 export function appShell(): Scenario {
   return {
@@ -216,6 +217,16 @@ export function appShell(): Scenario {
             })
             .map((a) => (a.textContent ?? '').trim())
           const active = nav.querySelector('a[aria-current="page"]')
+          // B17.520 — since B61.74 the cloud is the sidebar's one marker, sliding under the selected row, and the row
+          // itself is transparent: the marker is read where it sits, and only counts while it covers that row.
+          const mark = nav.querySelector('[data-nav-marker]')
+          const marker = (() => {
+            if (mark === null || active === null) return null
+            const m = mark.getBoundingClientRect()
+            const r = active.getBoundingClientRect()
+            const style = getComputedStyle(mark)
+            return { bg: style.backgroundColor, opacity: style.opacity, under: Math.abs(m.top - r.top) <= 1 && Math.abs(m.height - r.height) <= 1 }
+          })()
           // Pocket's own colours, as the page resolves them, so the row is held to the tokens rather than to numbers here.
           const probe = document.createElement('span')
           document.body.append(probe)
@@ -232,6 +243,7 @@ export function appShell(): Scenario {
             active: active ? (active.textContent ?? '').trim() : null,
             activeBg: active ? getComputedStyle(active).backgroundColor : 'none',
             activeInk: active ? getComputedStyle(active).color : 'none',
+            marker,
             cloud,
             ink,
             buttons: named('button'),
@@ -240,13 +252,18 @@ export function appShell(): Scenario {
           }
         })
         ctx.evidence.push({
-          note: `${seen.rows} sidebar rows, ${seen.bare.length} without an icon; selected "${seen.active}" ${seen.activeInk} on ${seen.activeBg}; top bar: ${[...seen.buttons, ...seen.links].join(' · ')}`,
+          note: `${seen.rows} sidebar rows, ${seen.bare.length} without an icon; selected "${seen.active}" ${seen.activeInk} on ${seen.activeBg === 'rgba(0, 0, 0, 0)' && seen.marker?.under ? `its marker ${seen.marker.bg}` : seen.activeBg}; top bar: ${[...seen.buttons, ...seen.links].join(' · ')}`,
         })
         const wrong: string[] = []
         if (seen.rows === 0) wrong.push('the sidebar has no rows')
         if (seen.bare.length > 0) wrong.push(`no 20px icon on ${seen.bare.join(', ')}`)
         if (seen.active !== 'Home') wrong.push(`on / the selected row is ${seen.active ?? 'nothing'}, not Home`)
-        if (seen.activeBg !== seen.cloud) wrong.push(`the selected row is on ${seen.activeBg}, not the cloud ${seen.cloud}`)
+        const m = seen.marker
+        const onMarker = m !== null && m.under && m.opacity === '1' && m.bg === seen.cloud
+        if (seen.activeBg !== seen.cloud && !onMarker) {
+          const under = m === null ? '' : `, its marker ${m.bg} at opacity ${m.opacity}${m.under ? '' : ' and not under it'}`
+          wrong.push(`the selected row is on ${seen.activeBg}${under}, not the cloud ${seen.cloud}`)
+        }
         if (seen.activeInk !== seen.ink) wrong.push(`the selected row is ${seen.activeInk}, not the ink ${seen.ink}`)
         if (!seen.buttons.some((b) => b.startsWith('Search agents, payees, bills'))) wrong.push('the top bar has no search')
         if (!seen.buttons.includes('Pause every agent') && !seen.buttons.includes('Start every agent again')) wrong.push('the top bar has no Pause every agent')

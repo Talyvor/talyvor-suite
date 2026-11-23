@@ -43,6 +43,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   queryClient.clear()
+  cleanup()
   document.body.replaceChildren()
 })
 
@@ -81,16 +82,21 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     const hybrid = kind === 'hybrid'
     let { main } = await at('/', account)
     expect(within(main).queryByRole('link', { name: 'Instant transfer' }) !== null).toBe(hybrid)
+    cleanup()
     document.body.replaceChildren()
     ;({ main } = await at('/money/pay', account))
     expect(within(main).queryByRole('link', { name: /^Instant transfer/ }) !== null).toBe(hybrid)
+    cleanup()
     document.body.replaceChildren()
     ;({ main } = await at('/money/pay/instant-transfer', account))
     expect(within(main).queryByTestId('instant-transfer-form') !== null).toBe(hybrid)
+    cleanup()
     document.body.replaceChildren()
     ;({ main } = await at('/agents/agt_research/rules', account))
-    await within(main).findByRole('switch', { name: 'Pauses if its spending looks unusual' })
-    expect(within(main).queryByRole('switch', { name: 'Can use Instant transfer' }) !== null).toBe(hybrid)
+    // B61.121 — an agent's rules open in the right panel over its page.
+    const panel = await screen.findByRole('dialog', { name: 'Rules' })
+    await within(panel).findByRole('switch', { name: 'Pauses if its spending looks unusual' })
+    expect(within(panel).queryByRole('switch', { name: 'Can use Instant transfer' }) !== null).toBe(hybrid)
   })
 
   it('Cards: no owner card tier of the other type', async () => {

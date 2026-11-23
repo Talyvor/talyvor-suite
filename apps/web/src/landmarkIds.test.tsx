@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Input } from '@talyvor/ui'
@@ -68,6 +68,7 @@ beforeEach(mockBff)
 afterEach(() => {
   vi.restoreAllMocks()
   queryClient.clear()
+  cleanup()
   document.body.replaceChildren()
 })
 

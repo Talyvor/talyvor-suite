@@ -95,6 +95,30 @@ describe('help and complaints, closing the account, your data (B59.28)', () => {
     expect(row.textContent).toContain('Received')
   })
 
+  // B17.524 — the page's first read of the list is still out when the ask is answered; that read, sent before the ask,
+  // lands after it and must not take the copy off the page.
+  it('keeps a copy asked for while the first read of the list is still out', async () => {
+    let answerRead: (r: Response) => void = () => {}
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+      if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+      if (url !== '/api/workspace/requests') return new Response('null', { status: 404 })
+      if (init?.method === 'POST') return json(req({ id: 81, kind: 'data_export' }), 201)
+      return new Promise<Response>((resolve) => (answerRead = resolve))
+    })
+    open('/settings/data')
+    await screen.findByText('Reading…')
+    fireEvent.click(screen.getByRole('button', { name: 'Ask for a copy' }))
+    await screen.findByTestId('request-81')
+    answerRead(new Response(JSON.stringify({ requests: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    await new Promise((r) => setTimeout(r, 50))
+    const row = screen.getByTestId('request-81')
+    expect(row.textContent).toContain('A copy of your data')
+    expect(row.textContent).toContain('Received')
+  })
+
   // B57.139 — drawn as Pocket's w-card: the crumb back to Settings, the page's heading and its line, then what was
   // sent in the wide column with the form beside it.
   it('draws each page as w-card: crumb, heading, then what was sent before the form', async () => {

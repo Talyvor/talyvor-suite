@@ -276,6 +276,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/physical-cards/x1/activate", body: `{"last4":"4242"}`},                                                               // B53.12
 		{method: http.MethodPost, path: "/api/money/physical-cards/x1/replace", body: `{"reason":"lost"}`},                                                               // B53.12
 		{method: http.MethodPost, path: "/api/money/card-disputes", body: `{"payment_id":"x1","reason":"a"}`},                                                            // B59.25
+		{method: http.MethodPost, path: "/api/money/cards", body: `{"agent_id":"a1","purpose":"p","currency":"GBP","cards":[{"merchant":"m","cap_minor":100}]}`},         // B28.49
+		{method: http.MethodPost, path: "/api/money/cards/x1/approve", body: `{}`},                                                                                       // B28.49
 		{method: http.MethodPost, path: "/api/money/payees/x1/called", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/details/challenge", body: `{"sort_code":"400000","account_number":"12345678"}`}, // B41.12
 		{method: http.MethodPost, path: "/api/money/payees/x1/details", body: `{"sort_code":"400000","account_number":"12345678","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},

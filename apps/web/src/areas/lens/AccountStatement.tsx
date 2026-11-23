@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Logo, inlineLink } from '@talyvor/ui'
-import { Button, Card as PocketCard, Icon, KindTile, Money, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
+import { Button, Card as PocketCard, Field, Icon, KindTile, Money, Select, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
 import { dayAfter, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
-import { lineWhen } from './AgentStatement'
+import { DownloadFailed, lineWhen } from './AgentStatement'
 import { AgentBankError, agentBankApi, refusalText, type Agent, type CurrencyAccount, type MoneyStatementLine } from './agentBankApi'
 import { DisputePayment } from './CardDisputes'
 import { InstantLegs, groupInstant } from './InstantTransferReceipt'
@@ -77,6 +77,73 @@ export function useAccountMonthCsv(account: CurrencyAccount | null, title: strin
       showToast(`Downloading the ${title} statement for ${month} as a CSV file`)
     },
   })
+}
+
+/** B30.95 — how many months Monthly statements lists, this one first. */
+export const STATEMENT_MONTHS = 12
+
+/** This month and the ones before it, newest first: each its first UTC day, the day its period ends before, and its name. */
+export function statementMonths(now = new Date(), count = STATEMENT_MONTHS): Array<{ from: string; to: string; name: string; current: boolean }> {
+  const day = (d: Date) => d.toISOString().slice(0, 10)
+  return Array.from({ length: count }, (_, i) => {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 1))
+    return {
+      from: day(start),
+      to: i === 0 ? dayAfter(day(now)) : day(end),
+      name: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+      current: i === 0,
+    }
+  })
+}
+
+/**
+ * B30.95 — a currency account's monthly statements: this month so far and each month before it, every one the PDF
+ * document Lens writes (Lens B30.23), named for the account and the month.
+ * B57.206 — in Pocket, as Statements' downloads are (B57.112): the month in Pocket's Select, then Download PDF.
+ */
+export function MonthlyStatements({ account, title }: { account: CurrencyAccount; title: string }) {
+  const [, inWords] = currencyWords(account.currency)
+  const months = statementMonths()
+  const [chosen, setChosen] = useState(months[0].from)
+  const month = months.find((m) => m.from === chosen) ?? months[0]
+  const file = useMutation({
+    mutationFn: async (m: (typeof months)[number]) => {
+      const stem = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      saveFile(`${stem}-statement-${m.from.slice(0, 7)}.pdf`, await agentBankApi.accountStatementFile(account.id, m.from, m.to, 'pdf'))
+      return m
+    },
+    onSuccess: (m) => showToast(`Downloading the ${title} statement for ${m.name} as a PDF file`),
+  })
+  return (
+    <PocketCard data-testid="monthly-statements" {...{ [DESIGN_ATTR]: 'pocket' }}>
+      <h3 className="font-display text-reading font-bold text-ink">Monthly statements</h3>
+      <p className="mt-1 text-body text-ink-2">Each month of this account as a PDF, in {inWords}.</p>
+      <form
+        className="mt-3 grid gap-3 wide:flex wide:items-end"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!file.isPending) file.mutate(month)
+        }}
+      >
+        <Field label="Month" className="min-w-0 wide:w-80">
+          <Select value={month.from} onChange={(e) => setChosen(e.target.value)}>
+            {months.map((m) => (
+              <option key={m.from} value={m.from}>
+                {m.current ? `${m.name}, so far` : m.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div>
+          <Button type="submit" variant="secondary" icon={<Icon name="download" />} disabled={file.isPending}>
+            {file.isPending ? 'Preparing…' : 'Download PDF'}
+          </Button>
+        </div>
+      </form>
+      {file.isError ? <DownloadFailed error={file.error} /> : null}
+    </PocketCard>
+  )
 }
 
 export function AccountStatement({ account, agent }: { account: CurrencyAccount; agent: Agent | null }) {

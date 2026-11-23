@@ -220,6 +220,8 @@ const more = (rule: string) => fireEvent.click(within(screen.getByTestId('more-r
 async function save(saved: unknown[], n: number) {
   fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
   await waitFor(() => expect(saved).toHaveLength(n))
+  // B61.121 — the rules are a panel over the agent's page, which a save closes.
+  await waitFor(() => expect(screen.queryByTestId('rules-page')).toBeNull())
   return screen.findByTestId('rules-in-words')
 }
 

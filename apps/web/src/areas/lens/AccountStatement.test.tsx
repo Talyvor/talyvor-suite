@@ -49,6 +49,8 @@ beforeEach(() => {
       return json({ agent_id: 'agt_research', lines: [], marketplace_bill: [
         { use_id: 'use_1', at: '2026-10-12T09:00:00Z', kind: 'use', amount_ulxc: 500_000, memo: 'Lead finder', label: 'on the marketplace bill' }] })
     if (path === '/api/agents/agt_research/statement' || path === '/api/agents/room_1/statement') return json({ lines: [] })
+    if (path === '/api/money/accounts/acct_usd/statement' && url.includes('format=pdf'))
+      return new Response('%PDF-1.4\n', { status: 200, headers: { 'Content-Type': 'application/pdf' } })
     if (path === '/api/money/accounts/acct_usd/statement' && url.includes('format=csv'))
       return new Response('entry_id,line\n', { status: 200, headers: { 'Content-Type': 'text/csv' } })
     if (path === '/api/money/accounts/acct_usd/statement') return json(USD)
@@ -124,6 +126,34 @@ describe('Statements, a tab per wallet and account', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Download CSV' }))
     await waitFor(() => expect(saved).toEqual([expect.stringMatching(/^company-usd-statement-\d{4}-\d{2}-01-to-\d{4}-\d{2}-\d{2}\.csv$/)]))
     expect(asked.some((u) => u.startsWith('/api/money/accounts/acct_usd/statement?') && u.includes('format=csv'))).toBe(true)
+  })
+
+  it('lists the account’s monthly statements and downloads a past month as Lens’s PDF (B30.95, B57.206 in Pocket)', async () => {
+    show('/statements?wallet=acct_usd')
+    const months = await screen.findByTestId('monthly-statements')
+    // B57.206 — the month is chosen in Pocket's Select, as Statements' downloads choose (B57.112), with one Download PDF.
+    const month = within(months).getByLabelText('Month') as HTMLSelectElement
+    const options = within(month).getAllByRole('option')
+    expect(options).toHaveLength(12)
+    expect(options[0].textContent).toMatch(/^\w+ \d{4}, so far$/)
+    expect(within(months).getAllByRole('button', { name: 'Download PDF' })).toHaveLength(1)
+
+    URL.createObjectURL = vi.fn(() => 'blob:x')
+    URL.revokeObjectURL = vi.fn()
+    const saved: string[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download)
+    })
+    const now = new Date()
+    const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+    const from = last.toISOString().slice(0, 10)
+    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10)
+    const name = last.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    fireEvent.change(month, { target: { value: from } })
+    expect(month.selectedOptions[0].textContent).toBe(name)
+    fireEvent.click(within(months).getByRole('button', { name: 'Download PDF' }))
+    await waitFor(() => expect(saved).toEqual([`company-usd-statement-${from.slice(0, 7)}.pdf`]))
+    expect(asked).toContain(`/api/money/accounts/acct_usd/statement?${new URLSearchParams({ from, to, format: 'pdf' })}`)
   })
 
   it('shows an invoice paid into an agent’s account as money in, under the agent’s face', async () => {

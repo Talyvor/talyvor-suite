@@ -665,6 +665,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/card-refunds", a.requireTenant(a.handleMoneyCardRefunds))
 	a.mux.HandleFunc("/api/money/card-exports", a.requireTenant(a.handleMoneyCardExport))
 	a.mux.HandleFunc("/api/money/card-spends", a.requireTenant(a.handleMoneyCardSpends)) // B59.54, money_card_spends.go
+	// B28.49 — an agent's single-use cards and the owner's approval of them (Lens B46.10). See money_cards.go.
+	a.mux.HandleFunc("/api/money/cards", a.requireTenant(a.handleMoneyCards))
+	a.mux.HandleFunc("/api/money/cards/{id}/approve", a.requireTenant(a.handleMoneyCardApprove))
 
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/challenge", a.requireTenant(a.handleMoneyMandateChallenge))

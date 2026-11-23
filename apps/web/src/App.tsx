@@ -1,22 +1,27 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { QueryCache, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
   BrowserRouter,
   Link,
   Route,
   Routes,
+  generatePath,
   matchPath,
   matchRoutes,
   useHref,
   useLinkClickHandler,
   useLocation,
+  useNavigate,
   useNavigationType,
+  type Location,
 } from 'react-router-dom'
 import { Logo, cn, inlineLink } from '@talyvor/ui'
 import {
   Button as PocketButton,
+  CloseX,
   EmptyState,
   Icon as PocketIcon,
+  Layer,
   PageBackground,
   PageHeading,
   Shell as PocketShell,
@@ -120,6 +125,7 @@ import { useAuthMeReader } from './lib/authMe'
 import { designOf } from './pocketPending'
 import { WorkspaceStatus } from './labels/workspace'
 import { AreaRoute, IfArea, useWorkspaceAreas } from './lib/workspaceAreas'
+import { PanelNameProvider } from './lib/pagePanel'
 import { ACTIVITY_TABS, PlaceTabs } from './components/PlaceTabs'
 
 // App.tsx is a SHARED file (see README §Directory ownership): it owns routing
@@ -182,6 +188,11 @@ export interface ConsoleRoute {
   /** What the sticky top bar says while this route is matched. */
   title: string
   element: React.ReactElement
+  /**
+   * B61.121 — the page opens in the right panel, over the page it was opened from; at its own address it opens over this
+   * one (a path pattern, filled from the panel's own params), and the panel is named by the title unless the page names it.
+   */
+  panel?: string
 }
 
 export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
@@ -242,7 +253,7 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // B57.16 — an agent's rules: today's agent view with that agent open, until B57.23 draws them.
   // B57.20 — an agent's page, from one read; today's agent view under it until B57.21 and B57.22 redraw the rest.
   { path: '/agents/:id', title: 'Agents', element: <AgentPage /> },
-  { path: '/agents/:id/rules', title: 'Agents', element: <AgentRulesPage /> },
+  { path: '/agents/:id/rules', title: 'Agents', element: <AgentRulesPage />, panel: '/agents/:id' },
   // B59.45 — every agent's card, Frozen or not, its limits, Freeze card, its purchases, and its details behind the passkey.
   { path: '/cards', title: 'Cards', element: <CardsScreen /> },
   // B20.3 — browse, use and publish agents, prompts, skills, evaluations and pipelines; what they earned.
@@ -252,25 +263,25 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/members', title: 'Members', element: <Members /> },
   { path: '/settings', title: 'Settings', element: <Settings /> },
   // B57.43 — every passkey and the phone's key by name, added and removed, the waiting phone and Stop everything.
-  { path: '/settings/devices', title: 'Approvals and devices', element: <DevicesScreen /> },
+  { path: '/settings/devices', title: 'Approvals and devices', element: <DevicesScreen />, panel: '/settings' },
   // B30.116 — the owner's verification level, each check, and the level each capability needs for live money.
-  { path: '/settings/verification', title: 'Verification', element: <VerificationScreen /> },
+  { path: '/settings/verification', title: 'Verification', element: <VerificationScreen />, panel: '/settings' },
   // B55.28 — where the workspace is paid its share of a room, its marketplace sales and royalties.
   { path: '/settings/payout-details', title: 'Payout details', element: <PayoutDetailsScreen /> },
   // B30.103 — each money capability's terms, read and accepted before its first use.
-  { path: '/settings/terms', title: 'Capability terms', element: <CapabilityTermsScreen /> },
+  { path: '/settings/terms', title: 'Capability terms', element: <CapabilityTermsScreen />, panel: '/settings' },
   // B39.25 — a Docs workspace's owner adds, rotates and deletes its signed webhooks.
-  { path: '/settings/webhooks', title: 'Webhooks', element: <DocsWebhooks /> },
+  { path: '/settings/webhooks', title: 'Webhooks', element: <DocsWebhooks />, panel: '/settings' },
   // B39.34 — a Docs workspace's owner sets the From name, header colour and logo of its Docs email.
-  { path: '/settings/email-branding', title: 'Email branding', element: <DocsEmailBranding /> },
+  { path: '/settings/email-branding', title: 'Email branding', element: <DocsEmailBranding />, panel: '/settings' },
   // B40.8 — the MCP address, how to add it to each assistant, and the assistants connected, each revocable.
-  { path: '/settings/connect', title: 'Connect your AI', element: <ConnectAI /> },
+  { path: '/settings/connect', title: 'Connect your AI', element: <ConnectAI />, panel: '/settings' },
   // B59.28 — help and complaints, closing the account and the account's data, each answered by a person at Talyvor.
-  { path: '/settings/help', title: 'Help and complaints', element: <HelpScreen /> },
-  { path: '/settings/close', title: 'Close this account', element: <CloseAccountScreen /> },
-  { path: '/settings/data', title: 'Your data', element: <YourDataScreen /> },
+  { path: '/settings/help', title: 'Help and complaints', element: <HelpScreen />, panel: '/settings' },
+  { path: '/settings/close', title: 'Close this account', element: <CloseAccountScreen />, panel: '/settings' },
+  { path: '/settings/data', title: 'Your data', element: <YourDataScreen />, panel: '/settings' },
   // B59.31 — a Business account's company details and the people with control.
-  { path: '/settings/company', title: 'Company details', element: <CompanyDetailsScreen /> },
+  { path: '/settings/company', title: 'Company details', element: <CompanyDetailsScreen />, panel: '/settings' },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B59.53 — Wallets: each side the kind shows, a tile per currency and each account, with Top up, Withdraw and Convert.
@@ -287,7 +298,7 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/pay/instant-transfer/:id', title: 'Instant transfer', element: <InstantTransferScreen /> },
   // B61.2 — Activity, as the phone has it: every payment in and out, and each one's own page.
   { path: '/activity', title: 'Activity', element: <ActivityScreen /> },
-  { path: '/activity/:account/:entry', title: 'Activity', element: <ActivityPaymentScreen /> },
+  { path: '/activity/:account/:entry', title: 'Activity', element: <ActivityPaymentScreen />, panel: '/activity' },
   // B45.37 — the page an assistant's recurring-payments link opens: its standing orders, and one passkey signature.
   { path: '/money/plans/:id', title: 'Sign recurring payments', element: <RecurringPlanScreen /> },
   // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.
@@ -335,6 +346,91 @@ function titleFor(pathname: string): string {
   const matches = matchRoutes(TITLE_MATCHERS, pathname === '/earnings' ? ROYALTIES_PATH : pathname)
   const matched = matches?.[matches.length - 1]?.route.path
   return CONSOLE_ROUTES.find((r) => r.path === matched)?.title ?? NOT_FOUND_TITLE
+}
+
+/**
+ * B61.121 — THE PAGES THAT OPEN IN THE RIGHT PANEL, and what is drawn behind each. Opened from a page in the app, the page
+ * it was opened from stays drawn behind it, mounted and at its scroll; at its own address (a link, a reload) the page it
+ * belongs to is. Each history entry remembers its own page behind, so Back and Forward draw it again, and a panel opened
+ * from a panel keeps the first one's page. Back closes it; Esc, the scrim and the close x go back the same way.
+ */
+const PANEL_ROUTES = CONSOLE_ROUTES.filter((r): r is ConsoleRoute & { panel: string } => r.panel !== undefined)
+
+interface PanelPlace {
+  route: ConsoleRoute & { panel: string }
+  /** The page drawn behind the panel. */
+  behind: Pick<Location, 'pathname' | 'search' | 'hash'>
+  /** How many entries back the page behind is; 0 when it is not in this tab's history (the panel's address opened straight). */
+  depth: number
+}
+
+// By the entry's key and its address: a first entry's key is "default" at every address.
+const PANEL_ENTRIES = new Map<string, { behind: PanelPlace['behind']; depth: number }>()
+const entryOf = (l: Pick<Location, 'key' | 'pathname'>) => `${l.key} ${l.pathname}`
+
+function panelRouteOf(pathname: string) {
+  const matches = matchRoutes(TITLE_MATCHERS, pathname)
+  const last = matches?.[matches.length - 1]
+  const route = PANEL_ROUTES.find((r) => r.path === last?.route.path)
+  return route && last ? { route, params: last.params } : null
+}
+
+/** The page behind the panel at a history entry, if a panel is open there. */
+const behindAt = (l: Pick<Location, 'key' | 'pathname'>) => PANEL_ENTRIES.get(entryOf(l))?.behind.pathname
+
+function usePanelPlace(): PanelPlace | null {
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const left = useRef<{ behind: PanelPlace['behind']; depth: number } | null>(null)
+  return useMemo(() => {
+    const hit = panelRouteOf(location.pathname)
+    if (hit === null) {
+      left.current = { behind: location, depth: 0 }
+      return null
+    }
+    let at = PANEL_ENTRIES.get(entryOf(location))
+    if (at === undefined) {
+      const from = navigationType === 'POP' ? null : left.current
+      at = from
+        ? { behind: from.behind, depth: from.depth + (navigationType === 'PUSH' ? 1 : 0) }
+        : { behind: { pathname: generatePath(hit.route.panel, hit.params), search: '', hash: '' }, depth: 0 }
+      PANEL_ENTRIES.set(entryOf(location), at)
+    }
+    left.current = at
+    return { route: hit.route, ...at }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one answer per history entry: `key` changes on every move
+  }, [location.key, location.pathname])
+}
+
+/** B61.121 — the panel a page opens in: its name and the close x at the top, the page under them. */
+function PagePanel({ place, onClose }: { place: PanelPlace; onClose: () => void }) {
+  const { pathname } = useLocation()
+  const heading = useId()
+  const [name, setName] = useState<string | null>(null)
+  return (
+    <Layer labelledBy={heading} onClose={onClose} position="panel">
+      <div data-design="pocket" data-page-panel="" className="grid content-start">
+        <div className="flex items-center justify-between gap-3 px-gutter pt-5">
+          <h2 id={heading} className="min-w-0 font-display text-title font-bold text-ink">
+            {name ?? place.route.title}
+          </h2>
+          <CloseX onClose={onClose} className="shrink-0" />
+        </div>
+        <PanelNameProvider value={setName}>
+          <ScreenBoundary address={pathname} onRetry={() => void queryClient.resetQueries({ type: 'inactive' })}>
+            {/* Padded as the shell's main pads a page, so a page that leans on it sits the same in the panel. */}
+            <div className="px-gutter pb-6 pt-4" data-design={designOf(pathname, ROUTE_PATHS)}>
+              <Routes>
+                {PANEL_ROUTES.map((r) => (
+                  <Route key={r.path} path={r.path} element={<AreaRoute path={r.path}>{r.element}</AreaRoute>} />
+                ))}
+              </Routes>
+            </div>
+          </ScreenBoundary>
+        </PanelNameProvider>
+      </div>
+    </Layer>
+  )
 }
 
 /**
@@ -597,7 +693,18 @@ function AppShell() {
 }
 
 function ConsoleShell() {
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
+  // B61.121 — a page open in the right panel, and the page drawn behind it: the shell is that page's (its heading, tab
+  // title, background and tabs), so nothing behind the panel moves when it opens or closes.
+  const place = usePanelPlace()
+  const navigate = useNavigate()
+  const closePanel = () => {
+    if (place === null) return
+    if (place.depth > 0) void navigate(-place.depth)
+    else void navigate(place.behind, { replace: true })
+  }
+  const shown = place?.behind.pathname ?? pathname
   const me = useAuthMeReader().data
   const operator = me?.operator === true
   // B59.2 — and no page of an area this workspace does not have.
@@ -607,8 +714,10 @@ function ConsoleShell() {
   // ONE expression, two consumers: the page's heading paints it and the browser tab is told it. They
   // cannot drift into naming different pages because there is nothing to drift between —
   // documentTitle.test.tsx asserts the tab's page half IS the heading's string, at every address.
-  const page = titleFor(pathname)
-  useDocumentTitle(page)
+  // B61.121 — but while a page is open in the right panel, the heading is the page behind it and the tab names the panel's
+  // page, the address it is at.
+  const page = titleFor(shown)
+  useDocumentTitle(titleFor(pathname))
   // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
   const chat = pathname === '/chat' || pathname.startsWith('/chat/')
   return (
@@ -620,8 +729,8 @@ function ConsoleShell() {
     <div className="contents" data-design="pocket">
     <PocketShell
       drawer={chat}
-      page={pathname}
-      background={<Background pathname={pathname} />}
+      page={shown}
+      background={<Background pathname={shown} />}
       sidebar={<Sidebar />}
       bar={
         <>
@@ -675,12 +784,14 @@ function ConsoleShell() {
           reader only. */}
       <PageHeading className={pathname === '/chat' ? 'sr-only' : 'mb-4.5'}>{page}</PageHeading>
       {/* B61.3 — Activity's tabs, and Pay's on a Business: the pages that left the sidebar, under the section they belong to. */}
-      <PlaceTabs />
+      <PlaceTabs pathname={shown} />
       {/* B27.12 — a screen that throws while drawing shows "couldn't be read" here, with the shell
           still standing. Try again drops the failed screen's cached reads and asks for them anew. */}
-      <ScreenBoundary address={pathname} onRetry={() => void queryClient.resetQueries({ type: 'inactive' })}>
-        <div className="contents" data-design={designOf(pathname, ROUTE_PATHS)}>
-        <Routes>
+      <ScreenBoundary address={shown} onRetry={() => void queryClient.resetQueries({ type: 'inactive' })}>
+        <div className="contents" data-design={designOf(shown, ROUTE_PATHS)}>
+        {/* Always given its location, the page behind or this one: Routes wraps a location it is given, and a tree that
+            changed shape as the panel opened would draw the page behind anew, at the top. */}
+        <Routes location={place?.behind ?? location}>
           {/* EVERY ROUTE COMES FROM CONSOLE_ROUTES, which is also what titles the page. A page
               declared here and nowhere else would be a page the heading cannot name — that was
               the state this table replaced. */}
@@ -723,6 +834,7 @@ function ConsoleShell() {
         </Routes>
         </div>
       </ScreenBoundary>
+      {place ? <PagePanel place={place} onClose={closePanel} /> : null}
       {/* B59.28 — Help and complaints, Close this account and Your data at the foot of every page; Chat has the whole page. */}
       {chat ? null : <SignedInFooter />}
       {/* B45.6 — Taly, on every signed-in page, told which page it is on. Today's design until B57.159. */}
@@ -802,11 +914,18 @@ function DesignScope({ children }: { children: React.ReactNode }) {
  * instant jump rather than an animation the reader watches.
  */
 function ScrollToTopOnPush() {
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
   const navigationType = useNavigationType()
+  const was = useRef(location)
   useLayoutEffect(() => {
+    const from = was.current
+    was.current = location
     if (navigationType === 'POP') return
+    // B61.121 — a page opening in the right panel, or closing back to the page behind it, leaves that page where it was.
+    if (panelRouteOf(pathname) !== null || behindAt(from) === pathname) return
     window.scrollTo(0, 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `location` is read for the entry it is; the move is the address
   }, [pathname, navigationType])
   return null
 }

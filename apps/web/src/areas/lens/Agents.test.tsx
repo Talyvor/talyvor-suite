@@ -213,6 +213,25 @@ describe('New agent (B61.13)', () => {
     expect(put).toMatchObject({ currency: 'USD', max_per_payment_minor: 0, daily_limit_minor: 0, monthly_limit_minor: 0, approval_above_minor: 1, allowed_payees: ['pye_1'] })
   })
 
+  // B61.64 — More rules names the merchant categories it may pay in by card; the summary says them in words.
+  it('More rules with Software and Hosting saves the agent with allowed_merchant_categories ["hosting", "software"]', async () => {
+    const { sent } = mockBff({ agents: [agent('agt_1', 'Books')], plan: { plan: 'free', agents: 3, agents_used: 1 } })
+    await openNewAgent()
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Ledger' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'More rules' }))
+    const more = within(dialog).getByTestId('new-agent-more-rules')
+    expect(more).toHaveTextContent('Any merchant. Pick some to let it pay only them by card.')
+    const categories = within(more).getByRole('group', { name: 'Merchants and categories' })
+    fireEvent.click(within(categories).getByRole('button', { name: 'Hosting' }))
+    fireEvent.click(within(categories).getByRole('button', { name: 'Software' }))
+    expect(more).toHaveTextContent('Software, hosting. Only these, by card.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))
+    expect(sent.find((s) => s.method === 'PUT')!.body.allowed_merchant_categories).toEqual(['hosting', 'software'])
+  })
+
   // B61.102 — Make your own offers the gallery's 27 pictures (the six helpers, lime and the twenty), none with a name;
   // the chef goes to the BFF as its picture, which Lens draws in lemon.
   it('your own offers 27 pictures, and the chef creates the agent wearing picture chef', async () => {

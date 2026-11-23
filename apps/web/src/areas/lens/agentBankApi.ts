@@ -690,6 +690,13 @@ export interface AgentRules {
   /** B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. A save without it keeps what Lens holds. */
   may_instant_transfer?: boolean
   /**
+   * B61.64 — "Merchants and categories" (Lens B61.43): the merchant categories the agent may pay in by card (once it
+   * names any, a card payment in another is refused) and those it may never pay in, each a merchantCategories.ts id or a
+   * four-digit merchant category code. A save without them keeps what Lens holds.
+   */
+  allowed_merchant_categories?: string[] | null
+  blocked_merchant_categories?: string[] | null
+  /**
    * B61.87 — the currency the rules are held in, GBP, EUR, USD or USDC (Lens B61.12), and each amount limit in its minor
    * units. The µLXC limits above are what these are worth for the parked gateway; a save names these and not those.
    * Absent from a Lens older than B61.12.
@@ -1081,12 +1088,12 @@ async function statementFile(agentID: string | null, from: string, to: string, f
 }
 
 /**
- * B56.15 — a currency account's statement for [from, to) as the CSV Lens writes (Lens B56.14). A refusal carries
- * Lens's sentence.
+ * B56.15 — a currency account's statement for [from, to) as the CSV Lens writes (Lens B56.14), or (B30.95) the PDF
+ * document Lens writes of it (Lens B30.23). A refusal carries Lens's sentence.
  */
-async function accountStatementFile(accountID: string, from: string, to: string): Promise<Blob> {
-  const path = `/api/money/accounts/${e(accountID)}/statement?${new URLSearchParams({ from, to, format: 'csv' })}`
-  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+async function accountStatementFile(accountID: string, from: string, to: string, format: 'csv' | 'pdf' = 'csv'): Promise<Blob> {
+  const path = `/api/money/accounts/${e(accountID)}/statement?${new URLSearchParams({ from, to, format })}`
+  const res = await fetch(path, { headers: { Accept: format === 'pdf' ? 'application/pdf' : 'text/csv' } })
   if (!res.ok) {
     let sentence = ''
     try {
@@ -1324,6 +1331,14 @@ export const agentBankApi = {
   /** B59.25 — the merchants' refunds on the workspace's card payments, newest first. */
   cardRefunds: async (): Promise<CardRefund[]> =>
     (await getSaid<{ card_refunds: CardRefund[] | null }>('/api/money/card-refunds')).card_refunds ?? [],
+  /** B28.49 — the agent's single-use card batches, newest first, each card with where it stands (Lens B46.10). */
+  cardBatches: async (agentID: string): Promise<MoneyCardBatch[]> =>
+    (await getSaid<{ batches: MoneyCardBatch[] | null }>(`/api/money/cards?${new URLSearchParams({ agent_id: agentID })}`)).batches ?? [],
+  /** B28.49 — asks for single-use cards for one job, one per merchant, each capped; nothing is held until it is approved. */
+  askCards: (ask: { agent_id: string; purpose: string; currency: string; cards: { merchant: string; cap_minor: number }[] }, key: string) =>
+    send<MoneyCardBatch>('POST', '/api/money/cards', ask, { 'Idempotency-Key': key }),
+  /** B28.49 — the owner or an admin approves a batch: each card's cap is held and the card issued. */
+  approveCards: (id: string) => send<MoneyCardBatch>('POST', `/api/money/cards/${e(id)}/approve`),
   cardExportFile,
   listFile,
   /** B19.24 — the agent's test-mode card and every purchase on it; null when it has none (Lens answers 404). */
@@ -2667,6 +2682,34 @@ export interface CardDispute {
   /** what came back of the payment: the payment once won, else 0 */
   credited_minor: number
   decided_at?: string
+  created_at: string
+}
+
+/** B28.49 — Lens economy.MoneyCard: one single-use card, locked to its merchant and capped. */
+export interface MoneyCard {
+  id: string
+  merchant: string
+  cap_minor: number
+  currency: string
+  status: 'awaiting_approval' | 'issuing' | 'active' | 'used' | 'expired' | 'failed'
+  last4?: string
+  /** what its one charge spent; the rest of its cap went back to the agent's account */
+  spent_minor: number
+  detail?: string
+  expires_at?: string
+}
+
+/** B28.49 — Lens economy.CardBatch: the single-use cards asked for one job, approved once for all of them. */
+export interface MoneyCardBatch {
+  id: string
+  agent_id: string
+  purpose: string
+  currency: string
+  total_minor: number
+  status: 'awaiting_approval' | 'issuing' | 'issued'
+  cards: MoneyCard[] | null
+  approved_by?: string
+  approved_at?: string
   created_at: string
 }
 

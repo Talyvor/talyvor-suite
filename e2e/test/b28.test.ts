@@ -74,6 +74,20 @@ describe('B28.293 — every DONE B28 feature, with the scenarios that test it', 
     expect(b28Report(after, new Map(), []).features.find((f) => f.id === 'B28.24')).toMatchObject({ state: 'waiting', item: 'B17.2' })
   })
 
+  it('B28.243 (a database error is 503, not a sign-out) reads as no scenario can reach it, and files nothing', () => {
+    const q = '## B28.243 — a database hiccup is 503, not a sign-out\nrepo: talyvor-lens · deps: none · status: DONE e4f5478\n'
+    const r = b28Report(q, new Map(), [])
+    expect(r.features).toMatchObject([{ id: 'B28.243', state: 'cannot' }])
+    expect(b28ItemsFor(q, r, 'docs/e2e/report.md').filed).toEqual([])
+  })
+
+  it('B28.264 (step-up on the most dangerous admin actions) reads as no scenario can reach it, and files nothing', () => {
+    const q = '## B28.264 — step-up auth on the most dangerous admin actions\nrepo: talyvor-lens · deps: none · status: DONE 7cb9c5b\n'
+    const r = b28Report(q, new Map(), [])
+    expect(r.features).toMatchObject([{ id: 'B28.264', state: 'cannot' }])
+    expect(b28ItemsFor(q, r, 'docs/e2e/report.md').filed).toEqual([])
+  })
+
   it("every item a scenario in the catalog names is a build item's id", () => {
     const named = [...scenarioItems().values()].flat()
     expect(named.length).toBeGreaterThan(0)
