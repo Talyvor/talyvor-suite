@@ -11,7 +11,7 @@ import { APPROVALS_KEY, BOOK_KEY, OnThePhone, rulesKey, useKeys } from './AgentB
 import { type AgentApproval, agentBankApi } from './agentBankApi'
 import { useMoney } from './money'
 import { signApproval } from './passkeys'
-import { TaskSays } from './PaymentProof'
+import { PaymentProofSection, TaskSays, stoppedSentence } from './PaymentProof'
 
 // ApprovalSheet.tsx — B57.15: the approval sheet (Pocket w-home+sheet-A, w-home+sheet-L), over the page you are on.
 // ?approval=<id> on any page opens it, for links from pushes and emails, and so does /approvals#approval-<id>, the
@@ -292,6 +292,13 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
               <p className="text-body text-ink" data-testid="approval-sheet-state">
                 {a.status === 'expired' ? `This request expired. If ${name} asks again, it waits for you again.` : `Already decided: ${DECIDED[a.status] ?? 'closed'}.`}
               </p>
+              {/* B62.10 — a payment it approved that was stopped says why (Lens B62.9), and a used one opens its proof. */}
+              {a.stopped ? (
+                <p className="text-body text-danger" data-testid="approval-stopped">
+                  {stoppedSentence(a.stopped.changed)}
+                </p>
+              ) : null}
+              {a.status === 'used' ? <PaymentProofSection entry={a.id} task={a.task} /> : null}
               {closeButton}
             </>
           ) : !decides ? (

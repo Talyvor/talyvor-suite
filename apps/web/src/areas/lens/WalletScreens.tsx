@@ -28,7 +28,7 @@ import { AccountStatement, MonthlyStatements, accountTitle, useAccountMonthCsv }
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
-import { TaskSays } from './PaymentProof'
+import { TaskSays, stoppedSentence } from './PaymentProof'
 import { ListFileDownload } from './ListFile'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
@@ -398,10 +398,26 @@ function ApprovalsPage() {
                             <>
                               {what} · <span className="font-figure">{formatDecided(decidedAt(a))}</span>
                               {a.approved_by_agent_id ? ` by ${nameOf(a.approved_by_agent_id)}` : null}
+                              {/* B62.10 — a payment it approved that was stopped says why (Lens B62.9). */}
+                              {a.stopped ? (
+                                <span className="block text-danger" data-testid="decided-stopped">
+                                  {stoppedSentence(a.stopped.changed)}
+                                </span>
+                              ) : null}
                             </>
                           }
                           amount={amountOf(a)}
-                          action={<Chip tone={DECIDED_TONE[a.status] ?? 'plain'}>{DECIDED[a.status]?.label ?? 'Closed'}</Chip>}
+                          action={
+                            <span className="inline-flex items-center gap-2">
+                              <Chip tone={DECIDED_TONE[a.status] ?? 'plain'}>{DECIDED[a.status]?.label ?? 'Closed'}</Chip>
+                              {/* B62.10 — a used approval opens its sheet, with the proof of the payment it approved. */}
+                              {a.status === 'used' ? (
+                                <PocketButton asChild variant="secondary" size="sm">
+                                  <Link to={approvalSheetTo(location, a.id)}>Proof</Link>
+                                </PocketButton>
+                              ) : null}
+                            </span>
+                          }
                         />
                       </div>
                     )

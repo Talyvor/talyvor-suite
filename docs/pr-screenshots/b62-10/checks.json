@@ -1,0 +1,5 @@
+[
+ { "route": "/approvals" },
+ { "route": "/approvals?approval=apr_hosting" },
+ { "route": "/approvals?approval=apr_stopped" }
+]

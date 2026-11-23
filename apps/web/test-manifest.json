@@ -100,7 +100,7 @@
   "src/areas/lens/AlertChannels.test.tsx": 3,
   "src/areas/lens/AlwaysAllow.test.tsx": 3,
   "src/areas/lens/ApprovalInbox.test.tsx": 18,
-  "src/areas/lens/ApprovalSheet.test.tsx": 10,
+  "src/areas/lens/ApprovalSheet.test.tsx": 16,
   "src/areas/lens/Approve.test.tsx": 27,
   "src/areas/lens/BillingReturn.test.tsx": 19,
   "src/areas/lens/billingTimingContract.test.ts": 3,

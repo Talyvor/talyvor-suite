@@ -849,7 +849,23 @@ const BY_PATH: Record<string, unknown> = {
         paid_from: { kind: 'lxc', account_id: 'agt_research', name: 'Researcher’s LXC balance', currency: 'LXC', amount_minor: 3_000_000, balance_minor: 10_000_000 },
         asks_above_ulxc: 2_000_000, budget_left_after_ulxc: null,
       },
+      // B62.10 — the October servers approval, used: its Decided row opens its proof, read by its id (Lens B62.9).
+      {
+        id: 'apr_out', agent_id: 'agt_research', amount_ulxc: 2_000_000, model: '', status: 'used', created_at: '2026-10-10T09:50:00Z', decided_at: '2026-10-10T09:58:00Z',
+        payee: { kind: 'outside', id: 'payee_hetzner', name: 'Hetzner' }, memo: 'October servers', task: 'Pay October’s servers', stopped: null,
+      },
+      // B62.10 — an approval whose payment was stopped: the agent sent it to another payee than the one approved.
+      {
+        id: 'apr_stopped', agent_id: 'agt_research', amount_ulxc: 1_500_000, model: '', status: 'approved', created_at: '2026-09-25T09:00:00Z', decided_at: '2026-09-25T09:05:00Z',
+        payee: { kind: 'outside', id: 'payee_hetzner', name: 'Hetzner' }, memo: 'September servers', stopped: { changed: 'payee', at: '2026-09-25T09:10:00Z' },
+      },
     ],
+  },
+  '/api/payment-proofs/apr_out': {
+    id: 'pp_out', rule: 'approval_above', rules_version: 3, approval_id: 'apr_out', key_kind: 'device', key_id: 'dk_1', signed_at: '2026-10-10T09:58:00Z',
+    shown: { agent_id: 'agt_research', agent_name: 'Researcher', payee: { kind: 'outside', id: 'payee_hetzner', name: 'Hetzner' }, amount_minor: 2000, currency: 'GBP' },
+    sent: { agent_id: 'agt_research', payee: { kind: 'outside', id: 'payee_hetzner', name: 'Hetzner' }, amount_minor: 2000, currency: 'GBP', rail: 'account', reference: 'ref_hetzner', task: 'Pay October’s servers' },
+    created_at: '2026-10-10T10:00:00Z', verified: true,
   },
   '/api/agents/agt_research/rules': {
     max_per_request_ulxc: 0,
