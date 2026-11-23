@@ -14,7 +14,7 @@ import (
 // TestClosedAccountTakesItsAddressesAndNumberMoveMails is B61.122 on a real Postgres: Talyvor closes Ada's account and
 // Cy's; the next sweep of Lens's operator inbox deletes every address Ada gave and every mail her move still kept, and
 // leaves her move as its id and time with no sub, once the sessions it owed are ended. Cy's address given also for her
-// open account stays, with its mail and her move's sub; Bob's account is open and keeps everything. A closed account's
+// open account stays, with its mail and her move's sub, and so does one kept before addresses carried their account; Bob's account is open and keeps everything. A closed account's
 // contact check keeps no address after.
 func TestClosedAccountTakesItsAddressesAndNumberMoveMails(t *testing.T) {
 	dsn := os.Getenv("BFF_TEST_DATABASE_URL")
@@ -64,6 +64,10 @@ func TestClosedAccountTakesItsAddressesAndNumberMoveMails(t *testing.T) {
 	a.rememberEmail(ctx, "sub-cy", "ws-cy-business", "cy@example.com") // the same address, for her account still open
 	a.rememberEmail(ctx, "sub-cy", "ws-cy", "cy.old@example.com")
 	a.rememberEmail(ctx, "sub-bob", "ws-bob", "bob@example.com")
+	// An address Cy gave before addresses carried their account: the sweep cannot tell it is not her open account's.
+	if _, err := db.pool.Exec(ctx, `INSERT INTO person_emails (sub, email, last_seen_at) VALUES ('sub-cy', 'cy.before@example.com', now())`); err != nil {
+		t.Fatal(err)
+	}
 	// The moves are kept with their mails (no sender is set, so none goes), and Ada's sessions are not yet ended.
 	if err := a.claimNumberMoves(ctx); err != nil {
 		t.Fatal(err)
@@ -104,8 +108,11 @@ func TestClosedAccountTakesItsAddressesAndNumberMoveMails(t *testing.T) {
 	if n := count(`SELECT count(*) FROM person_emails WHERE sub = 'sub-cy' AND email = 'cy.old@example.com'`); n != 0 {
 		t.Error("an address given only for the closed account was kept")
 	}
-	if n := count(`SELECT count(*) FROM number_move_mails WHERE move_id = 'move-cy'`); n != 1 {
-		t.Errorf("Cy's move kept %d mails, want the 1 to her address still kept", n)
+	if n := count(`SELECT count(*) FROM person_emails WHERE sub = 'sub-cy' AND email = 'cy.before@example.com'`); n != 1 {
+		t.Error("the sweep deleted an address no account was recorded for, which her open account may be told by")
+	}
+	if n := count(`SELECT count(*) FROM number_move_mails WHERE move_id = 'move-cy'`); n != 2 {
+		t.Errorf("Cy's move kept %d mails, want the 2 to her addresses still kept", n)
 	}
 	if n := count(`SELECT count(*) FROM number_moves WHERE sub IN ('sub-cy', 'sub-bob')`); n != 2 {
 		t.Errorf("a person with an account still open lost a move's sub (%d of 2 kept)", n)

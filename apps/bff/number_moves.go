@@ -97,18 +97,24 @@ func (a *app) rememberEmail(ctx context.Context, sub, ws, email string) {
 
 // forgetClosedAccountsAddresses deletes what ws's closing owes (B61.122): the addresses given for ws alone, their mails,
 // and the sub of every move of a person left with no address. sub, when known, is the person reading ws's requests: an
-// address of theirs kept before addresses carried their account goes too.
+// address of theirs kept before addresses carried their account goes too. Without sub such an address stays, as it may
+// be one their account still open is told by.
 func (a *app) forgetClosedAccountsAddresses(ctx context.Context, ws, sub string) error {
 	if a.oauth.db == nil || ws == "" {
 		return nil
 	}
 	pool := a.oauth.db.pool
-	rows, _ := pool.Query(ctx, `SELECT DISTINCT sub FROM person_email_accounts WHERE workspace_id = $1
-		UNION SELECT e.sub FROM person_emails e WHERE e.sub = $2 AND $2 <> ''
+	rows, _ := pool.Query(ctx, `SELECT sub, email FROM person_email_accounts WHERE workspace_id = $1
+		UNION SELECT e.sub, e.email FROM person_emails e WHERE e.sub = $2 AND $2 <> ''
 			AND NOT EXISTS (SELECT 1 FROM person_email_accounts x WHERE x.sub = e.sub AND x.email = e.email)`, ws, sub)
-	subs, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil || len(subs) == 0 {
+	type kept struct{ sub, email string }
+	pairs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (k kept, err error) { return k, r.Scan(&k.sub, &k.email) })
+	if err != nil || len(pairs) == 0 {
 		return err
+	}
+	subs, emails := make([]string, len(pairs)), make([]string, len(pairs))
+	for i, k := range pairs {
+		subs[i], emails[i] = k.sub, k.email
 	}
 	// A blanked move can no longer end its person's sessions, so the ones owed are ended first; until they are, nothing goes.
 	if err := a.endMovedPeople(ctx); err != nil {
@@ -118,9 +124,12 @@ func (a *app) forgetClosedAccountsAddresses(ctx context.Context, ws, sub string)
 		if _, err := tx.Exec(ctx, `DELETE FROM person_email_accounts WHERE workspace_id = $1`, ws); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(ctx, `DELETE FROM person_emails e USING unnest($1::text[], $2::text[]) AS g (sub, email)
+			WHERE e.sub = g.sub AND e.email = g.email
+				AND NOT EXISTS (SELECT 1 FROM person_email_accounts x WHERE x.sub = e.sub AND x.email = e.email)`, subs, emails); err != nil {
+			return err
+		}
 		for _, q := range []string{
-			`DELETE FROM person_emails e WHERE e.sub = ANY($1)
-				AND NOT EXISTS (SELECT 1 FROM person_email_accounts x WHERE x.sub = e.sub AND x.email = e.email)`,
 			`DELETE FROM number_move_mails x USING number_moves m WHERE m.id = x.move_id AND m.sub = ANY($1)
 				AND NOT EXISTS (SELECT 1 FROM person_emails e WHERE e.sub = m.sub AND e.email = x.email)`,
 			`UPDATE number_moves m SET sub = '' WHERE m.sub = ANY($1)
