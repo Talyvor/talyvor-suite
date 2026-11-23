@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { bodyFor } from '../../populatedBff'
 import { pressEverything } from '../../test/pressEverything'
@@ -47,7 +47,7 @@ function paste(digits: string) {
 async function open() {
   window.history.pushState({}, '', '/settings/security')
   render(<App />)
-  await screen.findByRole('heading', { level: 2, name: 'Your passkeys' })
+  await screen.findByRole('heading', { level: 2, name: 'Your devices' })
 }
 
 beforeEach(() => {
@@ -123,7 +123,7 @@ describe('Settings, Security: your passcode', () => {
   it('asks the old passcode, then the new one twice, and changes it', async () => {
     const sent = mockBff({ '/auth/passcode/change': () => ({ body: { changed: true } }) })
     await open()
-    fireEvent.click(within(screen.getByRole('region', { name: 'Your passcode' })).getByRole('button', { name: 'Change' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change passcode' }))
     await screen.findByRole('dialog', { name: 'Enter your passcode' })
     paste('418263')
     await screen.findByRole('dialog', { name: 'Choose a new passcode' })
@@ -137,7 +137,7 @@ describe('Settings, Security: your passcode', () => {
   it('asks the old passcode again in Lens’s words when it is wrong', async () => {
     mockBff({ '/auth/passcode/change': refused(400, 'wrong_passcode', 'That passcode is not right.') })
     await open()
-    fireEvent.click(within(screen.getByRole('region', { name: 'Your passcode' })).getByRole('button', { name: 'Change' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change passcode' }))
     await screen.findByRole('dialog', { name: 'Enter your passcode' })
     paste('111111')
     await screen.findByRole('dialog', { name: 'Choose a new passcode' })
@@ -157,7 +157,7 @@ describe('Settings, Security: your phone number', () => {
       '/auth/phone/change-number': () => ({ body: { changed: true, phone: '+447700900999' } }),
     })
     await open()
-    fireEvent.click(within(screen.getByRole('region', { name: 'Your phone number' })).getByRole('button', { name: 'Change' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change number' }))
     await screen.findByRole('dialog', { name: 'Your new phone number' })
     fireEvent.change(screen.getByRole('textbox', { name: 'Your new phone number' }), { target: { value: '07700 900999' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
@@ -181,7 +181,7 @@ describe('Settings, Security: your phone number', () => {
       '/auth/phone/change-number': refused(409, 'held', 'That number or identity belongs to another person.'),
     })
     await open()
-    fireEvent.click(within(screen.getByRole('region', { name: 'Your phone number' })).getByRole('button', { name: 'Change' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change number' }))
     fireEvent.change(await screen.findByRole('textbox', { name: 'Your new phone number' }), { target: { value: '07700 900111' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
     await screen.findByRole('dialog', { name: 'Enter the code' })
@@ -194,6 +194,33 @@ describe('Settings, Security: your phone number', () => {
 })
 
 describe('Settings, Security: the page', () => {
+  it('is drawn as Pocket Live’s panel: the rows that open a sheet, then Your devices, then the note', async () => {
+    mockBff()
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {})
+    Object.defineProperty(navigator, 'credentials', { configurable: true, value: { create: vi.fn(), get: vi.fn() } })
+    onTestFinished(() => {
+      Reflect.deleteProperty(navigator, 'credentials')
+      vi.unstubAllGlobals()
+    })
+    window.history.pushState({}, '', '/settings/security')
+    render(<App />)
+    const devices = await screen.findByRole('heading', { level: 2, name: 'Your devices' })
+    const add = screen.getByRole('button', { name: 'Add a passkey on this browser' })
+    const passcode = screen.getByRole('button', { name: 'Change passcode' })
+    const number = screen.getByRole('button', { name: 'Change number' })
+    expect(passcode).toHaveAccessibleDescription('6 digits, asked each time you sign in to Talyvor')
+    const card = add.parentElement!.parentElement!
+    expect(within(card).getByRole('button', { name: 'Change passcode' })).toBe(passcode)
+    expect(within(card).getByRole('button', { name: 'Change number' })).toBe(number)
+    const list = await screen.findByTestId('sign-in-keys')
+    const mac = within(list).getByRole('button', { name: 'Remove Mac, Safari' })
+    expect(mac).toHaveAccessibleDescription('Passkey · last used 20 Oct')
+    const note = screen.getByText('Your passcode opens the phone app. It never approves a payment.')
+    const follows = (x: Element, y: Element) => Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(follows(number, devices) && follows(devices, mac) && follows(mac, note)).toBe(true)
+    expect(screen.queryByText('How you sign in to Talyvor.')).toBeNull()
+  })
+
   it('is linked from Settings', async () => {
     mockBff()
     window.history.pushState({}, '', '/settings')

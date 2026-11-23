@@ -171,7 +171,7 @@
   "src/areas/lens/RulesPage.test.tsx": 5,
   "src/areas/lens/RuleTemplates.test.tsx": 5,
   "src/areas/lens/Scan.test.tsx": 3,
-  "src/areas/lens/Security.test.tsx": 9,
+  "src/areas/lens/Security.test.tsx": 10,
   "src/areas/lens/Setup.test.tsx": 34,
   "src/areas/lens/setupSnippets.test.ts": 14,
   "src/areas/lens/SingleUseCards.test.tsx": 3,
