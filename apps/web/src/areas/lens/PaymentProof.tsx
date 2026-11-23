@@ -24,6 +24,11 @@ export function TaskSays({ task, className, inline = false }: { task?: string; c
   )
 }
 
+/** B62.10 — why a payment an approval approved was stopped, in one sentence (Lens B62.9's `stopped`). */
+export function stoppedSentence(changed: 'payee' | 'amount' | 'currency' | 'agent'): string {
+  return `Stopped: the ${changed} changed after you approved.`
+}
+
 /** The rule that sent a payment to the owner, or let it pass, in words. */
 export const PROOF_RULE: Record<string, string> = {
   approval_above: 'It was above the amount the agent’s rules ask you about',

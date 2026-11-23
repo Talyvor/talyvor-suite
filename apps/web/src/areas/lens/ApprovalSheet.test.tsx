@@ -31,7 +31,7 @@ function acme(over: Partial<Approval> = {}): Approval {
   }
 }
 
-function mockBff({ approvals = [acme()], phoneOnly = false, paused = false }: { approvals?: Approval[]; phoneOnly?: boolean; paused?: boolean } = {}) {
+function mockBff({ approvals = [acme()], phoneOnly = false, paused = false, proofs = {} }: { approvals?: Approval[]; phoneOnly?: boolean; paused?: boolean; proofs?: Record<string, unknown> } = {}) {
   const decisions: Array<{ id: string; decision: string; body: Record<string, unknown> }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -66,6 +66,8 @@ function mockBff({ approvals = [acme()], phoneOnly = false, paused = false }: { 
     }
     if (/^\/api\/agents\/agt_\d\/rules$/.test(url)) return json({ max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 20_000 * M, approval_above_ulxc: 2_500 * M })
     if (/statement/.test(url)) return json({ lines: [] })
+    const proof = /^\/api\/payment-proofs\/([^/]+)$/.exec(url)
+    if (proof && proofs[proof[1]]) return json(proofs[proof[1]])
     return new Response('null', { status: 404 })
   })
   const get = vi.fn(async (opts: CredentialRequestOptions) => {
@@ -192,6 +194,50 @@ describe('the approval sheet', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(window.location.pathname).toBe('/approvals')
     expect(window.location.hash).toBe('')
+  })
+
+  // B62.10 — Lens B62.9 keeps a payment an approval approved that was stopped, and says which field differed first.
+  it.each(['payee', 'amount', 'currency', 'agent'])('says in one sentence why a payment it approved was stopped: the %s', async (changed) => {
+    const sentence = `Stopped: the ${changed} changed after you approved.`
+    mockBff({ approvals: [acme({ status: 'approved', decided_at: '2026-11-13T09:20:00Z', stopped: { changed, at: '2026-11-13T09:30:00Z' } })] })
+    const sheet = await openSheet('/approvals?approval=apr_A')
+    expect(within(sheet).getByTestId('approval-stopped')).toHaveTextContent(new RegExp(`^${sentence}$`))
+    expect(within(await screen.findByTestId('approvals-decided')).getByTestId('decided-stopped')).toHaveTextContent(new RegExp(`^${sentence}$`))
+  })
+
+  it('says nothing was stopped for an approval Lens kept no stop for', async () => {
+    mockBff({ approvals: [acme({ status: 'approved', decided_at: '2026-11-13T09:20:00Z', stopped: null })] })
+    const sheet = await openSheet('/approvals?approval=apr_A')
+    expect(sheet).toHaveTextContent('Already decided: approved.')
+    expect(within(sheet).queryByTestId('approval-stopped')).toBeNull()
+    expect(within(await screen.findByTestId('approvals-decided')).queryByTestId('decided-stopped')).toBeNull()
+  })
+
+  it('opens a used approval’s proof from its Decided row, read by the approval’s id', async () => {
+    const ACME = { kind: 'company', id: 'ws_acme', name: 'Acme Hosting' }
+    mockBff({
+      approvals: [acme({ status: 'used', decided_at: '2026-11-13T09:20:00Z', task: 'Pay October’s hosting' })],
+      proofs: {
+        apr_A: {
+          id: 'pp_A', approval_id: 'apr_A', rule: 'approval_above', rules_version: 4, key_kind: 'passkey', key_id: b64u(bytes('cred1')),
+          signed_at: '2026-11-13T09:20:00Z', created_at: '2026-11-13T09:25:00Z', verified: true,
+          shown: { agent_id: 'agt_1', agent_name: 'Research', payee: ACME, amount_minor: 34_000, currency: 'USD' },
+          sent: { agent_id: 'agt_1', payee: ACME, amount_minor: 34_000, currency: 'USD', rail: 'account', reference: 'ref_A' },
+        },
+      },
+    })
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    const row = (await screen.findByTestId('approvals-decided')).querySelector('[data-decided="apr_A"]') as HTMLElement
+    fireEvent.click(within(row).getByRole('link', { name: 'Proof' }))
+    const sheet = await screen.findByRole('dialog', { name: /wants to pay/ })
+    const proof = await within(sheet).findByTestId('payment-proof')
+    expect(proof).toHaveTextContent('You approved$340.00 to Acme Hosting')
+    expect(proof).toHaveTextContent('What was sent$340.00 to Acme Hosting')
+    await waitFor(() => expect(proof).toHaveTextContent('Signed withPasskey on This Mac'))
+    expect(proof).toHaveTextContent('The signature checks out')
+    expect(within(proof).getByRole('button', { name: 'Copy the proof' })).toBeEnabled()
+    expect(sheet).toHaveTextContent('Already decided: approved and used.')
   })
 
   it('pressEverything finds no dead control with the sheet open over Approvals', async () => {

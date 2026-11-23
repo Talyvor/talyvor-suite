@@ -748,6 +748,9 @@ export interface AgentApproval {
   budget_left_after_ulxc?: number | null
   /** B62.3 — what the agent says the payment is for, in its own words (Lens B62.2); "" when it gave none. Never a fact. */
   task?: string
+  /** B62.10 — the newest payment it stopped because it was not the one approved (Lens B62.9): which of payee, amount,
+   *  currency and agent differed first, and when; null when none did, or once the payment approved was sent. */
+  stopped?: { changed: 'payee' | 'amount' | 'currency' | 'agent'; at: string } | null
 }
 
 /** Lens economy.PaidFrom: the agent's LXC, one of its accounts, the monthly marketplace bill or its card. */
@@ -1313,7 +1316,8 @@ export const agentBankApi = {
   accountStatement: (id: string, from: string, to: string) =>
     getSaid<MoneyStatement>(`/api/money/accounts/${e(id)}/statement?${new URLSearchParams({ from, to })}`),
   accountStatementFile,
-  /** B62.3 — a payment's proof, by its money entry (Lens B62.1); null for a payment the rules never judged. */
+  /** B62.3 — a payment's proof, by its money entry (Lens B62.1), or (B62.10) by the approval it used (Lens B62.9); null for a
+   *  payment the rules never judged. */
   paymentProof: async (entry: string): Promise<PaymentProof | null> => {
     try {
       return await getSaid<PaymentProof>(`/api/payment-proofs/${e(entry)}`)

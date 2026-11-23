@@ -124,6 +124,18 @@ const SAMPLE: Record<string, unknown> = {
         paid_from: { kind: 'marketplace_bill', account_id: 'ws_1', name: 'Your monthly marketplace bill', currency: 'USD', amount_minor: 9_000, balance_minor: null },
         asks_above_ulxc: lxc(500), budget_left_after_ulxc: lxc(3_100),
       },
+      // B62.10 — the hosting payment's approval, used: its Decided row opens its proof (Lens B62.9 reads it by its id).
+      {
+        id: 'apr_hosting', agent_id: 'agt_research', amount_ulxc: lxc(1_500), model: '', status: 'used', created_at: '2026-10-14T09:50:00Z', decided_at: '2026-10-14T10:03:00Z',
+        payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, memo: 'October hosting', task: 'Renew the hosting for the research cluster', stopped: null,
+        paid_from: { kind: 'account', account_id: 'acc_research_usd', name: 'Research’s US dollar account', currency: 'USD', amount_minor: 15_000, balance_minor: 25_000 },
+      },
+      // B62.10 — an approved payment Lens stopped: the agent sent it to another payee than the one approved.
+      {
+        id: 'apr_stopped', agent_id: 'agt_research', amount_ulxc: lxc(800), model: '', status: 'approved', created_at: '2026-10-13T09:00:00Z', decided_at: '2026-10-13T09:04:00Z',
+        payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, memo: 'Backup storage', stopped: { changed: 'payee', at: '2026-10-13T09:12:00Z' },
+        paid_from: { kind: 'account', account_id: 'acc_research_usd', name: 'Research’s US dollar account', currency: 'USD', amount_minor: 8_000, balance_minor: 25_000 },
+      },
     ],
   },
   '/api/agents/briefing': {
@@ -233,6 +245,13 @@ const SAMPLE: Record<string, unknown> = {
   // B62.3 — that payment's proof (Lens B62.1).
   '/api/payment-proofs/ment_acme': {
     id: 'pp_acme', rule: 'approval_above', rules_version: 4, approval_id: 'apr_acme', key_kind: 'device', key_id: 'dk_iphone', signed_at: '2026-10-14T10:03:00Z',
+    shown: { agent_id: 'agt_research', agent_name: 'Research', payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, amount_minor: 15_000, currency: 'USD' },
+    sent: { agent_id: 'agt_research', payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, amount_minor: 15_000, currency: 'USD', rail: 'account', reference: 'ment_acme', task: 'Renew the hosting for the research cluster' },
+    created_at: '2026-10-14T10:05:00Z', verified: true,
+  },
+  // B62.10 — the same proof, read by the approval it used.
+  '/api/payment-proofs/apr_hosting': {
+    id: 'pp_acme', rule: 'approval_above', rules_version: 4, approval_id: 'apr_hosting', key_kind: 'device', key_id: 'dk_iphone', signed_at: '2026-10-14T10:03:00Z',
     shown: { agent_id: 'agt_research', agent_name: 'Research', payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, amount_minor: 15_000, currency: 'USD' },
     sent: { agent_id: 'agt_research', payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, amount_minor: 15_000, currency: 'USD', rail: 'account', reference: 'ment_acme', task: 'Renew the hosting for the research cluster' },
     created_at: '2026-10-14T10:05:00Z', verified: true,
