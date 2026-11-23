@@ -9,7 +9,13 @@ package main
 // person's own change (B61.104).
 //
 // THE ADDRESSES are the ones the person gave for their contact check (POST /api/verification/contact, verification.go):
-// each one Lens took is kept as (sub, address) in person_emails. Sign-in carries no address since Google's went (B61.29).
+// each one Lens took is kept as (sub, address) in person_emails, with the account it was given for in
+// person_email_accounts. Sign-in carries no address since Google's went (B61.29).
+//
+// CLOSED, AND GONE (B61.122). When Talyvor closes an account (help_closed.go reads it), the addresses given for that
+// account alone are deleted, with the mails their moves still kept for them; a person left with no address here keeps
+// each move only as its id and time, its sub blanked, once every session an operator's move owed is ended. An address
+// the person also gave for an account still open stays, and so do its mails.
 //
 // ONCE, AND KEPT. Every numberMoveSweep the BFF claims the moves and, in one transaction per move, writes the move and
 // one row per address into number_move_mails, so a restart loses none of them. An operator's move then ends the person
@@ -66,17 +72,67 @@ type mailer interface {
 	send(ctx context.Context, to, subject, body string) error
 }
 
-// rememberEmail keeps an address of sub's, for a move of their number to tell. A failure costs only that mail, so it
-// never fails the request that gave it.
-func (a *app) rememberEmail(ctx context.Context, sub, email string) {
+// rememberEmail keeps an address of sub's, given for ws's contact check, for a move of their number to tell. A failure
+// costs only that mail, so it never fails the request that gave it. An account Talyvor closed keeps none.
+func (a *app) rememberEmail(ctx context.Context, sub, ws, email string) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	if a.oauth.db == nil || sub == "" || !plainAddress(email) {
+	if a.oauth.db == nil || sub == "" || ws == "" || !plainAddress(email) {
 		return
 	}
-	if _, err := a.oauth.db.pool.Exec(ctx, `INSERT INTO person_emails (sub, email, last_seen_at) VALUES ($1, $2, now())
-		ON CONFLICT (sub, email) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at`, sub, email); err != nil {
+	if shut, err := a.help.isClosed(ctx, ws); err != nil || shut {
+		return
+	}
+	if err := pgx.BeginFunc(ctx, a.oauth.db.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO person_emails (sub, email, last_seen_at) VALUES ($1, $2, now())
+			ON CONFLICT (sub, email) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at`, sub, email); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO person_email_accounts (sub, email, workspace_id) VALUES ($1, $2, $3)
+			ON CONFLICT DO NOTHING`, sub, email, ws)
+		return err
+	}); err != nil {
 		log.Printf("bff: an address of sub=%s could not be kept: %v", sub, err)
 	}
+}
+
+// forgetClosedAccountsAddresses deletes what ws's closing owes (B61.122): the addresses given for ws alone, their mails,
+// and the sub of every move of a person left with no address. sub, when known, is the person reading ws's requests: an
+// address of theirs kept before addresses carried their account goes too.
+func (a *app) forgetClosedAccountsAddresses(ctx context.Context, ws, sub string) error {
+	if a.oauth.db == nil || ws == "" {
+		return nil
+	}
+	pool := a.oauth.db.pool
+	rows, _ := pool.Query(ctx, `SELECT DISTINCT sub FROM person_email_accounts WHERE workspace_id = $1
+		UNION SELECT e.sub FROM person_emails e WHERE e.sub = $2 AND $2 <> ''
+			AND NOT EXISTS (SELECT 1 FROM person_email_accounts x WHERE x.sub = e.sub AND x.email = e.email)`, ws, sub)
+	subs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil || len(subs) == 0 {
+		return err
+	}
+	// A blanked move can no longer end its person's sessions, so the ones owed are ended first; until they are, nothing goes.
+	if err := a.endMovedPeople(ctx); err != nil {
+		return err
+	}
+	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM person_email_accounts WHERE workspace_id = $1`, ws); err != nil {
+			return err
+		}
+		for _, q := range []string{
+			`DELETE FROM person_emails e WHERE e.sub = ANY($1)
+				AND NOT EXISTS (SELECT 1 FROM person_email_accounts x WHERE x.sub = e.sub AND x.email = e.email)`,
+			`DELETE FROM number_move_mails x USING number_moves m WHERE m.id = x.move_id AND m.sub = ANY($1)
+				AND NOT EXISTS (SELECT 1 FROM person_emails e WHERE e.sub = m.sub AND e.email = x.email)`,
+			`UPDATE number_moves m SET sub = '' WHERE m.sub = ANY($1)
+				AND (m.moved_by = 'person' OR m.sessions_ended_at IS NOT NULL)
+				AND NOT EXISTS (SELECT 1 FROM person_emails e WHERE e.sub = m.sub)`,
+		} {
+			if _, err := tx.Exec(ctx, q, subs); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // relayStatus is a ResponseWriter that remembers the status written through it (200 when only a body was).

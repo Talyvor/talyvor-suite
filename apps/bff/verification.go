@@ -69,7 +69,7 @@ func (a *app) handleVerificationContact(w http.ResponseWriter, r *http.Request, 
 	a.agentBankRelay(rec, r, t, http.MethodPost, "/verification/contact", body)
 	// B61.91: an address Lens took for this check is one a move of the person's number tells (number_moves.go).
 	if sub, ok := a.subOf(t.person); ok && rec.code/100 == 2 {
-		a.rememberEmail(r.Context(), sub, in.Email)
+		a.rememberEmail(r.Context(), sub, t.workspaceID, in.Email)
 	}
 }
 

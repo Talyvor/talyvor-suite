@@ -9,6 +9,8 @@ package main
 //     (GET /v1/admin/requests?kind=account_closure&state=done, on LENS_OPERATOR_READ_KEY; without it, nothing);
 //   - and whenever the workspace's own requests are read (GET /api/workspace/requests) with a closure done in them.
 //
+// The same two reads delete the email addresses kept for the account's number moves (B61.122, number_moves.go).
+//
 // Only the workspace's id stays, in help_closed, and Help takes no more questions from it: a closed account that can
 // still sign in cannot fill a new chat, nor have its day's count of questions start again by reading its requests.
 
@@ -104,6 +106,9 @@ func (a *app) forgetClosedAccountsHelp(ctx context.Context) {
 		if err := a.help.closed(ctx, r.WorkspaceID); err != nil {
 			log.Printf("bff: help: deleting a closed account's chat: %v", err)
 		}
+		if err := a.forgetClosedAccountsAddresses(ctx, r.WorkspaceID, ""); err != nil {
+			log.Printf("bff: deleting a closed account's email addresses, tried again in %s: %v", helpClosedSweep, err)
+		}
 	}
 }
 
@@ -121,12 +126,17 @@ func (a *app) keepForgettingClosedAccountsHelp(ctx context.Context) {
 	}
 }
 
-// forgetHelpIfClosed deletes ws's Help chat when its requests, as Lens answered them, hold a closure that is done.
-func (a *app) forgetHelpIfClosed(ctx context.Context, ws string, reqs []workspaceRequest) {
+// forgetHelpIfClosed deletes t's workspace's Help chat, and the addresses kept for it, when its requests, as Lens answered
+// them, hold a closure that is done.
+func (a *app) forgetHelpIfClosed(ctx context.Context, t tenant, reqs []workspaceRequest) {
 	for _, r := range reqs {
 		if r.Kind == "account_closure" && r.State == "done" {
-			if err := a.help.closed(ctx, ws); err != nil {
+			if err := a.help.closed(ctx, t.workspaceID); err != nil {
 				log.Printf("bff: help: deleting a closed account's chat: %v", err)
+			}
+			sub, _ := a.subOf(t.person)
+			if err := a.forgetClosedAccountsAddresses(ctx, t.workspaceID, sub); err != nil {
+				log.Printf("bff: deleting a closed account's email addresses: %v", err)
 			}
 			return
 		}

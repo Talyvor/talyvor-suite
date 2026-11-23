@@ -113,6 +113,16 @@ CREATE TABLE IF NOT EXISTS person_emails (
     PRIMARY KEY (sub, email)
 );
 
+-- B61.122: the account whose contact check gave each kept address, so closing that account deletes it (number_moves.go).
+CREATE TABLE IF NOT EXISTS person_email_accounts (
+    sub          text NOT NULL,
+    email        text NOT NULL,
+    workspace_id text NOT NULL,
+    PRIMARY KEY (sub, email, workspace_id),
+    FOREIGN KEY (sub, email) REFERENCES person_emails (sub, email) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS person_email_accounts_workspace ON person_email_accounts (workspace_id);
+
 -- B61.91: each move of a person's number Lens handed over (POST /v1/auth/phone/number-moves/claim, once), and one mail per
 -- address it owes (number_moves.go). sub is '' for an identity this BFF did not make. sent_at is set before a mail goes;
 -- next_try_at is a sweep on after the sender refused it for now, failed_at when it refused it for good.
