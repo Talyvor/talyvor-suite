@@ -43,38 +43,64 @@ const footLink = cn('underline underline-offset-2 transition-colors duration-200
  *  theme shown as the logo's are (theme.css --logo-on-light, --logo-on-dark). From 840px: on a phone the card fills the
  *  width and there is no left for the streams to flow in from.
  *  B64.12 — ANCHORED TO THE CARD, not the window: pinned to the window's left edge they ended in mid-air short of a
- *  laptop-width card and read as a cut-off logo. Their right end (the drawing's right edge, 47.46% down, where the three
- *  streams meet) now touches the card's left edge at the height of the card's logo, so they flow into it. */
+ *  laptop-width card and read as a cut-off logo.
+ *  B64.13 — JOINED AT THE CARD'S MIDDLE (Nick, 23 Nov: "at the middle of the sign up/in box, and connected to the box").
+ *  The meeting point (47.46% down the drawing) is at 50% of the card's own box, so it stays at the middle as the card
+ *  grows or shrinks between steps. The lines end UNDER_CARD px beneath the card's left edge (the card is on top), so no
+ *  background shows between them, and the mask narrows each bundle's flat, square end into the join, as the logo's
+ *  arrow does. */
 function Streams() {
   return (
     <div
-      className="pointer-events-none absolute right-full hidden select-none wide:block"
-      // Its own width: hung off the card's left edge (right: 100%) it has no room to shrink into, and the image's
-      // max-width: 100% would fold it to nothing.
-      style={{ top: CARD_LOGO_MIDDLE, width: 440, transform: 'translateY(-47.46%)' }}
+      className="pointer-events-none absolute hidden select-none wide:block"
+      // Its own width: hung off the card's left edge it has no room to shrink into, and the image's max-width: 100%
+      // would fold it to nothing.
+      style={{
+        top: '50%',
+        right: `calc(100% - ${(STREAMS_RIGHT_MARGIN + UNDER_CARD).toFixed(2)}px)`,
+        width: STREAMS_WIDTH,
+        transform: 'translateY(-47.46%)',
+        maskImage: STREAMS_TAPER,
+        WebkitMaskImage: STREAMS_TAPER,
+        maskSize: '100% 100%',
+        WebkitMaskSize: '100% 100%',
+      }}
       aria-hidden="true"
-      data-anchor="card-logo"
+      data-anchor="card-middle"
     >
       {(['light', 'dark'] as const).map((v) => (
         <img
           key={v}
           src={`/brand/logo/talyvor-streams-on-${v}.svg`}
           alt=""
-          width={440}
+          width={STREAMS_WIDTH}
           height={338}
           decoding="async"
           data-brand="streams"
-          style={{ display: `var(--logo-on-${v})`, width: 440, height: 'auto' }}
+          style={{ display: `var(--logo-on-${v})`, width: STREAMS_WIDTH, height: 'auto' }}
         />
       ))}
     </div>
   )
 }
 
-/** The middle of the card's logo drawing, from the card's top: the card's padding (p-8, 32 px), the logo's clear space
- *  (Logo: half the arrow's height, ceil(144 × 168 / 2963.51) = 9 px) and half the 144 px small logo's height
- *  (144 × 76 / 240 = 45.6 px). 63.8 px, measured the same in Chromium and WebKit. */
-const CARD_LOGO_MIDDLE = 32 + Math.ceil((144 * 168) / 2963.51) + (144 * 76) / 240 / 2
+const STREAMS_WIDTH = 440
+
+/** The drawing (viewBox 56 24 1164 944) ends its lines at x 1204, 16 units short of its right edge: 6.05 px at 440 wide.
+ *  That margin was the gap between the streams and the card. */
+const STREAMS_RIGHT_MARGIN = ((1220 - 1204) / 1164) * STREAMS_WIDTH
+
+/** How far the lines run under the card: 2.4 px, so their round caps (half a stroke, at most 1.6 px) end inside 4. */
+const UNDER_CARD = 2.4
+
+/** In the drawing's own units: everything left of x 1040 as drawn, then a curve on each side that narrows the three
+ *  bundles' ends (y 420 to 524) to y 452 to 492 at the card's edge, feathered so no line ends in a hard cut. Every
+ *  bundle keeps lines in the join, so each one meets the card. */
+const STREAMS_TAPER = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="56 24 1164 944" preserveAspectRatio="none">' +
+    '<filter id="f" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="5"/></filter>' +
+    '<path filter="url(#f)" d="M0 0H1040C1130 0 1150 448 1260 452V492C1150 492 1130 1000 1040 1000H0Z"/></svg>',
+)}")`
 
 /** The card every entry state is drawn in: pocket.css .authcard, white with its large shadow on the cloud page. */
 export function AuthCard({ children, className }: { children: React.ReactNode; className?: string }) {

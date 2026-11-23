@@ -304,14 +304,18 @@ describe('the sign-in page is Pocket’s auth card', () => {
         expect(img).toHaveAttribute('alt', '')
         expect(img.closest('[aria-hidden="true"]')).not.toBeNull()
       }
-      // B64.12 — the streams hang off the card, not the window: their right end on the card's left edge, at its logo's
-      // drawing's middle (32 px padding + 9 px clear space + half the 45.6 px logo), the art's meeting point (47.46% down)
-      // on that line.
-      const art = streams[0].closest('[data-anchor="card-logo"]') as HTMLElement
-      expect(art).toHaveClass('absolute', 'right-full')
-      expect(art.style.top).toBe('63.8px')
+      // B64.12 — the streams hang off the card, not the window. B64.13 — they meet it at its own vertical middle, so the
+      // join follows the card as it grows or shrinks between steps: the art's meeting point (47.46% down) at 50% of the
+      // card's box, the lines' ends (6.05 px short of the 440 px art's right edge) 2.4 px under the card's left edge, and
+      // the bundles' square ends narrowed by the taper.
+      const art = streams[0].closest('[data-anchor="card-middle"]') as HTMLElement
+      expect(art).toHaveClass('absolute')
+      expect(art).not.toHaveClass('right-full')
+      expect(art.style.top).toBe('50%')
+      expect(art.style.right).toBe('calc(100% - 8.45px)')
       expect(art.style.width).toBe('440px')
       expect(art.style.transform).toBe('translateY(-47.46%)')
+      expect(art.style.maskImage).toMatch(/^url\("data:image\/svg\+xml,/)
       expect(art.parentElement!.querySelector(':scope > .shadow-pocket-lg')).toBe(h1.closest('.bg-page'))
       // One line system: from 840px the background's own lines across the top are not drawn.
       expect(container.querySelector('[data-background="streams"]')).toHaveClass('wide:[&_.pk-bg-streams]:hidden')
