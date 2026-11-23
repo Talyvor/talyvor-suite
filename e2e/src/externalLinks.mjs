@@ -4,8 +4,8 @@
 // Plain JavaScript so the .mjs scripts in apps/web can use it as the run's .ts files do.
 
 /** Schemes the browser opens itself. Anything else goes to the operating system. blob: and data: are the
- *  app's own downloads, about: and javascript: never leave the page. */
-const IN_THE_BROWSER = ['http:', 'https:', 'blob:', 'data:', 'about:', 'javascript:']
+ *  app's own downloads, and about: never leaves the browser. */
+const IN_THE_BROWSER = ['http:', 'https:', 'blob:', 'data:', 'about:']
 
 /** Runs in every page before the page's own scripts: a click or auxclick on a link that would leave the
  *  browser is cancelled in the capture phase, and window.open with such an address opens nothing. The link
