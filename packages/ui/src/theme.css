@@ -412,3 +412,8 @@ h1, h2, h3, h4 { font-family: var(--display); }
 .pk-panel > * { width: 100% !important; min-height: 100%; align-content: start; border-radius: 0 !important; box-shadow: none !important; }
 /* Fields laid out side by side for the 480 dialog share the panel's narrower width rather than running past its edge. */
 .pk-panel .grid > *, .pk-panel input, .pk-panel select { min-width: 0; }
+/* B61.121 — a page opened in the panel: the page behind is its trail, so it draws no crumb, and its wide columns stack in
+   the panel's 440 as the same page stacks on a phone. */
+.pk-panel [data-page-panel] nav[aria-label="Breadcrumb"] { display: none; }
+.pk-panel [data-page-panel] [class*="wide:grid-cols-"] { grid-template-columns: minmax(0, 1fr); }
+.pk-panel [data-page-panel] [class*="wide:col-span-"] { grid-column: auto; }

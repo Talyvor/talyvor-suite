@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink } from '@talyvor/ui'
-import { Button, Card, Chip, EmptyState, Icon, KindTile, Money, Row } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Dialog, EmptyState, Icon, KindTile, Money, Row } from '@talyvor/ui/pocket'
 import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { BOOK_KEY, PASSKEYS_KEY, rulesKey } from './AgentBank'
@@ -83,6 +83,8 @@ function Section({ title, children, className }: { title: string; children: Reac
   )
 }
 
+// B61.121 — the details open in the right panel once the passkey says it is you (the check itself is unchanged), and
+// closing the panel hides them again.
 function Details({ card, shown, onShow, onHide }: { card: AgentCard; shown: boolean; onShow: () => void; onHide: () => void }) {
   return (
     <Card>
@@ -90,26 +92,39 @@ function Details({ card, shown, onShow, onHide }: { card: AgentCard; shown: bool
         <div data-testid="card-details-row" className="mt-1">
           <Row
             wrap
-            leading={<KindTile icon={<Icon name={shown ? 'card' : 'lock'} size={18} />} />}
-            title={
-              shown ? (
-                <span data-testid="card-details" className="grid">
-                  <span className="font-figure">•••• {card.last4}</span>
-                  <span className="text-body font-normal text-ink-3">{expiry(card)}</span>
-                </span>
-              ) : (
-                <span className="font-figure">•••• ••••</span>
-              )
-            }
-            line={shown ? undefined : 'Hidden until you check it is you with your passkey.'}
+            leading={<KindTile icon={<Icon name="lock" size={18} />} />}
+            title={<span className="font-figure">•••• ••••</span>}
+            line="Hidden until you check it is you with your passkey."
             action={
-              <Button variant="secondary" size="sm" onClick={shown ? onHide : onShow}>
-                {shown ? 'Hide card details' : 'Show card details'}
+              <Button variant="secondary" size="sm" onClick={onShow}>
+                Show card details
               </Button>
             }
           />
         </div>
       </Section>
+      <Dialog
+        position="panel"
+        open={shown}
+        onClose={onHide}
+        title="Card details"
+        actions={
+          <Button variant="secondary" onClick={onHide}>
+            Hide card details
+          </Button>
+        }
+      >
+        <Row
+          wrap
+          leading={<KindTile icon={<Icon name="card" size={18} />} />}
+          title={
+            <span data-testid="card-details" className="grid">
+              <span className="font-figure">•••• {card.last4}</span>
+              <span className="text-body font-normal text-ink-3">{expiry(card)}</span>
+            </span>
+          }
+        />
+      </Dialog>
     </Card>
   )
 }

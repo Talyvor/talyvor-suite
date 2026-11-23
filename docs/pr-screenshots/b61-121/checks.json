@@ -1,0 +1,7 @@
+[
+  { "route": "/activity/macc_company_usd/ment_kite" },
+  { "route": "/agents/agt_research/rules" },
+  { "route": "/cards", "steps": ["Show card details"], "authenticator": true },
+  { "route": "/settings/devices" },
+  { "route": "/settings/help" }
+]

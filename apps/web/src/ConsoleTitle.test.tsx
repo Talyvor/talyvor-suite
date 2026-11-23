@@ -223,7 +223,9 @@ describe('the table names every page it routes', () => {
 })
 
 describe('every console address titles itself truthfully', () => {
-  it.each(CONSOLE_ROUTES.map((r) => [addressOf(r.path), r.title] as const))(
+  // B61.121 — a page that opens in the right panel is drawn over the page it belongs to, and that page names the screen.
+  const shownTitle = (r: (typeof CONSOLE_ROUTES)[number]) => (r.panel ? CONSOLE_ROUTES.find((x) => x.path === r.panel)!.title : r.title)
+  it.each(CONSOLE_ROUTES.map((r) => [addressOf(r.path), shownTitle(r)] as const))(
     '%s is titled %s',
     async (address, title) => {
       await at(address)

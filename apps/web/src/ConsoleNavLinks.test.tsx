@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { blankComments } from '../../../packages/ui/src/lib/sourceText'
@@ -134,6 +134,7 @@ function mockBff() {
 afterEach(() => {
   vi.restoreAllMocks()
   queryClient.clear()
+  cleanup()
   document.body.replaceChildren()
 })
 

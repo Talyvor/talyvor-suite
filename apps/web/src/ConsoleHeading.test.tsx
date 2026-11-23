@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from './App'
 import { populatedBff, settleQueries } from './populatedBff'
@@ -107,18 +107,19 @@ const PINNED: Readonly<Record<string, string>> = {
   '/operator/tax': 'Tax',
   '/operator/compliance': 'Compliance',
   '/settings': 'Settings',
-  '/settings/devices': 'Approvals and devices',
-  '/settings/verification': 'Verification',
+  // B61.121 — Settings' pages open in the right panel over Settings, which names the page; the panel names itself.
+  '/settings/devices': 'Settings',
+  '/settings/verification': 'Settings',
   '/settings/payout-details': 'Payout details',
-  '/settings/terms': 'Capability terms',
-  '/settings/webhooks': 'Webhooks',
-  '/settings/email-branding': 'Email branding',
-  '/settings/connect': 'Connect your AI',
-  '/settings/company': 'Company details',
+  '/settings/terms': 'Settings',
+  '/settings/webhooks': 'Settings',
+  '/settings/email-branding': 'Settings',
+  '/settings/connect': 'Settings',
+  '/settings/company': 'Settings',
   '/cards': 'Cards',
-  '/settings/help': 'Help and complaints',
-  '/settings/close': 'Close this account',
-  '/settings/data': 'Your data',
+  '/settings/help': 'Settings',
+  '/settings/close': 'Settings',
+  '/settings/data': 'Settings',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
   '/money/wallets': 'Wallets',
@@ -169,6 +170,7 @@ async function at(address: string) {
 beforeEach(mockBff)
 afterEach(() => {
   vi.restoreAllMocks()
+  cleanup()
   document.body.replaceChildren()
 })
 

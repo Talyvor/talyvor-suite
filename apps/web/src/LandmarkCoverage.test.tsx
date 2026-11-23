@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { blankComments } from '../../../packages/ui/src/lib/sourceText'
@@ -106,6 +106,8 @@ const LANDMARK_SELECTOR = [
   'form[aria-labelledby]',
   '[role="form"]',
   '[role="search"]',
+  // B61.121 — a page open in the right panel is a modal dialog: a screen reader is held inside it, named by its heading.
+  '[role="dialog"][aria-modal="true"][aria-labelledby]',
 ].join(', ')
 
 const NOT_READABLE = ['SCRIPT', 'STYLE', 'TEMPLATE']
@@ -180,6 +182,7 @@ function mockBff(authenticated: boolean) {
 afterEach(() => {
   vi.restoreAllMocks()
   queryClient.clear()
+  cleanup()
   document.body.replaceChildren()
 })
 

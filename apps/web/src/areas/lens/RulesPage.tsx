@@ -10,6 +10,7 @@ import { marketApi } from '../marketplace/marketApi'
 import { isSessionExpired } from '../../lib/productState'
 import { PAYEES_KEY } from './Pay'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
+import { usePanelName } from '../../lib/pagePanel'
 import { FX_KEY, fetchFX, pegQuery, useLensWords, useMoney, useMoneyFigures, type FXRates } from './money'
 import { MERCHANT_CATEGORIES, merchantCategoriesText, merchantCategoryName } from './merchantCategories'
 import { CURRENCY_WORDS, type MinorLimit, agentCurrency, convertDown, heldIn, parseRuleAmount, ruleAmountText } from './rulesCurrency'
@@ -311,6 +312,8 @@ export function RulesPage({ id }: { id: string }) {
   useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees, retry: false })
   useKeys()
   const agent = book.data?.agents.find((a) => a.id === id)
+  // B61.121 — on the web it opens in the right panel over the agent's page.
+  usePanelName('Rules')
   return (
     <section data-design="pocket" className="grid gap-5 px-gutter pb-8 pt-4 wide:px-8 [&>*]:min-w-0" data-testid="rules-page">
       <Crumb
