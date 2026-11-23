@@ -515,6 +515,12 @@ func main() {
 	}
 
 	app := newApp(cfg, auth)
+	// B61.91: the sender of what a moved number owes the person's addresses (number_moves.go).
+	if m, on, err := smtpFromEnv(); err != nil {
+		log.Fatalf("bff: %v", err)
+	} else if on {
+		app.mail = m
+	}
 
 	// B52.1: Connect's sign-ins survive a restart when there is a database to keep them in (oauth_store.go).
 	if dsn := os.Getenv("BFF_DATABASE_URL"); dsn != "" {
@@ -554,6 +560,9 @@ func main() {
 
 	// B61.65: an account a person at Talyvor closed in Lens loses its Help chat here too.
 	go app.keepForgettingClosedAccountsHelp(ctx)
+
+	// B61.91: a number Lens moves is told to the person's addresses, and an operator's move signs them out everywhere.
+	go app.keepTellingNumberMoves(ctx)
 
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

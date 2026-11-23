@@ -65,6 +65,9 @@ type app struct {
 	// help keeps each workspace's Help chat and counts its questions a day (help_chat.go).
 	help *helpStore
 
+	// mail sends what a moved number owes the person's addresses (number_moves.go); nil while BFF_SMTP_* is unset.
+	mail mailer
+
 	// trackSpendSynced is when each Track workspace last asked Track to credit its Chat spend (track_spend.go).
 	trackSpendSynced sync.Map
 
