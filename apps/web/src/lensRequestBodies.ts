@@ -1707,6 +1707,18 @@ export const LENS_BODIES: LensBody[] = [
       "func newConnectRevocationHandler(authManager *auth.Manager, store connectRevoker) http.HandlerFunc {",
     subject: "lensConnectRevocationBody",
   },
+  // B52.38 — a person deletes their account in Settings; Lens deletes every account of the identity (Lens B52.37).
+  {
+    route: "POST /v1/account/delete",
+    file: "apps/bff/account_delete.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]string{"identity": a.identityOf(s.sub)})',
+    upstreamFile: "cmd/lens/account_delete_handler.go",
+    upstreamAnchor:
+      "func newAccountDeleteHandler(secret string, d accountDeleteDeps) http.HandlerFunc {",
+    subject: "lensAccountDeleteBody",
+  },
 ];
 
 /**

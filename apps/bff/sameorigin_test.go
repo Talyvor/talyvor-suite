@@ -630,6 +630,8 @@ var notSweptWrite = map[string]string{
 	"/auth/passcode/replace":           "B61.108 — Origin-GATED (exempt only with no Origin, the phone app's), and its one upstream is Lens's /v1/auth/*, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/auth/logout-everywhere": "B52.9 — Origin-GATED, but it answers in the BFF and writes nothing upstream; " +
 		"TestSignOutEverywhereEndsEveryAssistant posts it from another site and asserts the 403 and that nothing ended",
+	"/auth/account/delete": "B52.38 — Origin-GATED, and its one upstream is Lens's /v1/account/delete, which this table's fixture does not answer; " +
+		"TestDeleteAccountEndsEveryAssistant posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/api/admin/billing/purchases":   "operator read surface, adminNotWired — see the note above",
 	"/api/admin/economy/flags":       "operator read surface, adminNotWired — see the note above",
 	"/api/admin/keel/findings":       "operator read surface, adminNotWired — see the note above",
