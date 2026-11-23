@@ -59,6 +59,7 @@ export const NO_SCENARIO: Readonly<Record<string, string>> = {
   'B28.248': "Docs' /metrics; production serves Docs only to the BFF, on 127.0.0.1, so no request from outside reaches it",
   'B28.436': "Track's /metrics; production serves Track only to the BFF, on 127.0.0.1, so no request from outside reaches it",
   'B28.442': "Track's check of the BFF's signed assertion; production serves Track only to the BFF, on 127.0.0.1, so no forged one can be sent from outside",
+  'B28.243': "Lens's answer when its own database fails a key lookup; nothing a person or an agent sends makes Lens's store fail, and Lens's own tests inject that store error on every pull request",
   'B28.460': "the red team's own admin-gate-lens control in hostile.ts, which the red team runs against Lens's main every night; nothing a person or an agent does reaches it",
 }
 
