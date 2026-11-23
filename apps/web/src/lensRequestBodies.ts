@@ -885,8 +885,8 @@ export const LENS_BODIES: LensBody[] = [
     fn: "func (a *app) handleAgentCashOut(",
     anchor: "var in struct {",
     upstreamFile: "cmd/lens/agent_cash_outs_handler.go",
-    upstreamAnchor:
-      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/cash-outs", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    // B28.339 moved the body into a struct the challenge shares; its tags sit there, not under the route.
+    upstreamAnchor: "type cashOutBody struct {",
     subject: "lensAgentCashOutBody",
   },
   // B28.21 — renaming and describing an agent; B57.124: choosing its helper.

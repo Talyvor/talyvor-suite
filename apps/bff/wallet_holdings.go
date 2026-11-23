@@ -25,7 +25,8 @@ import (
 //	POST /api/agents/{id}/portfolios/{pfid}/orders {instrument, side, type, quantity_micros, limit_price_usd}
 //	POST /api/agents/{id}/portfolios/{pfid}/orders/{oid}/cancel
 //	GET  /api/wallets/cash-outs                                              every cash-out and where it stands
-//	POST /api/agents/{id}/cash-outs    {amount_ulxc, destination}
+//	POST /api/agents/{id}/cash-out-challenge {amount_ulxc, destination}   the challenge a cash-out is signed over (B28.67)
+//	POST /api/agents/{id}/cash-outs    {amount_ulxc, destination, assertion}
 //
 // Lens decides everything — who may move money, each capability's class, whether live money is refused —
 // and a refusal comes back with its sentence (agentBankRelay). Every body sent up is rebuilt from the
@@ -277,25 +278,33 @@ func (a *app) handleCashOuts(w http.ResponseWriter, r *http.Request, t tenant) {
 	a.agentBankRelay(w, r, t, http.MethodGet, "/cash-outs", nil)
 }
 
-// handleAgentCashOut — POST /api/agents/{id}/cash-outs: the owner asks to turn the agent's credits into money.
-func (a *app) handleAgentCashOut(w http.ResponseWriter, r *http.Request, t tenant) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
+// handleAgentCashOut — POST /api/agents/{id}/cash-outs: the owner asks to turn the agent's credits into money; and its
+// /challenge (B28.67): the challenge a passkey or the phone's key signs over that amount and destination. Lens
+// (B28.339) refuses an unsigned cash-out once the workspace has a key, so the signature goes up exactly as it came.
+func (a *app) handleAgentCashOut(challenge bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		suffix, ok := agentSuffix(w, r, "cash-outs")
+		if !ok {
+			return
+		}
+		var in struct {
+			AmountULXC  int64           `json:"amount_ulxc"`
+			Destination string          `json:"destination"`
+			Assertion   json.RawMessage `json:"assertion,omitempty"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		if challenge {
+			in.Assertion, suffix = nil, suffix+"/challenge"
+		}
+		// UPSTREAM-BINDS-ONLY lensAgentCashOutBody: none
+		body, _ := json.Marshal(in)
+		a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
 	}
-	suffix, ok := agentSuffix(w, r, "cash-outs")
-	if !ok {
-		return
-	}
-	var in struct {
-		AmountULXC  int64  `json:"amount_ulxc"`
-		Destination string `json:"destination"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
-		return
-	}
-	// UPSTREAM-BINDS-ONLY lensAgentCashOutBody: none
-	body, _ := json.Marshal(in)
-	a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
 }

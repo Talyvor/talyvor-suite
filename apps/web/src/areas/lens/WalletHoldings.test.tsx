@@ -114,6 +114,10 @@ function mockBff() {
       return json(order, 201)
     }
     if (url === '/api/agents/agt_1/portfolios') return json({ portfolios: [portfolio], notice: portfolio.notice })
+    // B28.67 — Lens B28.339's cash-out challenge, over the amount and where it goes, and the signed cash-out it held.
+    if (url === '/api/agents/agt_1/cash-out-challenge') return json({ challenge: 'Y2g', allow_credentials: ['Y3JlZDE'], user_verification: 'required' })
+    if (url === '/api/agents/agt_1/cash-outs' && method === 'POST')
+      return json({ id: 'co_1', workspace_id: 'ws_1', agent_id: 'agt_1', amount_ulxc: body.amount_ulxc, amount_uusd: 400_000, test_funded_ulxc: 0, destination: body.destination, partner: 'test', status: 'held', created_at: '2026-09-29T10:00:00Z' }, 201)
     if (url === '/api/wallets/cash-outs') return json({ cash_outs: [] })
     if (url === '/api/wallets/requests') return json({ requests: [] })
     if (url === '/api/wallets/loans') return json({ loans: [] })
@@ -155,6 +159,28 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
       closePanel()
     }
     expect(screen.queryByTestId(/^test-money-only-/)).toBeNull()
+  })
+
+  // B28.67 — a cash-out is signed with the owner's passkey over Lens's challenge for that amount and destination; Lens
+  // (B28.339) refuses an unsigned one and writes no posting.
+  it('signs a cash-out with the passkey over the challenge for that amount and destination', async () => {
+    const sent = mockBff()
+    const ASSERTION = {
+      rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer },
+    }
+    Object.defineProperty(navigator, 'credentials', { value: { get: vi.fn().mockResolvedValue(ASSERTION), create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/agents/agt_1')
+    render(<App />)
+    const panel = await openPanel('cash-out')
+    fireEvent.change(within(panel).getByLabelText('Amount in LXC to cash out'), { target: { value: '4' } })
+    fireEvent.change(within(panel).getByLabelText('Pay to (a name for the account)'), { target: { value: 'Own account' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Ask to cash out' }))
+    await within(panel).findByText(/is held and is under Cash-outs/)
+    expect(sent.filter((s) => s.url.includes('cash-out'))).toEqual([
+      { method: 'POST', url: '/api/agents/agt_1/cash-out-challenge', body: { amount_ulxc: 4_000_000, destination: 'Own account' } },
+      { method: 'POST', url: '/api/agents/agt_1/cash-outs', body: { amount_ulxc: 4_000_000, destination: 'Own account', assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } },
+    ])
   })
 
   // B17.33 — a Move out that meets a deploy's restart (a 502, then no answer) is sent again under one

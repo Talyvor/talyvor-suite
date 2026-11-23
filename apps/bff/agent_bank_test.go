@@ -85,6 +85,11 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 			}})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/challenge"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"looser": true, "changes": []string{"Daily limit: was 5 LXC, now 9 LXC"}, "challenge": "ch_rules", "allow_credentials": []string{"cred_1"}, "user_verification": "required"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/cash-outs/challenge"): // B28.67: Lens B28.339's cash-out challenge
+			_ = json.NewEncoder(w).Encode(map[string]any{"challenge": "ch_cash", "allow_credentials": []string{"cred_1"}, "user_verification": "required"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/cash-outs"):
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "co_1", "agent_id": "agt_1", "amount_ulxc": 40_000_000, "status": "held"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/rollback"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"daily_limit_ulxc": 5_000_000})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/boosts") && r.Method == http.MethodPost:
@@ -905,6 +910,36 @@ func TestRulesChallengeAndSignedChangesReachLens(t *testing.T) {
 		}
 		if strings.Contains(got, "ws_other") || strings.Contains(got, "junk") || strings.Contains(got, `"x"`) {
 			t.Fatalf("Lens got %q; a browser's extra field went up", got)
+		}
+	}
+}
+
+// B28.67 — a cash-out asks Lens for its challenge over the amount and where it goes, then is sent with the passkey's or
+// the phone's signature exactly as the screen sent it (Lens B28.339 refuses an unsigned one and writes no posting); a
+// browser's extra fields go nowhere, and the challenge never carries a signature.
+func TestCashOutChallengeAndSignatureReachLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	const cash = `"amount_ulxc":40000000,"destination":"Own account"`
+	const as = `{"credential_id":"cred_1","client_data_json":"cd","authenticator_data":"ad","signature":"sig"}`
+	rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/cash-out-challenge", `{`+cash+`,"assertion":`+as+`,"workspace_id":"ws_other"}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"challenge":"ch_cash"`) || !strings.Contains(rec.Body.String(), `"allow_credentials":["cred_1"]`) {
+		t.Fatalf("challenge = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/cash-outs", `{`+cash+`,"assertion":`+as+`,"workspace_id":"ws_other"}`); rec.Code >= 300 {
+		t.Fatalf("cash-out = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	want := []string{
+		`/agents/agt_1/cash-outs/challenge {` + cash + `}`,
+		`/agents/agt_1/cash-outs {` + cash + `,"assertion":` + as + `}`,
+	}
+	if len(f.got) != len(want) {
+		t.Fatalf("Lens got %q; want the challenge and the signed cash-out", f.got)
+	}
+	for i, end := range want {
+		if !strings.HasPrefix(f.got[i], http.MethodPost+" ") || !strings.HasSuffix(f.got[i], end) {
+			t.Fatalf("Lens got %q; want POST … %q", f.got[i], end)
 		}
 	}
 }
