@@ -20,6 +20,7 @@
 import type { Page } from 'playwright'
 import type { AppUser } from './app.ts'
 import { CapReached, type SpendCap, worstInputTokens } from './budget.ts'
+import { externalLinkNote } from './externalLinks.mjs'
 import type { LensClient } from './lens.ts'
 import { type CatalogModel, listPriceUSD } from './oracles.ts'
 
@@ -167,7 +168,7 @@ const MAX_STEPS = 200
 const TEXT_CHARS = 3500
 const CONTROLS = 70
 
-interface Control { i: number; tag: string; role: string; type: string; name: string }
+interface Control { i: number; tag: string; role: string; type: string; name: string; href: string }
 interface Screen { url: string; title: string; text: string; controls: Control[] }
 
 /** What the explorer can see: the page's text and its visible controls, each numbered for its reply. */
@@ -182,7 +183,7 @@ async function observe(page: Page): Promise<Screen> {
     const controls = shown.map((el, i) => {
       el.setAttribute('data-explore', String(i))
       const name = el.getAttribute('aria-label') ?? ((el as HTMLElement).innerText || el.getAttribute('placeholder') || el.getAttribute('name') || '')
-      return { i, tag: el.tagName.toLowerCase(), role: el.getAttribute('role') ?? '', type: el.getAttribute('type') ?? '', name: name.replace(/\s+/g, ' ').trim().slice(0, 60) }
+      return { i, tag: el.tagName.toLowerCase(), role: el.getAttribute('role') ?? '', type: el.getAttribute('type') ?? '', name: name.replace(/\s+/g, ' ').trim().slice(0, 60), href: el.getAttribute('href') ?? '' }
     })
     return { url: location.pathname + location.search, title: document.title, text: document.body.innerText, controls }
   }, { max: CONTROLS }).then((s) => ({ ...s, text: cutText(s.text, TEXT_CHARS) }))
@@ -455,7 +456,9 @@ async function exploring(n: number, app: AppUser, opts: ExploreOptions, count: (
         else if (target === undefined) throw new Error(`there is no control ${move.target}`)
         else if (move.action === 'click') await page.locator(`[data-explore="${move.target}"]`).click({ timeout: 5_000 })
         else await page.locator(`[data-explore="${move.target}"]`).fill(move.text, { timeout: 5_000 })
-        trail.push(`${label} on ${screen.url}`)
+        // B17.526 — a mailto: or tel: link is clicked, and the guard keeps it from the Mac (externalLinks.mjs).
+        const kept = move.action === 'click' && target !== undefined ? externalLinkNote(target.href) : undefined
+        trail.push(`${label} on ${screen.url}${kept === undefined ? '' : `: ${kept}`}`)
       } catch (e) {
         trail.push(`${label} on ${screen.url} FAILED: ${(e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 100)}`)
       }

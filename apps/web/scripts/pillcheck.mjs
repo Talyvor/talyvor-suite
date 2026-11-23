@@ -18,6 +18,7 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright'
+import { guardExternalLinks } from '../../../e2e/src/externalLinks.mjs'
 import { build } from 'vite'
 
 const WEB = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -85,7 +86,7 @@ function measure() {
 if (!process.argv.includes('--no-build')) await build({ root: WEB, logLevel: 'warn' })
 const server = await serve()
 const base = `http://127.0.0.1:${server.address().port}`
-const browser = await chromium.launch()
+const browser = guardExternalLinks(await chromium.launch())
 let bad = 0
 let headings = 0
 try {

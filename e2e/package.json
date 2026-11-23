@@ -11,6 +11,7 @@
     "run": "node --experimental-strip-types --no-warnings src/run.ts",
     "pocket": "node --experimental-strip-types --no-warnings src/run.ts --pocket",
     "selftest": "sh selftest/selftest.sh",
+    "selftest:links": "node --experimental-strip-types --no-warnings selftest/external-links.ts",
     "signup-live": "node --experimental-strip-types --no-warnings src/signupLive.ts",
     "seed:review": "node --experimental-strip-types --no-warnings src/reviewWorkspace.ts"
   },
