@@ -229,6 +229,11 @@ const BODIES: Record<string, unknown> = {
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B52.36 — Members: the owner's invite links and who joined by one.
+  '/api/workspace/member-invites': {
+    invites: [{ id: 'wsinv_1', max_uses: 5, uses: 1, expires_at: '2026-11-27T10:00:00Z', live: true, created_at: '2026-11-20T10:00:00Z' }],
+  },
+  '/api/workspace/members': { members: [{ id: 'wsm_1', role: 'member', added_at: '2026-11-20T10:30:00Z' }] },
   // B61.9 — Your accounts: the person's two, the workspace above the current one.
   '/api/accounts': {
     accounts: [

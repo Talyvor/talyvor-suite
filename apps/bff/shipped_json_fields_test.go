@@ -113,6 +113,7 @@ var decodedFromUpstream = map[string]string{
 	"uploadedDocument":       "one document uploaded in Chat, decoded from Lens's GET /v1/documents list in handleDocumentList (B28.380)",
 	"provisionResult":        "Lens's POST /v1/provision reply, decoded in provision()",
 	"personAccount":          "one account in Lens's POST /v1/provision list reply, decoded in listAccounts and served on /api/accounts with current added (B61.8)",
+	"workspaceMember":        "one member in Lens's GET /v1/workspaces/{ws}/members reply, decoded in handleWorkspaceMembers and served on /api/workspace/members without its identity (B52.36)",
 	"trackBootstrapResult":   "Track's POST /v1/bootstrap reply, decoded in bootstrapTrackWorkspace()",
 	"trackProjectCreateBody": "request body this service POSTs to Track's project create (B4.2), built from four chosen fields",
 	"trackBoardCreateBody":   "request body this service POSTs to Track's issue-board link create (B27.30), built from the one chosen field",

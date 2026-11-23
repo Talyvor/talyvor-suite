@@ -199,6 +199,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/features/stored-answers/delete", body: `{"scope":"shared","confirm":"ws"}`},
 		{method: http.MethodPost, path: "/api/features/deletion-requests", body: `{}`},
 		{method: http.MethodPut, path: "/api/workspace/name", body: `{"name":"a"}`},                          // B46.16
+		{method: http.MethodPost, path: "/api/workspace/member-invites", body: `{"max_uses":1}`},             // B52.36
+		{method: http.MethodDelete, path: "/api/workspace/member-invites/x1"},                                // B52.36
+		{method: http.MethodDelete, path: "/api/workspace/members/x1"},                                       // B52.36
+		{method: http.MethodPost, path: "/api/invites/accept", body: `{"token":"t"}`},                        // B52.36
 		{method: http.MethodPost, path: "/api/workspace/requests", body: `{"kind":"support","message":"a"}`}, // B59.28
 		{method: http.MethodPut, path: "/api/workspace/business", body: `{"company_name":"a"}`},              // B59.31
 		{method: http.MethodPost, path: "/api/agents", body: `{"name":"a"}`},
