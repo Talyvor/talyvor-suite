@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, getJSON } from '../../lib/api'
 
 // accountRequests.ts — B59.28: help and complaints, closing the account and the workspace's data. Each is a request a
@@ -42,10 +42,18 @@ export class RequestRefusedError extends ApiError {
 export const REQUESTS_KEY = ['workspace-requests']
 
 /** The workspace's requests, newest first: all of them for the owner, the ones they sent for anyone else. */
+// B17.524 — a read sent before a request was filed can land after Lens's answer to it: the requests newer than any the
+// read holds are ones just sent from this page, and stay listed above what the read holds.
 export function useAccountRequests() {
+  const qc = useQueryClient()
   return useQuery({
     queryKey: REQUESTS_KEY,
-    queryFn: async () => (await getJSON<{ requests: AccountRequest[] | null }>('/api/workspace/requests', { requests: 'list' })).requests ?? [],
+    queryFn: async () => {
+      const read = (await getJSON<{ requests: AccountRequest[] | null }>('/api/workspace/requests', { requests: 'list' })).requests ?? []
+      const newest = Math.max(0, ...read.map((r) => r.id))
+      const sent = (qc.getQueryData<AccountRequest[]>(REQUESTS_KEY) ?? []).filter((r) => r.id > newest)
+      return [...sent, ...read]
+    },
   })
 }
 
