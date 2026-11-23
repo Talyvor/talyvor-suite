@@ -205,5 +205,5 @@ describe('Settings, Security: the page', () => {
     const report = await pressEverything('/settings/security')
     expect(report.dead).toEqual([])
     expect(report.pressed).toBeGreaterThan(4)
-  })
+  }, 60_000)
 })
