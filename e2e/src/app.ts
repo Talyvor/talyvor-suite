@@ -341,6 +341,10 @@ export class AppUser {
   async openStart(): Promise<void> {
     if (!this.home) return this.openChat()
     await this.page.goto(this.appURL + '/')
+    // B17.527 — and waits until Home has read who is signed in, which is when the app remembers the session
+    // (apps/web/src/components/AuthGate.tsx). A tab opened sooner is a browser that was never signed in, and it draws
+    // "Checking your session…" at its load event: not the bookmark a person opens, whose browser was signed in before.
+    await this.page.waitForFunction(() => localStorage.getItem('talyvor.had-session') === '1')
   }
 
   async openChat(): Promise<void> {
