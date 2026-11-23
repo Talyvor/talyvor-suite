@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COMPANY_LINE, LOGO_FILE, type Look, type ReportLook, type ShownLogo, brandFaults, logoFaults, companyFaults, docsBrandFaults, exportBrandFaults, heroFadeFaults, readingFaults, roiBrandFaults } from '../src/brand.ts'
+import { COMPANY_LINE, LOGO_FILE, LOGO_SCREENS, type Look, type ReportLook, type ShownLogo, brandFaults, logoFaults, companyFaults, docsBrandFaults, exportBrandFaults, heroFadeFaults, readingFaults, roiBrandFaults } from '../src/brand.ts'
 
 const brand: Look = {
   scroll: 390, client: 390, logos: ['svg mark', 'svg wordmark'], tiles: [], amberCount: 0, amber: [], inter: [],
@@ -55,6 +55,17 @@ describe('the brand-logo oracle (B17.401)', () => {
       '/ light shows /site/hero-loop-poster.jpg on a light plane',
       '/ light /brand/logo/talyvor-logo-small-on-light-480.png did not load',
       '/ still asks for /old/logo.svg',
+    ])
+  })
+  // B17.528: read signed in, /signin sends you on to Home once /auth/me answers, and 3 of 10 nightly reads caught the
+  // page between the two: "/signin light shows no logo". Only the sidebar is this user's; the rest is what a stranger sees.
+  it('reads the sidebar as this user and sign-in and the public headers signed out', () => {
+    expect(LOGO_SCREENS).toEqual([
+      { path: '/', signedIn: true },
+      { path: '/signin', signedIn: false },
+      { path: '/marketing', signedIn: false },
+      { path: '/pricing', signedIn: false },
+      { path: '/documentation', signedIn: false },
     ])
   })
 })
