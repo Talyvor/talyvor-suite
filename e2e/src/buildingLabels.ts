@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type QueueItem, queueItems } from './b28.ts'
+import { guardExternalLinks } from './externalLinks.mjs'
 
 /** The registry the app draws every Building chip from (StatusLabel.tsx), in this checkout. */
 export const BUILDING_FILE = resolve(dirname(fileURLToPath(import.meta.url)), '../../apps/web/src/labels/building.json')
@@ -192,7 +193,7 @@ export async function readBuildingLabels(o: { appURL: string; lensURL: string; b
   const pages: { path: string; chips: string[] }[] = []
   // Loaded here, not at the top: the report and TESTERS.md import this file where no browser is installed (nightly.test.ts).
   const [{ chromium }, { PUBLIC_PAGES }] = await Promise.all([import('playwright'), import('./siteTruth.ts')])
-  const browser = await chromium.launch({ headless: true, channel: 'chromium' })
+  const browser = guardExternalLinks(await chromium.launch({ headless: true, channel: 'chromium' }))
   try {
     const page = await (await browser.newContext()).newPage()
     const origin = new URL(o.appURL).origin

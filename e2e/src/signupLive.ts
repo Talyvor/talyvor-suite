@@ -10,6 +10,7 @@
 // It exits 1 when anything fails. A founder's own sign-up by hand is recorded in the queue, never made here.
 
 import { chromium, type Page } from 'playwright'
+import { guardExternalLinks } from './externalLinks.mjs'
 import { doorScenarios } from './door.ts'
 import { CannotTest, type Evidence, type ScenarioCtx } from './scenarios.ts'
 
@@ -47,7 +48,7 @@ async function main(): Promise<number> {
     if (status === 'FAIL' || status === 'ERROR') failed = true
     console.log(`${status.padEnd(5)} ${what}`)
   }
-  const browser = await chromium.launch()
+  const browser = guardExternalLinks(await chromium.launch())
   try {
     const visitor = await browser.newContext()
     const page = await visitor.newPage()
