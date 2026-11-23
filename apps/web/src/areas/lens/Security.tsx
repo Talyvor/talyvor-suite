@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Crumb, Dialog, Icon, Input, KindTile, Row, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Crumb, Dialog, Icon, type IconName, Input, KindTile, Row, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { formatDecided } from './format'
 import { CountryPicker, DigitBoxes, DOOR_WORDS, Note, PHONE_COUNTRIES, Said, digitsOf } from '../auth/Door'
 import {
@@ -26,6 +26,10 @@ import {
 //   · your passcode: the old one, then the new one typed twice;
 //   · your phone number: the new number, its texted code (the door's six boxes and its Sandbox code), then the passcode.
 //
+// B57.203 — drawn as Pocket Live's web panel: one card of rows that open their sheet (Add a passkey on this browser, then
+// the phone's Change passcode and B61.106's Change number), "Your devices" with each key as a row pressed to remove it,
+// and the passcode note under them.
+//
 // Lens holds every rule and the BFF (B61.105) relays its words: each refusal shown here is Lens's own sentence.
 
 export const SECURITY_PATH = '/settings/security'
@@ -34,9 +38,7 @@ export const SIGN_IN_KEYS_KEY = ['sign-in-keys']
 /** The page's words (Pocket Live's security sheet where it has them; the rest are listed on the PR). */
 export const SECURITY_WORDS = {
   title: 'Security',
-  lead: 'How you sign in to Talyvor.',
-  keysTitle: 'Your passkeys',
-  keysLine: 'Each one signs you in with Face ID, Touch ID or the device’s PIN.',
+  devicesTitle: 'Your devices',
   noKeys: 'You have no passkey yet. You sign in with your phone number and passcode.',
   addKey: 'Add a passkey on this browser',
   addKeyLine: 'It signs you in here, with no code',
@@ -49,7 +51,6 @@ export const SECURITY_WORDS = {
   removed: (name: string) => `Removed: ${name}`,
   removedLine: 'It can no longer sign you in.',
   keep: 'Keep it',
-  passcodeTitle: 'Your passcode',
   changePasscode: 'Change passcode',
   passcodeLine: '6 digits, asked each time you sign in to Talyvor',
   oldPasscode: 'Enter your passcode',
@@ -57,7 +58,6 @@ export const SECURITY_WORDS = {
   newPasscode: 'Choose a new passcode',
   passcodeChanged: 'Your passcode is changed',
   passcodeChangedLine: 'Use the new one next time you sign in.',
-  numberTitle: 'Your phone number',
   changeNumber: 'Change number',
   numberLine: 'We text a code to the new number, then ask your passcode',
   newNumber: 'Your new phone number',
@@ -73,130 +73,150 @@ export const SECURITY_WORDS = {
 const sentence = (err: unknown) => (err instanceof Error && err.message ? err.message : DOOR_FAILED)
 const reasonOf = (err: unknown) => (err instanceof DoorError ? err.reason : '')
 
-/** "Passkey · added 14 Oct · last used 20 Oct", or "Phone key · …". */
+/** Pocket Live's device line: "Passkey · last used 20 Oct", or "Phone key · added 15 Oct" for one never used. */
 function keyFacts(k: SignInKey): string {
   return [
     k.kind === 'device' ? 'Phone key' : 'Passkey',
-    `added ${formatDecided(k.created_at)}`,
-    k.last_used_at ? `last used ${formatDecided(k.last_used_at)}` : 'never used',
+    k.last_used_at ? `last used ${formatDecided(k.last_used_at)}` : `added ${formatDecided(k.created_at)}`,
   ].join(' · ')
 }
 
 const keyName = (k: SignInKey) => k.name || (k.kind === 'device' ? 'Phone key' : 'Passkey')
 
-/** A card's title, as Pocket draws it (pocket.css .h3). */
-function Title({ children }: { children: React.ReactNode }) {
-  return <h2 className="font-display text-bar font-bold text-ink">{children}</h2>
+export function SecurityScreen() {
+  const [open, setOpen] = useState<'passcode' | 'number' | null>(null)
+  const close = () => setOpen(null)
+  return (
+    <div data-design="pocket" className="grid min-w-0 max-w-2xl gap-4">
+      <Crumb trail={[{ label: 'Settings', href: '/settings' }, { label: SECURITY_WORDS.title }]} />
+      <Card>
+        <AddKeyRow />
+        <SheetRow title={SECURITY_WORDS.changePasscode} line={SECURITY_WORDS.passcodeLine} onOpen={() => setOpen('passcode')} />
+        <SheetRow title={SECURITY_WORDS.changeNumber} line={SECURITY_WORDS.numberLine} onOpen={() => setOpen('number')} />
+      </Card>
+      {open === 'passcode' ? <ChangePasscodeDialog onClose={close} /> : null}
+      {open === 'number' ? <ChangeNumberDialog onClose={close} /> : null}
+      <YourDevices />
+      <Note icon="shield">{SECURITY_WORDS.passcodeNote}</Note>
+    </div>
+  )
 }
 
-export function SecurityScreen() {
+/** pocket.css .li as a press: the whole row is one control, named by `label` (else its title), its line read with it;
+ *  an empty button over the row, so the line wraps as the row's words and not as a button's label. No `onOpen`, no press. */
+function SheetRow({ icon, title, line, label, onOpen }: { icon?: IconName; title: string; line: React.ReactNode; label?: string; onOpen?: () => void }) {
+  const lineId = useId()
   return (
-    <div data-design="pocket" className="grid min-w-0 gap-5">
-      <Crumb trail={[{ label: 'Settings', href: '/settings' }, { label: SECURITY_WORDS.title }]} />
-      <p className="max-w-3xl text-reading text-ink-2">{SECURITY_WORDS.lead}</p>
-      <div className="grid items-start gap-4 wide:grid-cols-12">
-        <div className="grid min-w-0 gap-4 wide:col-span-7">
-          <KeysCard />
-          <PasscodeCard />
-          <NumberCard />
-        </div>
-        <div className="grid min-w-0 gap-4 wide:col-span-5">
-          <Card>
-            <Row
-              href="/settings/devices"
-              leading={<KindTile on="white" icon={<Icon name="faceid" size={18} />} />}
-              title={SECURITY_WORDS.approvals}
-              line={SECURITY_WORDS.approvalsLine}
-            />
-          </Card>
-          <Note icon="shield">{SECURITY_WORDS.passcodeNote}</Note>
-        </div>
-      </div>
+    <div className="relative flex w-full items-center gap-3 rounded-control border-t border-line py-2.5 text-reading first:border-t-0">
+      {icon ? <KindTile icon={<Icon name={icon} size={18} />} /> : null}
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-ink">{title}</span>
+        <span id={lineId} className="block text-body font-normal text-ink-3">
+          {line}
+        </span>
+      </span>
+      {onOpen ? (
+        <>
+          <Icon name="chev" size={16} className="shrink-0 text-ink-3" />
+          <button
+            type="button"
+            className={`absolute inset-0 rounded-control ${pocketFocusRing}`}
+            onClick={onOpen}
+            aria-haspopup="dialog"
+            aria-label={label ?? title}
+            aria-describedby={lineId}
+          />
+        </>
+      ) : null}
     </div>
   )
 }
 
 // ─── your passkeys ─────────────────────────────────────────────────────────
 
-function KeysCard() {
+/** "Add a passkey on this browser", proved by the passcode; a browser that cannot make one says so and offers nothing. */
+function AddKeyRow() {
   const qc = useQueryClient()
-  const keys = useQuery({ queryKey: SIGN_IN_KEYS_KEY, queryFn: signInKeys })
-  const [removing, setRemoving] = useState<SignInKey | null>(null)
   const [adding, setAdding] = useState(false)
   const [canKey, setCanKey] = useState(false)
   useEffect(() => setCanKey(passkeysSupported()), [])
-  const list = keys.data ?? []
-  const line = keys.error ? sentence(keys.error) : keys.isPending ? 'Reading…' : list.length === 0 ? SECURITY_WORDS.noKeys : SECURITY_WORDS.keysLine
-  const changed = () => qc.invalidateQueries({ queryKey: SIGN_IN_KEYS_KEY })
   return (
-    <section aria-label={SECURITY_WORDS.keysTitle}>
-      <Card tone="white">
-        <div className="flex items-start gap-3">
-          <KindTile icon={<Icon name="key" />} />
-          <div className="grid min-w-0 gap-0.5 pt-1">
-            <Title>{SECURITY_WORDS.keysTitle}</Title>
-            <p className={keys.error ? 'text-body text-danger' : 'text-body text-ink-3'} role={keys.error ? 'alert' : undefined}>
-              {line}
-            </p>
-          </div>
-        </div>
-        {list.length > 0 ? (
-          <div className="mt-3" data-testid="sign-in-keys">
+    <>
+      <SheetRow
+        title={SECURITY_WORDS.addKey}
+        line={canKey ? SECURITY_WORDS.addKeyLine : SECURITY_WORDS.noKeysHere}
+        onOpen={canKey ? () => setAdding(true) : undefined}
+      />
+      {adding ? (
+        <AddKeyDialog
+          onClose={() => setAdding(false)}
+          onAdded={() => {
+            showSnack({
+              title: SECURITY_WORDS.added,
+              line: SECURITY_WORDS.addedLine,
+            })
+            setAdding(false)
+            void qc.invalidateQueries({ queryKey: SIGN_IN_KEYS_KEY })
+          }}
+        />
+      ) : null}
+    </>
+  )
+}
+
+/** "Your devices": each sign-in key, pressed to remove it with the passcode; then the keys that approve payments. */
+function YourDevices() {
+  const qc = useQueryClient()
+  const keys = useQuery({ queryKey: SIGN_IN_KEYS_KEY, queryFn: signInKeys })
+  const [removing, setRemoving] = useState<SignInKey | null>(null)
+  const list = keys.data ?? []
+  return (
+    <section aria-label={SECURITY_WORDS.devicesTitle} className="grid gap-2.5">
+      <h2 className="px-0.5 pt-1.5 font-display text-bar font-bold text-ink">{SECURITY_WORDS.devicesTitle}</h2>
+      <Card>
+        {keys.error ? (
+          <p className="pb-2 text-body text-danger" role="alert">
+            {sentence(keys.error)}
+          </p>
+        ) : keys.isPending ? (
+          <p className="pb-2 text-body text-ink-3">Reading…</p>
+        ) : list.length === 0 ? (
+          <p className="pb-2 text-body text-ink-3">{SECURITY_WORDS.noKeys}</p>
+        ) : (
+          <div data-testid="sign-in-keys">
             {list.map((k) => (
-              <Row
+              <SheetRow
                 key={k.id}
-                leading={<KindTile on="white" icon={<Icon name={k.kind === 'device' ? 'phone' : 'key'} size={18} />} />}
+                icon={k.kind === 'device' ? 'phone' : 'key'}
                 title={keyName(k)}
                 line={keyFacts(k)}
-                action={
-                  <Button variant="secondary" size="sm" aria-label={`Remove ${keyName(k)}`} onClick={() => setRemoving(k)}>
-                    Remove
-                  </Button>
-                }
+                label={`Remove ${keyName(k)}`}
+                onOpen={() => setRemoving(k)}
               />
             ))}
           </div>
-        ) : null}
-        <div className="mt-3 grid gap-1">
-          <Button
-            variant="secondary"
-            className="justify-self-start"
-            icon={<Icon name="plus" size={16} />}
-            disabledReason={canKey ? undefined : SECURITY_WORDS.noKeysHere}
-            onClick={() => setAdding(true)}
-          >
-            {SECURITY_WORDS.addKey}
-          </Button>
-          {canKey ? <p className="text-body text-ink-3">{SECURITY_WORDS.addKeyLine}</p> : null}
-        </div>
-        {removing ? (
-          <RemoveKeyDialog
-            k={removing}
-            onClose={() => setRemoving(null)}
-            onRemoved={() => {
-              showSnack({
-                title: SECURITY_WORDS.removed(keyName(removing)),
-                line: SECURITY_WORDS.removedLine,
-              })
-              setRemoving(null)
-              void changed()
-            }}
-          />
-        ) : null}
-        {adding ? (
-          <AddKeyDialog
-            onClose={() => setAdding(false)}
-            onAdded={() => {
-              showSnack({
-                title: SECURITY_WORDS.added,
-                line: SECURITY_WORDS.addedLine,
-              })
-              setAdding(false)
-              void changed()
-            }}
-          />
-        ) : null}
+        )}
+        <Row
+          href="/settings/devices"
+          leading={<KindTile icon={<Icon name="faceid" size={18} />} />}
+          title={SECURITY_WORDS.approvals}
+          line={SECURITY_WORDS.approvalsLine}
+        />
       </Card>
+      {removing ? (
+        <RemoveKeyDialog
+          k={removing}
+          onClose={() => setRemoving(null)}
+          onRemoved={() => {
+            showSnack({
+              title: SECURITY_WORDS.removed(keyName(removing)),
+              line: SECURITY_WORDS.removedLine,
+            })
+            setRemoving(null)
+            void qc.invalidateQueries({ queryKey: SIGN_IN_KEYS_KEY })
+          }}
+        />
+      ) : null}
     </section>
   )
 }
@@ -250,28 +270,6 @@ function AddKeyDialog({ onClose, onAdded }: { onClose: () => void; onAdded: () =
 
 // ─── your passcode ─────────────────────────────────────────────────────────
 
-function PasscodeCard() {
-  const [open, setOpen] = useState(false)
-  return (
-    <section aria-label={SECURITY_WORDS.passcodeTitle}>
-      <Card tone="white">
-        <Title>{SECURITY_WORDS.passcodeTitle}</Title>
-        <Row
-          leading={<KindTile on="white" icon={<Icon name="lock" size={18} />} />}
-          title={SECURITY_WORDS.changePasscode}
-          line={SECURITY_WORDS.passcodeLine}
-          action={
-            <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-              Change
-            </Button>
-          }
-        />
-        {open ? <ChangePasscodeDialog onClose={() => setOpen(false)} /> : null}
-      </Card>
-    </section>
-  )
-}
-
 type PasscodeStep = { at: 'old' } | { at: 'new'; old: string } | { at: 'again'; old: string; first: string }
 
 /** The old passcode, then the new one typed twice. A wrong old one is asked again; a new one Lens will not take is chosen again. */
@@ -319,28 +317,6 @@ function ChangePasscodeDialog({ onClose }: { onClose: () => void }) {
 }
 
 // ─── your phone number ─────────────────────────────────────────────────────
-
-function NumberCard() {
-  const [open, setOpen] = useState(false)
-  return (
-    <section aria-label={SECURITY_WORDS.numberTitle}>
-      <Card tone="white">
-        <Title>{SECURITY_WORDS.numberTitle}</Title>
-        <Row
-          leading={<KindTile on="white" icon={<Icon name="phone" size={18} />} />}
-          title={SECURITY_WORDS.changeNumber}
-          line={SECURITY_WORDS.numberLine}
-          action={
-            <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-              Change
-            </Button>
-          }
-        />
-        {open ? <ChangeNumberDialog onClose={() => setOpen(false)} /> : null}
-      </Card>
-    </section>
-  )
-}
 
 type NumberStep =
   | { at: 'phone' }
