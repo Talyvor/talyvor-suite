@@ -130,3 +130,32 @@ describe('An invite link opened signed in', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('This invite link has expired, been used or been revoked. Ask for a new one.')
   })
 })
+
+// B57.205 — drawn in Pocket: each part is a white card that heads itself (w-room-settings' cards), its rows as
+// w-members' rows; the Join page as w-room-invite, what joining means as facts beside the
+// note on what a link admits, and Not now.
+describe('Members’ invite links and the Join page, in Pocket', () => {
+  it('heads each card itself, the form and the links in one card', async () => {
+    standInBff()
+    renderAt(<MemberInvites />)
+    const links = await screen.findByRole('region', { name: 'Invite links' })
+    expect(within(links).getByRole('heading', { level: 2, name: 'Invite links' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Joined by invite' })).toBeTruthy()
+    fireEvent.click(within(links).getByRole('button', { name: 'Make a link' }))
+    const list = await within(links).findByRole('list', { name: 'Invite links' })
+    expect(within(list).getByRole('button', { name: /^Revoke invite made/ })).toBeTruthy()
+  })
+
+  it('says what joining means as facts, with Not now and what a link admits', () => {
+    standInBff()
+    renderAt(<JoinWorkspace />, '/join#wsinvtok_abc')
+    const facts = screen.getAllByRole('term').map((t) => [t.textContent, t.nextElementSibling?.textContent])
+    expect(facts).toEqual([
+      ['What you can do', 'Read the workspace'],
+      ['Who can remove you', 'Its owner, at any time'],
+      ['Your own account', 'Stays as it is'],
+    ])
+    expect(screen.getByRole('link', { name: 'Not now' }).getAttribute('href')).toBe('/')
+    expect(screen.getByText('An invite link admits people until it is revoked, expires or is used up. A link that no longer admits anyone says so here.')).toBeTruthy()
+  })
+})
