@@ -108,8 +108,9 @@ function ChangePlanDialog({
   const qc = useQueryClient()
   const change = useMutation({
     mutationFn: () => changeWorkspacePlan(to.id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: PLAN_KEY })
+    // The plan is read again before the dialog closes, so Your plan names the new one the moment the change is done.
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: PLAN_KEY })
       showSnack({ title: `You are on ${to.name}`, line: 'Your plan changed now.' })
       onClose()
     },
