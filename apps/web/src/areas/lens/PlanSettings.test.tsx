@@ -156,6 +156,35 @@ describe('Settings, Plan', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
+  it('reads the new plan before the dialog closes, so Your plan names it the moment the change is done', async () => {
+    const STUDIO = { ...BUSINESS, plan: 'business_studio', name: 'Studio', price_minor: { GBP: 1100, EUR: 1100, USD: 1100 }, agents: 3 }
+    let moved = false
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url === '/api/plan' && init?.method === 'PUT') {
+        moved = true
+        return json({ from: 'business_studio', plan: 'business_company', name: 'Company' })
+      }
+      if (url === '/api/plan') {
+        if (!moved) return json(STUDIO)
+        await new Promise((r) => setTimeout(r, 50))
+        return json(BUSINESS)
+      }
+      if (url === '/api/pricing')
+        return json({ min_usd_cents: 0, max_usd_cents: 0, preset_usd_cents: [], ladders: LADDERS, fees: FEES, card_payments: 'test' })
+      if (url === '/api/workspace/account') return json({ account_type: 'business', money_kind: 'fiat' })
+      return json({}, 404)
+    })
+    renderPlan()
+    await ladderNames()
+    expect(screen.getByTestId('plan-current')).toHaveTextContent('You are on Studio.')
+    fireEvent.click(within(screen.getByTestId('ladder-business_company')).getByRole('button', { name: 'Change plan' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Change to Company' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByTestId('plan-current')).toHaveTextContent('You are on Company.')
+    expect(screen.getByTestId('plan-current')).toHaveTextContent('2 of 26')
+  })
+
   it('says Lens’s sentence when a move down is refused under too many agents', async () => {
     const sentence = 'Solo allows 4 agents, and this account has 5. Archive 1 agent first.'
     mockBff(PERSONAL, { status: 409, body: { error: sentence } })

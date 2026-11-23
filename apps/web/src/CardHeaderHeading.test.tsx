@@ -186,6 +186,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // 6 → 0 at B57.42: drawn in Pocket, whose cards head themselves with an h2 or h3.
   '/settings': 0,
   '/settings/devices': 0, // B57.43: drawn in Pocket
+  '/settings/security': 0, // B61.106: drawn in Pocket
   '/settings/verification': 0, // B57.42: drawn in Pocket
   '/settings/payout-details': 0,
   '/settings/terms': 0, // B57.42: drawn in Pocket

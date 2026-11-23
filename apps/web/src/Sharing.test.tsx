@@ -120,6 +120,7 @@ describe('sharing consent', () => {
     const hrefs = Array.from(pages.querySelectorAll('a')).map((a) => a.getAttribute('href'))
     expect(hrefs).toEqual([
       '/settings/devices',
+      '/settings/security',
       '/settings/connect',
       '/members',
       '/billing',

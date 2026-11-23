@@ -56,6 +56,13 @@ export interface ShownLogo {
   plane: 'dark' | 'light'
 }
 
+/** B17.528 — the screens brand-logo reads, and whether as this user or as a stranger. Signed in, /signin sends you on to
+ *  Home once /auth/me answers (B64.12), so a signed-in read could land between the two and find no logo. */
+export const LOGO_SCREENS: { path: string; signedIn: boolean }[] = [
+  { path: '/', signedIn: true },
+  ...['/signin', '/marketing', '/pricing', '/documentation'].map((path) => ({ path, signedIn: false })),
+]
+
 /** A file of the chosen kit, and the version it is: its .svg drawings and B64.11's small-logo PNGs. */
 const KIT_LOGO = /^\/brand\/logo\/talyvor-[a-z-]+-on-(dark|light)(?:-(?:240|480))?\.(?:svg|png)$/
 

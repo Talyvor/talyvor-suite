@@ -85,6 +85,7 @@ import { OperatorTax } from './areas/lens/OperatorTax'
 import { OperatorCompliance } from './areas/lens/OperatorCompliance'
 import { VerificationScreen } from './areas/lens/Verification'
 import { DevicesScreen } from './areas/lens/Devices'
+import { SecurityScreen } from './areas/lens/Security'
 import { PayoutDetailsScreen } from './areas/lens/PayoutDetails'
 import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
 import { ConnectAI } from './areas/lens/ConnectAI'
@@ -267,6 +268,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings', title: 'Settings', element: <Settings /> },
   // B57.43 — every passkey and the phone's key by name, added and removed, the waiting phone and Stop everything.
   { path: '/settings/devices', title: 'Approvals and devices', element: <DevicesScreen />, panel: '/settings' },
+  // B61.106 — how a person signs in: their passkeys, their passcode and their phone number, each changed here.
+  { path: '/settings/security', title: 'Security', element: <SecurityScreen />, panel: '/settings' },
   // B30.116 — the owner's verification level, each check, and the level each capability needs for live money.
   { path: '/settings/verification', title: 'Verification', element: <VerificationScreen />, panel: '/settings' },
   // B55.28 — where the workspace is paid its share of a room, its marketplace sales and royalties.

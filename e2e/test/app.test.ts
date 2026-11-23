@@ -106,3 +106,31 @@ describe('a compared stream whose page closes (B54.40)', () => {
     }
   })
 })
+
+// B17.527 — a launch run's tester opened its first tab before Home had read who is signed in, so that tab found a browser
+// with no sign-in remembered and drew "Checking your session…" at its load event, not the screen a bookmark opens.
+describe('a launch run starts once Home has read who is signed in (B17.527)', () => {
+  it('returns from sign-in only after the app remembers the session', async () => {
+    const storage = new Map<string, string>()
+    const store = { getItem: (k: string) => storage.get(k) ?? null }
+    const page = {
+      // The app's probe of /auth/me answers a moment after the load event, and only then is the session remembered.
+      goto: async () => { setTimeout(() => storage.set('talyvor.had-session', '1'), 30) },
+      evaluate: async () => 200,
+      waitForFunction: async (fn: () => boolean) => {
+        const was = (globalThis as { localStorage?: unknown }).localStorage
+        try {
+          ;(globalThis as { localStorage?: unknown }).localStorage = store
+          while (!fn()) await new Promise((r) => setTimeout(r, 5))
+        } finally {
+          ;(globalThis as { localStorage?: unknown }).localStorage = was
+        }
+      },
+    }
+    const context = { route: async () => undefined, newPage: async () => page, close: async () => undefined }
+    const fake = Object.assign(new FakeBrowser(), { newContext: async () => context }) as unknown as Browser
+    const user = { index: 13, workspaceID: 'ws_13', token: 'tok', expiresAt: '' }
+    await AppUser.signIn(fake, user, { appURL: 'http://app', syntheticKey: 'k', cap: {} as never, catalog: [], modelName: 'm', book: {} as never, usdPerLXC: 0.1, home: true })
+    expect(storage.get('talyvor.had-session')).toBe('1')
+  })
+})

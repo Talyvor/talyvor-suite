@@ -41,13 +41,14 @@ type doorLens struct {
 	calls      []string
 	bodies     map[string]map[string]any // path → the last body
 	down       map[string]map[string]any // path → the 503 body Lens answers there instead (B61.112)
+	keyTickets map[string]string         // B61.108: a key sign-in's ticket → its person, until it is spent
 }
 
 func newDoorLens(t *testing.T, rest *strangerLens) *doorLens {
 	t.Helper()
 	d := &doorLens{codes: map[string]string{}, tickets: map[string]string{}, people: map[string]*doorPerson{},
 		challenges: map[string]string{}, origins: map[string]string{}, bodies: map[string]map[string]any{},
-		down: map[string]map[string]any{}}
+		down: map[string]map[string]any{}, keyTickets: map[string]string{}}
 	target, _ := url.Parse(rest.srv.URL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	d.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,8 +158,10 @@ func newDoorLens(t *testing.T, rest *strangerLens) *doorLens {
 			}
 			for phone, p := range d.people {
 				if p.device != "" && p.device == str("device_id") && str("signature") == "signed:"+str("challenge") && (named == "" || named == p.id) {
+					ticket := "ktk-" + strconv.Itoa(d.n)
+					d.keyTickets[ticket] = p.id
 					_ = json.NewEncoder(w).Encode(map[string]any{"person": map[string]any{"id": p.id, "phone": phone, "identity": p.identity},
-						"key_id": "pky_1", "ticket": "ktk-" + strconv.Itoa(d.n), "expires_at": "2099-01-01T00:05:00Z"})
+						"key_id": "pky_1", "ticket": ticket, "expires_at": "2099-01-01T00:05:00Z"})
 					return
 				}
 			}
@@ -184,6 +187,8 @@ func newDoorLens(t *testing.T, rest *strangerLens) *doorLens {
 			refuse(http.StatusNotFound, "no_person")
 		case "/v1/auth/passkey/keys", "/v1/auth/passkey/keys/remove", "/v1/auth/passcode/change", "/v1/auth/phone/change-number":
 			d.settings(w, r.URL.Path, str, refuse)
+		case "/v1/auth/passcode/replace":
+			d.replace(w, str, refuse)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -489,7 +494,7 @@ func TestB6125_DoorRefusesAnotherSite(t *testing.T) {
 	s := startDoorSuite(t, nil)
 	for _, path := range []string{"/auth/phone/start", "/auth/phone/finish", "/auth/phone/signin", "/auth/phone/join",
 		"/auth/signup/account", "/auth/passkey/challenge", "/auth/passkey/finish", "/auth/passkey/register/challenge",
-		"/auth/passkey/register", "/auth/lock", "/auth/unlock/challenge", "/auth/unlock"} {
+		"/auth/passkey/register", "/auth/lock", "/auth/unlock/challenge", "/auth/unlock", "/auth/passcode/replace"} {
 		req, _ := http.NewRequest(http.MethodPost, s.ts.URL+path, strings.NewReader(`{"phone":"+447700900008"}`))
 		req.Header.Set("Origin", "https://evil.example")
 		req.Header.Set("Sec-Fetch-Site", "cross-site")

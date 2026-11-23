@@ -99,6 +99,7 @@ var decodedFromUpstream = map[string]string{
 	"keyAnswer":              "a key's answer to a sign-in challenge, decoded from the request body and relayed to Lens (B61.25)",
 	"keySignedIn":            "Lens's answer to POST /v1/auth/passkey/finish, decoded in handleKeySignInFinish and handleUnlock (B61.25)",
 	"lensPerson":             "Lens's person in its phone and key sign-in answers, decoded with them (B61.25)",
+	"numberMove":             "a move of a person's number in Lens's POST /v1/auth/phone/number-moves/claim answer, decoded in claimNumberMoves (B61.91)",
 	"talyAnswer":             "Lens's model proxy's Anthropic Messages answer to Taly, decoded in talyAsk (B45.41)",
 	"talyTurn":               "a turn of the desktop app's ask_taly thread, decoded in askTaly and sent on to the model (B45.41)",
 	"pendingRequest":         "a request in Lens's GET /v1/money/payment-requests?status=pending_approval, decoded in mcpApprovals (B45.41)",

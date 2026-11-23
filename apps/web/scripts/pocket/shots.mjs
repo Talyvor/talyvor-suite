@@ -47,6 +47,7 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright'
+import { guardExternalLinks } from '../../../../e2e/src/externalLinks.mjs'
 import { build, createServer } from 'vite'
 
 const WEB = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -115,7 +116,7 @@ const BASE = `http://127.0.0.1:${server.address().port}`
 
 const OUT = join(REPO, 'docs/pr-screenshots', item)
 await mkdir(OUT, { recursive: true })
-const browser = await chromium.launch()
+const browser = guardExternalLinks(await chromium.launch())
 const failures = []
 
 /** Count requests in flight on a page, so a step or a press is read after it settles. */

@@ -305,6 +305,9 @@ var publicWriteRoutes = map[string]string{
 	"/auth/passkey/challenge": "B61.25 — a key sign-in starts before any session exists; the challenge opens nothing by itself",
 	"/auth/passkey/finish": "B61.25 — the key's answer, verified by Lens, is its credential; a wrong or replayed one answers " +
 		"4xx — b6125_phone_signin_test.go",
+	"/auth/passcode/replace": "B61.108 — a forgotten passcode, before any session exists: the check from a right code plus a " +
+		"key sign-in of the same person, both verified by Lens, are its credential; either alone sets nothing — " +
+		"b61108_passcode_replace_test.go",
 	"/auth/synthetic": "B17.2 — the synthetic sign-in, which by definition runs before any session " +
 		"exists. It needs the operator key instead (401 without it) and answers 404 while " +
 		"LENS_SYNTHETIC_KEY is unset, as here; synthetic_test.go owns both refusals",

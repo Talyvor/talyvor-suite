@@ -13,6 +13,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { type Browser, chromium } from 'playwright'
+import { guardExternalLinks } from './externalLinks.mjs'
 import { AppUser, ChargeBook } from './app.ts'
 import { type B28Report, b28Report } from './b28.ts'
 import { type BuildingLabelsReport, readBuildingLabels } from './buildingLabels.ts'
@@ -201,7 +202,7 @@ function timed<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
  * B26.18 — the run's browser. One that crashes or is killed takes only the users in it with it: whoever
  * signs in next gets a new one, and the run's incidents say when the old one went.
  */
-class Browsers {
+export class Browsers {
   private readonly headed: boolean
   private readonly incidents: string[]
   private current: Promise<Browser> | undefined
@@ -224,6 +225,8 @@ class Browsers {
     const launched: Promise<Browser> = chromium.launch({ headless: !this.headed, channel: 'chromium', args: [
       '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${VOICE_CLIP}`,
     ] }).then((b) => {
+      // B17.526 — no link in it is handed to the Mac: a mailto: opened a Mail window per explorer.
+      guardExternalLinks(b)
       b.on('disconnected', () => {
         if (this.closing) return
         this.incidents.push(`${stamp()} the browser went away mid-run (it crashed or was killed); the users in it errored and the rest had a new one`)
