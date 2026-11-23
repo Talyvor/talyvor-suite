@@ -11,6 +11,8 @@ import { formatWhen } from './format'
 // is held until the owner or an admin approves it; then the cap is held out of the agent's account and the card issued.
 // It pays its merchant once, up to its cap, within 24 hours: Lens declines a second charge, gives back what the first did
 // not spend, and closes the card. One unused for 24 hours is closed and its whole cap given back.
+// B57.200 — drawn in Pocket as the card's "Disputes and refunds" rows are: each card a row with where it stands under its
+// merchant, and the ask form one field to a line at the dialog's width, the most it may spend beside its currency.
 
 export const singleUseKey = (agentID: string) => ['single-use-cards', agentID]
 
@@ -38,8 +40,9 @@ function CardState({ card }: { card: MoneyCard }) {
   }
 }
 
+/** One card as a Pocket row: the merchant over where it stands and its number, and the most it may spend. */
 function CardLine({ card }: { card: MoneyCard }) {
-  const line =
+  const detail =
     card.status === 'active' && card.expires_at
       ? `${card.last4 ? `•••• ${card.last4} · ` : ''}until ${formatWhen(card.expires_at)}`
       : card.last4
@@ -48,14 +51,13 @@ function CardLine({ card }: { card: MoneyCard }) {
   return (
     <li data-testid="single-use-card" className="border-t border-line first:border-t-0">
       <Row
-        wrap
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            {card.merchant}
+        title={card.merchant}
+        line={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
             <CardState card={card} />
+            {detail ? <span className="font-figure">{detail}</span> : null}
           </span>
         }
-        line={line ? <span className="font-figure">{line}</span> : undefined}
         amount={
           <span className="grid justify-items-end">
             <Money minor={card.cap_minor} currency={card.currency} />
@@ -131,17 +133,17 @@ function AskCard({ agent }: { agent: Agent }) {
         if (ready && !ask.isPending) ask.mutate()
       }}
     >
-      <div className="flex flex-wrap items-end gap-2">
-        <Field label="For">
-          <Input className="w-56" placeholder="Book a train ticket" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+      <Field label="For">
+        <Input placeholder="Book a train ticket" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+      </Field>
+      <Field label="Merchant">
+        <Input value={merchant} onChange={(e) => setMerchant(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Up to" className="min-w-0 grid-cols-1">
+          <Input className="font-figure" inputMode="decimal" value={cap} aria-invalid={cap !== '' && capMinor === null} onChange={(e) => setCap(e.target.value)} />
         </Field>
-        <Field label="Merchant">
-          <Input className="w-48" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
-        </Field>
-        <Field label="Up to">
-          <Input className="w-28 font-figure" inputMode="decimal" value={cap} aria-invalid={cap !== '' && capMinor === null} onChange={(e) => setCap(e.target.value)} />
-        </Field>
-        <Field label="Currency">
+        <Field label="Currency" className="min-w-0 grid-cols-1">
           <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
             {CURRENCIES.map((c) => (
               <option key={c} value={c}>
@@ -151,16 +153,15 @@ function AskCard({ agent }: { agent: Agent }) {
           </Select>
         </Field>
       </div>
-      <div>
-        <Button
-          type="submit"
-          variant="secondary"
-          disabled={!ready || ask.isPending}
-          disabledReason={ready ? undefined : 'Say what it is for, the merchant and the most it may spend first.'}
-        >
-          {ask.isPending ? 'Asking…' : 'Ask for a single-use card'}
-        </Button>
-      </div>
+      <Button
+        type="submit"
+        variant="secondary"
+        className="justify-self-start"
+        disabled={!ready || ask.isPending}
+        disabledReason={ready ? undefined : 'Say what it is for, the merchant and the most it may spend first.'}
+      >
+        {ask.isPending ? 'Asking…' : 'Ask for a single-use card'}
+      </Button>
       {ask.isError ? (
         <p role="alert" className="text-body text-ink">
           {refusalText(ask.error)}
