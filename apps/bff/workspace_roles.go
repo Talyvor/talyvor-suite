@@ -52,6 +52,9 @@ const (
 	roleCodeLife  = 10 * time.Minute
 	roleCodeTries = 5
 	roleCodeGap   = 30 * time.Second
+	// roleCodesAnHour is how many codes go in an hour to one person, and to one address whoever asks: with
+	// roleCodeTries each, an address's code can be guessed at most 25 times an hour out of a million.
+	roleCodesAnHour = 5
 
 	roleCodeSubject = "Your Talyvor code"
 )
@@ -77,15 +80,32 @@ type roleCode struct {
 	email   string
 	hash    [32]byte
 	expires time.Time
-	sentAt  time.Time
 	tries   int
 }
 
-// roleProofs keeps the codes waiting, by sub, and the proved addresses when there is no database.
+// roleProofs keeps the codes waiting, by sub, the times codes were sent, by "sub:" and "email:" (kept apart from the
+// codes, so a code used up or refused does not reset the hour), and the proved addresses when there is no database.
 type roleProofs struct {
 	mu     sync.Mutex
 	codes  map[string]roleCode
+	sent   map[string][]time.Time
 	proved map[string][]string
+}
+
+// lastHour is the times under key in the hour before now, pruned. The caller holds mu.
+func (p *roleProofs) lastHour(key string, now time.Time) []time.Time {
+	kept := p.sent[key][:0]
+	for _, at := range p.sent[key] {
+		if now.Sub(at) < time.Hour {
+			kept = append(kept, at)
+		}
+	}
+	if len(kept) == 0 {
+		delete(p.sent, key)
+		return nil
+	}
+	p.sent[key] = kept
+	return kept
 }
 
 // roleEmail is an address as the person typed it, lower-cased, or "" when it is not one plain address.
@@ -154,15 +174,23 @@ func (a *app) handleRoleEmailCode(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	a.roles.mu.Lock()
-	if prev, ok := a.roles.codes[c.s.sub]; ok && now.Sub(prev.sentAt) < roleCodeGap {
+	if a.roles.codes == nil {
+		a.roles.codes, a.roles.sent = map[string]roleCode{}, map[string][]time.Time{}
+	}
+	bySub, byEmail := a.roles.lastHour("sub:"+c.s.sub, now), a.roles.lastHour("email:"+email, now)
+	if len(bySub) >= roleCodesAnHour || len(byEmail) >= roleCodesAnHour {
+		a.roles.mu.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Too many codes asked for. Try again in an hour."})
+		return
+	}
+	if len(bySub) > 0 && now.Sub(bySub[len(bySub)-1]) < roleCodeGap {
 		a.roles.mu.Unlock()
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Wait a moment before asking for another code."})
 		return
 	}
-	if a.roles.codes == nil {
-		a.roles.codes = map[string]roleCode{}
-	}
-	a.roles.codes[c.s.sub] = roleCode{email: email, hash: sha256.Sum256([]byte(code)), expires: now.Add(roleCodeLife), sentAt: now}
+	a.roles.sent["sub:"+c.s.sub] = append(bySub, now)
+	a.roles.sent["email:"+email] = append(byEmail, now)
+	a.roles.codes[c.s.sub] = roleCode{email: email, hash: sha256.Sum256([]byte(code)), expires: now.Add(roleCodeLife)}
 	a.roles.mu.Unlock()
 	if err := a.mail.send(r.Context(), email, roleCodeSubject, roleCodeMail(code)); err != nil {
 		log.Printf("bff: a role email code for sub=%s was not sent: %v", c.s.sub, err)
@@ -362,7 +390,8 @@ func (a *app) roleSessionBy(ctx context.Context, identity, email, accountID stri
 	switch {
 	case err != nil:
 		return provisionResult{}, err
-	case status == http.StatusNotFound:
+	// 404: no role for this email there; 409: someone else took the role up first (Lens binds it to them).
+	case status == http.StatusNotFound || status == http.StatusConflict:
 		return provisionResult{}, errNoSuchAccount
 	case status != http.StatusOK:
 		return provisionResult{}, fmt.Errorf("lens %s answered %d", provisionRolesPath, status)

@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -265,5 +266,30 @@ func TestB2870_TheEmailCodeRoutesRefuseAnotherSite(t *testing.T) {
 	defer m.mu.Unlock()
 	if len(m.got) != 0 || len(m.tried) != 0 {
 		t.Fatalf("a mail went: %v", m.got)
+	}
+}
+
+// An address's code cannot be guessed by asking for code after code: whoever asks, an address gets roleCodesAnHour
+// codes an hour, and a code used up does not reset that.
+func TestB2870_AnAddressGetsFiveCodesAnHourWhoeverAsks(t *testing.T) {
+	s, _, m := startRoleSuite(t)
+	for i := 0; i <= roleCodesAnHour; i++ {
+		br := s.signUp(fmt.Sprintf("b2870-asker-%d", i), "")
+		code, body := s.post(br, "/api/roles/email/code", `{"email":"`+b2870Email+`"}`)
+		if i < roleCodesAnHour && code != http.StatusOK {
+			t.Fatalf("code %d: %d %s, want 200", i+1, code, body)
+		}
+		if i == roleCodesAnHour && code != http.StatusTooManyRequests {
+			t.Fatalf("code %d: %d %s, want 429", i+1, code, body)
+		}
+		// Each asker uses up their code with wrong guesses; that frees nothing.
+		for j := 0; j < roleCodeTries; j++ {
+			_, _ = s.post(br, "/api/roles/email/check", `{"email":"`+b2870Email+`","code":"999999x"}`)
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.tried[b2870Email] != roleCodesAnHour {
+		t.Fatalf("%d codes were mailed to the address, want %d", m.tried[b2870Email], roleCodesAnHour)
 	}
 }
