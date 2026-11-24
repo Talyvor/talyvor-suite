@@ -198,13 +198,15 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/waitlist", body: `{"email":"a@example.com"}`}, // B44.1
 		{method: http.MethodPost, path: "/api/features/stored-answers/delete", body: `{"scope":"shared","confirm":"ws"}`},
 		{method: http.MethodPost, path: "/api/features/deletion-requests", body: `{}`},
-		{method: http.MethodPut, path: "/api/workspace/name", body: `{"name":"a"}`},                          // B46.16
-		{method: http.MethodPost, path: "/api/workspace/member-invites", body: `{"max_uses":1}`},             // B52.36
-		{method: http.MethodDelete, path: "/api/workspace/member-invites/x1"},                                // B52.36
-		{method: http.MethodDelete, path: "/api/workspace/members/x1"},                                       // B52.36
-		{method: http.MethodPost, path: "/api/invites/accept", body: `{"token":"t"}`},                        // B52.36
-		{method: http.MethodPost, path: "/api/workspace/requests", body: `{"kind":"support","message":"a"}`}, // B59.28
-		{method: http.MethodPut, path: "/api/workspace/business", body: `{"company_name":"a"}`},              // B59.31
+		{method: http.MethodPut, path: "/api/workspace/name", body: `{"name":"a"}`},                               // B46.16
+		{method: http.MethodPost, path: "/api/workspace/member-invites", body: `{"max_uses":1}`},                  // B52.36
+		{method: http.MethodDelete, path: "/api/workspace/member-invites/x1"},                                     // B52.36
+		{method: http.MethodDelete, path: "/api/workspace/members/x1"},                                            // B52.36
+		{method: http.MethodPost, path: "/api/invites/accept", body: `{"token":"t"}`},                             // B52.36
+		{method: http.MethodPut, path: "/api/workspace/roles", body: `{"email":"a@example.com","role":"viewer"}`}, // B28.70
+		{method: http.MethodDelete, path: "/api/workspace/roles"},                                                 // B28.70
+		{method: http.MethodPost, path: "/api/workspace/requests", body: `{"kind":"support","message":"a"}`},      // B59.28
+		{method: http.MethodPut, path: "/api/workspace/business", body: `{"company_name":"a"}`},                   // B59.31
 		{method: http.MethodPost, path: "/api/agents", body: `{"name":"a"}`},
 		{method: http.MethodPost, path: "/api/agents/x1/fund", body: `{"amount_ulxc":1}`},
 		{method: http.MethodPost, path: "/api/agents/x1/withdraw", body: `{"amount_ulxc":1}`},
@@ -601,6 +603,8 @@ var notSweptWrite = map[string]string{
 	"/mcp":           "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/api/accounts": "B61.8 — Origin-GATED, but its one upstream write is POST /v1/provision, which this table's arrival " +
 		"assertion excludes on purpose; TestB618_SwitchingToAnotherPersonsAccountOrFromAnotherSiteIsRefused posts it from another site and asserts the 403",
+	"/api/roles/email/code":  "B28.70 — Origin-GATED, but the code is kept in the BFF and mailed, nothing written upstream; TestB2870_TheEmailCodeRoutesRefuseAnotherSite posts it from another site and asserts the 403 and that no mail went",
+	"/api/roles/email/check": "B28.70 — Origin-GATED, but the proved address is kept in the BFF, nothing written upstream; TestB2870_TheEmailCodeRoutesRefuseAnotherSite posts it from another site and asserts the 403",
 	"/api/accounts/switch": "B61.8 — the same: its one upstream call is POST /v1/provision; " +
 		"TestB618_SwitchingToAnotherPersonsAccountOrFromAnotherSiteIsRefused posts it from another site and asserts the 403 and that the session did not move",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +

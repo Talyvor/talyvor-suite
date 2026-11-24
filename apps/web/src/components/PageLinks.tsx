@@ -7,6 +7,7 @@ import { useAuthMeReader } from '../lib/authMe'
 import { useWorkspaceAreas } from '../lib/workspaceAreas'
 import { WORKSPACE_NAME_KEY, agentBankApi, useAccount } from '../areas/lens/agentBankApi'
 import type { RosterMember } from '../areas/lens/Members'
+import { teamTitle } from '../areas/lens/rolesApi'
 
 /**
  * B57.8 — a page's links to the pages that left the sidebar, as Pocket draws them (pocket.css .card.setc): Billing
@@ -91,6 +92,7 @@ const SETTINGS_ICON: Record<string, IconName> = {
   '/members': 'rooms',
   '/billing': 'billing',
   '/settings/company': 'statements',
+  '/settings/team': 'rooms',
   '/settings/verification': 'shield',
   '/settings/payout-details': 'coin',
   '/settings/terms': 'check',
@@ -130,6 +132,8 @@ export function useSettingsLinks(): SettingsLink[] {
     // B61.3 — Billing and Plans, as one row. B57.171 — in Pocket Live's w-settings words; the plan's name is on its page.
     { to: '/billing', title: 'Plan', line: 'What you have and what it costs' },
     ...(business ? [{ to: '/settings/company', title: 'Company details', line: 'Company name, number and country, and the people with control' }] : []),
+    // B28.70 — roles on a Business account; on a Personal one, only the accounts shared with the person.
+    { to: '/settings/team', title: teamTitle(business), line: business ? 'Who in your team can see, pay and approve' : 'Open an account someone gave you a role in' },
     { to: '/settings/verification', title: 'Verification', line: 'What Talyvor has checked about you' },
     // B55.28 — where the workspace is paid its earnings.
     { to: '/settings/payout-details', title: 'Payout details', line: 'Where Talyvor pays you' },

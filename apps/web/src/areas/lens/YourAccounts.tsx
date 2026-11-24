@@ -7,6 +7,7 @@ import { WorkspaceStatus } from '../../labels/workspace'
 import { accountChip } from './agentBankApi'
 import { ACCOUNTS_KEY, accountOf, readAccounts, switchAccount, type PersonAccount } from './accountsApi'
 import { readFailure } from './WalletMoney'
+import { roleName } from './rolesApi'
 
 // YourAccounts.tsx — B61.9: the sheet "Your accounts" (Pocket Live's sheet and panel `accounts`, launch-pack DESIGN.md
 // P6). Each of the person's accounts with its avatar, name and chip, the current one marked, then "Open another account",
@@ -67,7 +68,10 @@ function Row({ a, busy, onPick }: { a: PersonAccount; busy: boolean; onPick: () 
         </span>
         <span className="grid min-w-0 flex-1 justify-items-start gap-1">
           <span className="max-w-full truncate text-reading font-semibold text-ink">{name}</span>
-          {kind ? <Chip>{accountChip(kind)}</Chip> : null}
+          <span className="flex flex-wrap gap-1">
+            {kind ? <Chip>{accountChip(kind)}</Chip> : null}
+            {a.role ? <Chip>{roleName(a.role)}</Chip> : null}
+          </span>
         </span>
         {a.current ? (
           <span className="flex items-center gap-1 text-body font-semibold text-ink">

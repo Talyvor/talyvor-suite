@@ -64,6 +64,7 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/settings/close': '/settings/close',
   '/settings/data': '/settings/data',
   '/settings/company': '/settings/company',
+  '/settings/team': '/settings/team',
   '/money/invoices': '/money/invoices',
   '/money/pay': '/money/pay',
   '/money/wallets': '/money/wallets',

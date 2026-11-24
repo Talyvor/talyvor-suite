@@ -28,6 +28,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -39,6 +40,8 @@ type personAccount struct {
 	Kind     string `json:"kind"`
 	OpenedAt string `json:"opened_at"`
 	Current  bool   `json:"current"`
+	// Role is the role the person holds in an account that is someone else's (B28.70); "" on their own.
+	Role string `json:"role,omitempty"`
 }
 
 // accountsOf is who is asking: the identity Lens knows them by, the account the session is on, and the session itself
@@ -103,6 +106,18 @@ func (a *app) listAccounts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, failed)
 		return
 	}
+	// B28.70: then the accounts a role was given in, to an email the person proved. A failed read leaves them out.
+	if emails, err := a.provedEmails(r.Context(), c.s.sub); err != nil {
+		log.Printf("bff: reading proved emails failed: %v", err)
+	} else if roles, err := a.roleAccounts(r.Context(), c.identity, emails); err != nil {
+		log.Printf("bff: reading role accounts failed: %s", redactSecret(err.Error()))
+	} else {
+		for _, ra := range roles {
+			if !slices.ContainsFunc(got.Accounts, func(x personAccount) bool { return x.ID == ra.ID }) {
+				got.Accounts = append(got.Accounts, personAccount{ID: ra.ID, Name: ra.Name, Type: ra.Type, Kind: ra.Kind, Role: ra.Role})
+			}
+		}
+	}
 	for i := range got.Accounts {
 		got.Accounts[i].Current = got.Accounts[i].ID == c.current
 	}
@@ -134,6 +149,10 @@ func (a *app) handleAccountSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prov, err := a.provisionAccount(r.Context(), c.identity, in.AccountID)
+	// B28.70: an account that is not the person's own opens only by a role given to an email they proved.
+	if errors.Is(err, errNoSuchAccount) {
+		prov, err = a.roleSession(r.Context(), c.identity, c.s.sub, in.AccountID)
+	}
 	if errors.Is(err, errNoSuchAccount) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such account"})
 		return
@@ -196,6 +215,7 @@ func (a *app) moveSession(w http.ResponseWriter, r *http.Request, c accountsOf, 
 	next := c.s
 	next.workspaceID, next.lensToken, next.lensTokenExp = prov.WorkspaceID, prov.Token, parseExpiry(prov.ExpiresAt)
 	next.cachePoolable, next.needsPoolingChoice = prov.CachePoolable, prov.Created
+	next.role, next.roleEmail = prov.Role, prov.roleEmail
 	if _, _, bearer := a.auth.bearerSession(r); bearer {
 		sid, err := a.auth.storeSession(next)
 		if err != nil {

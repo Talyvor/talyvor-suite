@@ -65,6 +65,9 @@ type app struct {
 	// help keeps each workspace's Help chat and counts its questions a day (help_chat.go).
 	help *helpStore
 
+	// roles keeps the email codes waiting and, without a database, the proved addresses (B28.70, workspace_roles.go).
+	roles roleProofs
+
 	// mail sends what a moved number owes the person's addresses (number_moves.go); nil while BFF_SMTP_* is unset.
 	mail mailer
 
@@ -499,6 +502,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/workspace/members", a.requireTenant(a.handleWorkspaceMembers))
 	a.mux.HandleFunc("/api/workspace/members/{id}", a.requireTenant(a.handleWorkspaceMember))
 	a.mux.HandleFunc("/api/invites/accept", a.requireSession(a.handleInviteAccept))
+	// B28.70 — the owner's roles, and proving an email a role was given to (workspace_roles.go).
+	a.mux.HandleFunc("/api/workspace/roles", a.requireTenant(a.handleWorkspaceRoles))
+	a.mux.HandleFunc("/api/roles", a.requireSession(a.handleRoles))
+	a.mux.HandleFunc("/api/roles/email/code", a.requireSession(a.handleRoleEmailCode))
+	a.mux.HandleFunc("/api/roles/email/check", a.requireSession(a.handleRoleEmailCheck))
 	// B19.4 — the Agent Bank: agents, their balances and rules, payments between them, and the
 	// approvals inbox. See agent_bank.go.
 	a.mux.HandleFunc("/api/agents", a.requireTenant(a.handleAgents))

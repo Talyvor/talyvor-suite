@@ -73,6 +73,10 @@ type session struct {
 	awayAt   time.Time
 	// keyTicket is the ticket of the key sign-in that opened this session, the proof for its next key.
 	keyTicket keyTicket
+	// B28.70 (workspace_roles.go): role is the role this session holds in someone else's account, "" on the person's
+	// own; roleEmail is the proved email the role was given to.
+	role      string
+	roleEmail string
 }
 
 func (s session) expiresAt() time.Time { return s.expires }

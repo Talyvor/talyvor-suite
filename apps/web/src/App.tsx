@@ -52,6 +52,7 @@ import { Settings, TeamOnly } from './areas/lens/Sharing'
 import { WELCOME_PATH, Welcome, WelcomeRedirect } from './areas/auth/Welcome'
 import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/HelpAndAccount'
 import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
+import { TeamRolesScreen } from './areas/lens/TeamRoles'
 import { SignedInFooter } from './components/HelpLinks'
 import { HelpButton, HelpChatHost } from './components/HelpChat'
 import { YourAccountsHost, withAccountsOpen } from './areas/lens/YourAccounts'
@@ -288,6 +289,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/data', title: 'Your data', element: <YourDataScreen />, panel: '/settings' },
   // B59.31 — a Business account's company details and the people with control.
   { path: '/settings/company', title: 'Company details', element: <CompanyDetailsScreen />, panel: '/settings' },
+  // B28.70 — a Business owner's roles (Viewer, Finance, Approver, Admin), and opening an account someone gave you one in.
+  { path: '/settings/team', title: 'Team and roles', element: <TeamRolesScreen />, panel: '/settings' },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B59.53 — Wallets: each side the kind shows, a tile per currency and each account, with Top up, Withdraw and Convert.

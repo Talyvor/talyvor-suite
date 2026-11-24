@@ -123,6 +123,15 @@ CREATE TABLE IF NOT EXISTS person_email_accounts (
 );
 CREATE INDEX IF NOT EXISTS person_email_accounts_workspace ON person_email_accounts (workspace_id);
 
+-- B28.70: each address a person proved with a code mailed to it, the only addresses Lens is told a role may be taken up by
+-- (workspace_roles.go).
+CREATE TABLE IF NOT EXISTS person_proved_emails (
+    sub       text NOT NULL,
+    email     text NOT NULL,
+    proved_at timestamptz NOT NULL,
+    PRIMARY KEY (sub, email)
+);
+
 -- B61.91: each move of a person's number Lens handed over (POST /v1/auth/phone/number-moves/claim, once), and one mail per
 -- address it owes (number_moves.go). sub is '' for an identity this BFF did not make. sent_at is set before a mail goes;
 -- next_try_at is a sweep on after the sender refused it for now, failed_at when it refused it for good.

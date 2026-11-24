@@ -234,6 +234,15 @@ const BODIES: Record<string, unknown> = {
     invites: [{ id: 'wsinv_1', max_uses: 5, uses: 1, expires_at: '2026-11-27T10:00:00Z', live: true, created_at: '2026-11-20T10:00:00Z' }],
   },
   '/api/workspace/members': { members: [{ id: 'wsm_1', role: 'member', added_at: '2026-11-20T10:30:00Z' }] },
+  // B28.70 — Team and roles: a role the owner gave, and an account shared with the person.
+  '/api/workspace/roles': {
+    items: [{ email: 'finn@northwind.example', role: 'finance', signed_in: true, granted_at: '2026-11-24T10:00:00Z' }],
+    roles: ['viewer', 'finance', 'approver', 'admin'],
+  },
+  '/api/roles': {
+    emails: ['maya@lind.example'],
+    accounts: [{ id: 'ws_3', name: 'Northwind', type: 'business', kind: 'fiat', role: 'viewer', email: 'maya@lind.example', current: false }],
+  },
   // B61.9 — Your accounts: the person's two, the workspace above the current one.
   '/api/accounts': {
     accounts: [
