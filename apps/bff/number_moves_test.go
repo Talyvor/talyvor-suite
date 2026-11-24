@@ -58,7 +58,7 @@ func TestNumberMoveTellsEveryAddressAndEndsEverySession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := first.pool.Exec(ctx, `TRUNCATE oauth_clients, oauth_codes, oauth_grants, oauth_tokens, signed_out_everywhere,
-		person_emails, number_move_mails, number_moves`); err != nil {
+		person_email_accounts, person_emails, number_move_mails, number_moves`); err != nil {
 		t.Fatal(err)
 	}
 	first.close()
@@ -119,11 +119,11 @@ func TestNumberMoveTellsEveryAddressAndEndsEverySession(t *testing.T) {
 	}
 	a := boot()
 	// The addresses Ada and Bob gave; Bob's number is not moved.
-	a.rememberEmail(ctx, "sub-ada", "Ada@example.com")
-	a.rememberEmail(ctx, "sub-ada", "ada.work@example.com")
-	a.rememberEmail(ctx, "sub-ada", "aaa-gone@example.com") // first in line, and its mailbox is gone
-	a.rememberEmail(ctx, "sub-ada", "Ada <ada@example.com>\r\nBcc: eve@example.com")
-	a.rememberEmail(ctx, "sub-bob", "bob@example.com")
+	a.rememberEmail(ctx, "sub-ada", "ws-ada", "Ada@example.com")
+	a.rememberEmail(ctx, "sub-ada", "ws-ada", "ada.work@example.com")
+	a.rememberEmail(ctx, "sub-ada", "ws-ada", "aaa-gone@example.com") // first in line, and its mailbox is gone
+	a.rememberEmail(ctx, "sub-ada", "ws-ada", "Ada <ada@example.com>\r\nBcc: eve@example.com")
+	a.rememberEmail(ctx, "sub-bob", "ws-bob", "bob@example.com")
 	// Ada on the web (sid-ada, from oauthApp) and on her lost phone, sealed as a restart would restore it; Cy and Bob
 	// signed in too.
 	phone, err := a.auth.sealer.seal(session{sub: "sub-ada", email: "ada@example.com", expires: time.Now().Add(time.Hour),

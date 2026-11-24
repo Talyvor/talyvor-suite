@@ -59,7 +59,7 @@ func (a *app) handleWorkspaceRequests(w http.ResponseWriter, r *http.Request, t 
 		if got.Requests == nil {
 			got.Requests = []workspaceRequest{}
 		}
-		a.forgetHelpIfClosed(r.Context(), t.workspaceID, got.Requests) // B61.65 (help_closed.go)
+		a.forgetHelpIfClosed(r.Context(), t, got.Requests) // B61.65 (help_closed.go)
 		writeJSON(w, http.StatusOK, map[string][]workspaceRequest{"requests": got.Requests})
 	case http.MethodPost:
 		var in struct {
