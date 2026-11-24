@@ -507,6 +507,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/roles", a.requireSession(a.handleRoles))
 	a.mux.HandleFunc("/api/roles/email/code", a.requireSession(a.handleRoleEmailCode))
 	a.mux.HandleFunc("/api/roles/email/check", a.requireSession(a.handleRoleEmailCheck))
+	// B28.40 — a Business account's second approver, and the challenge setting it is signed over (second_approver.go).
+	a.mux.HandleFunc("/api/workspace/second-approver", a.requireTenant(a.handleSecondApprover(false)))
+	a.mux.HandleFunc("/api/workspace/second-approver/challenge", a.requireTenant(a.handleSecondApprover(true)))
 	// B19.4 — the Agent Bank: agents, their balances and rules, payments between them, and the
 	// approvals inbox. See agent_bank.go.
 	a.mux.HandleFunc("/api/agents", a.requireTenant(a.handleAgents))

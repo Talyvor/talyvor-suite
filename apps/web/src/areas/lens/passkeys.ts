@@ -21,6 +21,7 @@ import {
   type RecoveryPasskey,
 } from './agentBankApi'
 import { showRecoveryCode } from './recoveryCodeStore'
+import { rolesApi, type SecondApproverLine } from './rolesApi'
 
 export function b64u(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
@@ -216,4 +217,13 @@ export async function notifyThisDevice(): Promise<void> {
   const json = sub.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } }
   if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) throw new Error('The browser gave no push subscription.')
   await agentBankApi.subscribePush({ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } })
+}
+
+/**
+ * B28.40 — a Business account's second approver is set, or cleared with an empty line, signed over the challenge naming
+ * exactly that line once the workspace has a passkey (Lens B28.315). With none, it is set as before.
+ */
+export async function setSecondApproverSigned(line: SecondApproverLine): Promise<SecondApproverLine> {
+  const c = await rolesApi.secondApproverChallenge(line)
+  return rolesApi.setSecondApprover(line, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
 }

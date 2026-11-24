@@ -236,9 +236,14 @@ const BODIES: Record<string, unknown> = {
   '/api/workspace/members': { members: [{ id: 'wsm_1', role: 'member', added_at: '2026-11-20T10:30:00Z' }] },
   // B28.70 — Team and roles: a role the owner gave, and an account shared with the person.
   '/api/workspace/roles': {
-    items: [{ email: 'finn@northwind.example', role: 'finance', signed_in: true, granted_at: '2026-11-24T10:00:00Z' }],
+    items: [
+      { email: 'finn@northwind.example', role: 'finance', signed_in: true, granted_at: '2026-11-24T10:00:00Z', user_id: 'pfinn' },
+      { email: 'ada@northwind.example', role: 'approver', signed_in: true, granted_at: '2026-11-24T10:05:00Z', user_id: 'pada' },
+    ],
     roles: ['viewer', 'finance', 'approver', 'admin'],
   },
+  // B28.40 — the second approver: Ada, above £5,000.
+  '/api/workspace/second-approver': { user_id: 'pada', above_minor: 500_000, currency: 'GBP' },
   '/api/roles': {
     emails: ['maya@lind.example'],
     accounts: [{ id: 'ws_3', name: 'Northwind', type: 'business', kind: 'fiat', role: 'viewer', email: 'maya@lind.example', current: false }],

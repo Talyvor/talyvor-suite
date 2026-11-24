@@ -1,0 +1,46 @@
+[
+  {
+    "route": "/settings/team"
+  },
+  {
+    "route": "/settings/team",
+    "steps": [
+      "Save"
+    ]
+  },
+  {
+    "route": "/?approval=apr_1",
+    "answers": {
+      "/api/agents/approvals": {
+        "approvals": [
+          {
+            "id": "apr_1",
+            "agent_id": "agt_research",
+            "amount_ulxc": 3000000,
+            "model": "",
+            "status": "pending",
+            "created_at": "2026-09-27T12:30:00Z",
+            "payee": {
+              "kind": "company",
+              "id": "ws_acme",
+              "name": "Acme Hosting"
+            },
+            "memo": "October invoice",
+            "paid_from": {
+              "kind": "lxc",
+              "account_id": "agt_research",
+              "name": "Researcher’s LXC balance",
+              "currency": "LXC",
+              "amount_minor": 3000000,
+              "balance_minor": 10000000
+            },
+            "asks_above_ulxc": 2000000,
+            "budget_left_after_ulxc": null,
+            "over_second_approver_line": true,
+            "waiting_for_second_approver": true
+          }
+        ]
+      }
+    }
+  }
+]

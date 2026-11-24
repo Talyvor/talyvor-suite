@@ -728,6 +728,18 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: 'r.Put("/v1/workspaces/{wsID}/account/money-kind", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensWorkspaceMoneyKindBody",
   },
+  // B28.40 — a Business account's second approver, signed over the challenge for that line (Lens B28.315); the
+  // challenge (POST …/second-approver/challenge) is the same body without the assertion.
+  {
+    route: "PUT /v1/workspaces/{wsID}/second-approver",
+    file: "apps/bff/second_approver.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleSecondApprover(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/second_approver_handler.go",
+    upstreamAnchor: 'r.Put("/v1/workspaces/{wsID}/second-approver", businessOwnerOnly(func(w http.ResponseWriter, req *http.Request, by string) {',
+    subject: "lensSecondApproverBody",
+  },
   // B61.59 — the owner changes the account's plan from Settings, Plan (Lens B61.57).
   {
     route: "PUT /v1/workspaces/{wsID}/plan",

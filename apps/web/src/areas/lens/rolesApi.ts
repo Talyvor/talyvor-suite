@@ -4,11 +4,14 @@
 //   POST /api/roles/email/code {"email"}      a code is mailed to the address
 //   POST /api/roles/email/check {email, code} the address is proved for the signed-in person
 //   GET /api/roles                            the proved addresses and the accounts a role was given in
+//   GET/PUT /api/workspace/second-approver    B28.40: who must be one of the two approvers above an amount, and
+//   POST /api/workspace/second-approver/challenge   the challenge setting it is signed over
 //
 // A role opens only by an email the person proved with the code, so an address they typed and could not prove shows
 // nothing. Opening a role's account is the accounts switcher's own POST /api/accounts/switch.
 
 import { ApiError, getJSON } from '../../lib/api'
+import type { PasskeyAssertion } from './agentBankApi'
 
 export type Role = 'viewer' | 'finance' | 'approver' | 'admin'
 
@@ -35,6 +38,8 @@ export interface GivenRole {
   role: Role
   signed_in: boolean
   granted_at: string
+  /** B28.40 — the person who took the role up, as the second approver names them (talyvor-lens B28.464); "" or absent until then. */
+  user_id?: string
 }
 
 /** One account a role was given in, to one of the person's proved addresses. */
@@ -54,6 +59,7 @@ export interface MyRoles {
 }
 
 export const GIVEN_ROLES_KEY = ['workspace-roles'] as const
+export const SECOND_APPROVER_KEY = ['second-approver'] as const
 export const MY_ROLES_KEY = ['my-roles'] as const
 
 /** A request the BFF or Lens refused, with its sentence. */
@@ -90,7 +96,23 @@ export const rolesApi = {
   },
   sendCode: (email: string) => send<{ sent: boolean; email: string }>('/api/roles/email/code', 'POST', { email }),
   checkCode: (email: string, code: string) => send<{ email: string }>('/api/roles/email/check', 'POST', { email, code }),
+  secondApprover: () => getJSON<SecondApproverLine>('/api/workspace/second-approver', { user_id: 'string', above_minor: 'number', currency: 'string' }),
+  secondApproverChallenge: (line: SecondApproverLine) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('/api/workspace/second-approver/challenge', 'POST', line),
+  setSecondApprover: (line: SecondApproverLine, assertion?: PasskeyAssertion) =>
+    send<SecondApproverLine>('/api/workspace/second-approver', 'PUT', { ...line, ...(assertion ? { assertion } : {}) }),
 }
+
+/** B28.40 — a Business account's second approver (talyvor-lens B28.315): above `above_minor` of `currency`, a payment
+ * needs two people's approvals, one of them `user_id`'s. Empty (user_id "", above_minor 0) when none is set. */
+export interface SecondApproverLine {
+  user_id: string
+  above_minor: number
+  currency: string
+}
+
+/** The roles that may approve (talyvor-lens approvalRoles): only they can be a second approver. */
+export const APPROVING_ROLES: readonly Role[] = ['approver', 'admin']
 
 /** A refusal's sentence, or the fallback. */
 export const refusal = (err: unknown, fallback: string) => (err instanceof RoleError && err.sentence ? err.sentence : fallback)
