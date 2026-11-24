@@ -202,6 +202,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/workspace/member-invites", body: `{"max_uses":1}`},                                         // B52.36
 		{method: http.MethodDelete, path: "/api/workspace/member-invites/x1"},                                                            // B52.36
 		{method: http.MethodDelete, path: "/api/workspace/members/x1"},                                                                   // B52.36
+		{method: http.MethodPost, path: "/api/invites/preview", body: `{"token":"t"}`},                                                   // B52.46
 		{method: http.MethodPost, path: "/api/invites/accept", body: `{"token":"t"}`},                                                    // B52.36
 		{method: http.MethodPut, path: "/api/workspace/roles", body: `{"email":"a@example.com","role":"viewer"}`},                        // B28.70
 		{method: http.MethodDelete, path: "/api/workspace/roles"},                                                                        // B28.70

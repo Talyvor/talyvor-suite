@@ -42,6 +42,8 @@ const NORTHWIND_REQUEST = {
 }
 
 const SAMPLE: Record<string, unknown> = {
+  // B52.46: the Join page names the workspace an invite link is to.
+  '/api/invites/preview': { workspace_id: 'ws_northwind', name: 'Northwind Studio' },
   '/auth/me': {
     mode: 'oidc',
     authenticated: true,

@@ -43,6 +43,7 @@ export async function addMember(email: string, role: 'owner' | 'member'): Promis
 //
 //   GET/POST /api/workspace/member-invites, DELETE /api/workspace/member-invites/{id}
 //   GET /api/workspace/members, DELETE /api/workspace/members/{id}
+//   POST /api/invites/preview {"token"} — B52.46: which workspace the link is to, before Join; adds nobody
 //   POST /api/invites/accept {"token"}  — the BFF adds the SESSION's person; the browser sends only the token
 
 /** Lens members.Invite. token is there only in the answer that made the link. */
@@ -62,6 +63,12 @@ export interface JoinedMember {
   id: string
   role: string
   added_at: string
+}
+
+/** What an invite link is to, before the person joins. */
+export interface InvitePreview {
+  workspace_id: string
+  name: string
 }
 
 export interface Joined {
@@ -109,6 +116,7 @@ export const invitesApi = {
   revoke: (id: string) => send<WorkspaceInvite>(`/api/workspace/member-invites/${e(id)}`, 'DELETE', {}),
   members: async () => (await read<{ members: JoinedMember[] | null }>('/api/workspace/members')).members ?? [],
   remove: (id: string) => send<void>(`/api/workspace/members/${e(id)}`, 'DELETE', {}),
+  preview: (token: string) => send<InvitePreview>('/api/invites/preview', 'POST', { token }),
   accept: (token: string) => send<Joined>('/api/invites/accept', 'POST', { token }),
 }
 

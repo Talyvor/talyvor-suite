@@ -34,6 +34,11 @@ function standInBff() {
       members.splice(0, 1)
       return new Response(null, { status: 204 })
     }
+    if (url === '/api/invites/preview') {
+      // B52.46: what the link is to; nobody joins.
+      if (body.token !== 'wsinvtok_abc') return json({ error: 'This invite link has expired, been used or been revoked. Ask for a new one.' }, 404)
+      return json({ workspace_id: 'ws_owner', name: 'Northwind Studio' })
+    }
     if (url === '/api/invites/accept') {
       // The join: Lens adds the session's person, so the owner's list has them after it.
       members.push({ id: 'wsm_1', role: 'member', added_at: '2026-11-20T10:30:00Z' })
@@ -115,19 +120,26 @@ describe('An invite link opened signed in', () => {
   it('sends only the token, and says which workspace was joined', async () => {
     const sent = standInBff()
     renderAt(<JoinWorkspace />, '/join#wsinvtok_abc')
-    expect(screen.getByText('You’ve been invited to join a workspace on Talyvor.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Join' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Join Northwind Studio' }))
     expect((await screen.findByTestId('joined')).textContent).toBe('You joined Northwind Studio.')
     expect(sent.find((s) => s.url === '/api/invites/accept')?.body).toEqual({ token: 'wsinvtok_abc' })
   })
 
-  it('says a used, expired or revoked link in the BFF’s words', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      json({ error: 'This invite link has expired, been used or been revoked. Ask for a new one.' }, 404),
-    )
+  it('names the workspace before Join, and joins nobody until the press', async () => {
+    const sent = standInBff()
+    renderAt(<JoinWorkspace />, '/join#wsinvtok_abc')
+    expect(await screen.findByRole('button', { name: 'Join Northwind Studio' })).toBeTruthy()
+    expect(screen.getByTestId('invited').textContent).toBe('You’ve been invited to join Northwind Studio on Talyvor.')
+    expect(sent.find((s) => s.url === '/api/invites/preview')?.body).toEqual({ token: 'wsinvtok_abc' })
+    expect(sent.some((s) => s.url === '/api/invites/accept')).toBe(false)
+  })
+
+  it('says a used, expired or revoked link in the BFF’s words, before the press', async () => {
+    const sent = standInBff()
     renderAt(<JoinWorkspace />, '/join#wsinvtok_gone')
-    fireEvent.click(screen.getByRole('button', { name: 'Join' }))
     expect((await screen.findByRole('alert')).textContent).toBe('This invite link has expired, been used or been revoked. Ask for a new one.')
+    expect(screen.queryByRole('button', { name: /^Join/ })).toBeNull()
+    expect(sent.some((s) => s.url === '/api/invites/accept')).toBe(false)
   })
 })
 

@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
 import { Button, Card, Facts } from '@talyvor/ui/pocket'
 import { InviteError, invitesApi } from './membersApi'
@@ -35,6 +35,13 @@ export function JoinWorkspace() {
   const { hash } = useLocation()
   const token = inviteToken(hash)
   const join = useMutation({ mutationFn: () => invitesApi.accept(token) })
+  const preview = useQuery({
+    queryKey: ['invite-preview', token],
+    queryFn: () => invitesApi.preview(token),
+    enabled: token !== '',
+    retry: false,
+    staleTime: Infinity,
+  })
 
   const home = (label: string) => (
     <Button asChild variant="secondary">
@@ -72,9 +79,29 @@ export function JoinWorkspace() {
     )
   }
 
+  const dead = preview.error instanceof InviteError && (preview.error.status === 404 || preview.error.status === 409)
+  if (dead) {
+    return (
+      <div className="grid items-start gap-4 wide:grid-cols-12">
+        <Card tone="white" className="grid gap-3.5 wide:col-span-7">
+          <h2 role="alert" className="font-display text-reading font-bold text-ink">
+            {preview.error instanceof InviteError && preview.error.sentence
+              ? preview.error.sentence
+              : 'This invite link has expired, been used or been revoked. Ask for a new one.'}
+          </h2>
+          <div>{home('Back to Home')}</div>
+        </Card>
+        <Admits />
+      </div>
+    )
+  }
+
+  const name = preview.data?.name ?? ''
   return (
     <div className="grid gap-4">
-      <p className="text-reading pk-on-bg">You’ve been invited to join a workspace on Talyvor.</p>
+      <p data-testid="invited" className="text-reading pk-on-bg">
+        {name ? `You’ve been invited to join ${name} on Talyvor.` : 'You’ve been invited to join a workspace on Talyvor.'}
+      </p>
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <Card tone="white" className="grid gap-3.5 wide:col-span-7">
           <h2 className="font-display text-reading font-bold text-ink">What joining means</h2>
@@ -86,8 +113,8 @@ export function JoinWorkspace() {
             ]}
           />
           <div className="flex flex-wrap gap-2.5">
-            <Button variant="primary" disabled={join.isPending} onClick={() => join.mutate()}>
-              {join.isPending ? 'Joining…' : 'Join'}
+            <Button variant="primary" disabled={join.isPending || preview.isPending} onClick={() => join.mutate()}>
+              {join.isPending ? 'Joining…' : name ? `Join ${name}` : 'Join'}
             </Button>
             {home('Not now')}
           </div>
