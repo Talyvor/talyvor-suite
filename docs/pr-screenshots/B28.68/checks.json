@@ -1,0 +1,5 @@
+[
+  { "route": "/settings/devices", "screen": "w-security" },
+  { "route": "/settings/devices", "steps": ["Lost your phone?"] },
+  { "route": "/settings/devices?locked", "answers": { "/api/money/lockdown": { "active": true, "started_at": "2026-11-24T10:00:00Z", "reason": "lost phone" } } }
+]

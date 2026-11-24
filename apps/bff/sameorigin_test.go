@@ -296,6 +296,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/devices/x1/revoke", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/permission-mandates/x1/revoke", body: `{}`}, // B41.15
 		{method: http.MethodPost, path: "/api/money/devices/x1/push-token", body: `{"push_token":"t"}`},
+		{method: http.MethodPost, path: "/api/money/lockdown", body: `{"device_ids":["x1"],"reason":"lost phone"}`}, // B28.68
+		{method: http.MethodPost, path: "/api/money/lockdown/lift", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payments", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`},
 		{method: http.MethodPost, path: "/api/money/payments/challenge", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`}, // B54.35
 		{method: http.MethodPost, path: "/api/money/instant-transfers/quote", body: `{"send_minor":100,"send_currency":"USD","receive_currency":"EUR","to":"talyvor_account"}`},                 // B59.19

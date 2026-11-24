@@ -1,5 +1,7 @@
 import { useEffect, useId, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { inlineLink } from '@talyvor/ui'
 import { Button, Card, Crumb, Dialog, Facts, Icon, KindTile, Row, showSnack } from '@talyvor/ui/pocket'
 import { StartEveryAgent, useAllPaused, usePauseEveryAgent } from '../../components/EveryAgent'
 import { DEVICES_KEY, PASSKEYS_KEY, deviceText, useKeys } from './AgentBank'
@@ -13,10 +15,12 @@ import { letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerT
 // Devices.tsx — B57.43: /settings/devices, Approvals and devices, as Pocket's w-security draws it. Every passkey and the
 // phone's key by name, removed after asking and never signed (B55.16; Lens refuses the last one); Add this device, signed
 // by a passkey the workspace has or let in by the phone (B55.3); a phone waiting to be let in; an agent's approval; Stop
-// everything. Lens decides who may add, remove and let in: this page only draws what it says.
+// everything. Lens decides who may add, remove and let in: this page only draws what it says. B28.68: a lost phone is
+// locked out from here, its key the last one or not (Lens B41.116), so the recovery code can add a new passkey.
 
 export const APPROVAL_KEYS_KEY = ['approval-keys']
 const ENROLMENTS_KEY = ['key-enrolments']
+const LOCKDOWN_KEY = ['money-lockdown']
 
 /** A card's title, as Pocket draws it (pocket.css .h3). */
 function Title({ children }: { children: React.ReactNode }) {
@@ -59,6 +63,8 @@ export function DevicesScreen() {
     <div className="grid min-w-0 gap-5">
       <Crumb trail={[{ label: 'Settings', href: '/settings' }, { label: 'Approvals and devices' }]} />
       <p className="max-w-3xl text-reading text-ink-2">Who can approve a payment, and how.</p>
+      {/* B28.68 — a lost phone's lockdown, first while it stands. */}
+      <Lockdown />
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <div className="grid min-w-0 gap-4 wide:col-span-7">
           {/* B55.54 — with every key removed, the way to get one back (B57.131: in Pocket). */}
@@ -348,8 +354,102 @@ function YourPhone() {
                 : 'Turn approving on in the Talyvor app, then let it in here.'}
           </p>
         ) : null}
+        {live ? <LostPhone ids={all.filter((d) => !d.revoked_at).map((d) => d.id)} /> : null}
         {/* Letting a phone in is signed by a passkey here, so only a browser that signs is shown who waits. */}
         {thisBrowserSigns ? <WaitingPhones /> : null}
+      </Card>
+    </section>
+  )
+}
+
+/**
+ * B28.68 — Lost your phone?: its keys stop signing at once, even the workspace's last one, which Remove keeps. With no
+ * key left, Approvals and devices then offers the recovery code (KeyRecovery.tsx), which adds this browser's passkey.
+ */
+function LostPhone({ ids }: { ids: string[] }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const lock = useMutation({
+    mutationFn: () => agentBankApi.lockOut(ids, 'lost phone'),
+    onSuccess: () => {
+      setOpen(false)
+      showSnack({ title: 'Your phone is locked out', line: 'It can no longer approve anything.' })
+    },
+    // Every agent paused and every card frozen too: everything on the page is read again.
+    onSettled: () => qc.invalidateQueries(),
+  })
+  const close = () => {
+    lock.reset()
+    setOpen(false)
+  }
+  return (
+    <>
+      <div className="mt-3">
+        <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+          Lost your phone?
+        </Button>
+      </div>
+      <Dialog
+        open={open}
+        onClose={close}
+        title="Lost your phone?"
+        actions={
+          <>
+            <Button variant="secondary" disabled={lock.isPending} onClick={close}>
+              Cancel
+            </Button>
+            <Button variant="danger" disabled={lock.isPending} onClick={() => lock.mutate()}>
+              Lock out my phone
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Your phone’s key stops approving at once. Every agent is paused, every agent card is frozen and every other
+          sign-in ends. Nothing starts again until you confirm who you are and lift the lockdown.
+        </p>
+        {lock.isError ? <p role="alert">{deviceText(lock.error, 'Your phone was not locked out.')}</p> : null}
+      </Dialog>
+    </>
+  )
+}
+
+/** B28.68 — while a lost phone's lockdown stands: since when, and Lift the lockdown once an identity check has passed. */
+function Lockdown() {
+  const qc = useQueryClient()
+  const lockdown = useQuery({ queryKey: LOCKDOWN_KEY, queryFn: agentBankApi.lockdown })
+  const lift = useMutation({
+    mutationFn: agentBankApi.liftLockdown,
+    onSuccess: () => showSnack({ title: 'The lockdown is lifted', line: 'Start each agent and unfreeze each card when you are ready.' }),
+    onSettled: () => qc.invalidateQueries(),
+  })
+  if (!lockdown.data?.active) return null
+  return (
+    <section aria-label="Locked down">
+      <Card tone="white">
+        <Title>Locked down after a lost phone</Title>
+        <p className="mt-1 text-body text-ink-3">
+          {lockdown.data.started_at ? (
+            <>
+              Since <span className="font-figure">{formatDecided(lockdown.data.started_at)}</span>.{' '}
+            </>
+          ) : null}
+          Every agent is paused and every agent card is frozen. To lift it, confirm who you are in{' '}
+          <Link className={inlineLink} to="/settings/verification">
+            Verification
+          </Link>
+          , then come back here.
+        </p>
+        {lift.isError ? (
+          <p role="alert" className="mt-2 text-body text-ink">
+            {deviceText(lift.error, 'The lockdown was not lifted.')}
+          </p>
+        ) : null}
+        <div className="mt-3">
+          <Button disabled={lift.isPending} onClick={() => lift.mutate()}>
+            Lift the lockdown
+          </Button>
+        </div>
       </Card>
     </section>
   )

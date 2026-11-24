@@ -628,6 +628,7 @@ const BY_PATH: Record<string, unknown> = {
   '/api/agents/keys': { keys: [] }, // B55.16
   // B55.2 — nor a phone key: with one, the web leaves approving and resuming to the phone.
   '/api/money/devices': { devices: [] },
+  '/api/money/lockdown': { active: false },
   // B19.21 — a weekly payment from the Researcher to the Writer, and the Researcher's top-up.
   '/api/agents/schedules': {
     schedules: [{ id: 'sch_1', from_agent_id: 'agt_research', to_agent_id: 'agt_writer', amount_ulxc: 1_000_000, memo: 'drafts', every: 'week', next_run_at: '2026-10-05T09:00:00Z', active: true, created_at: '2026-09-28T09:00:00Z' }],

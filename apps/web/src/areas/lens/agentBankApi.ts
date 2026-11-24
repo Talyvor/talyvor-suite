@@ -1487,6 +1487,10 @@ export const agentBankApi = {
   approvalKeys: () => getJSON<{ keys: ApprovalKey[] | null }>('/api/agents/keys', { keys: 'list' }),
   removePasskey: (credentialID: string) => send<{ removed: boolean }>('DELETE', '/api/agents/passkeys', { credential_id: credentialID }),
   revokeDevice: (id: string) => send<DeviceKey>('POST', `/api/money/devices/${e(id)}/revoke`),
+  // B28.68 — a lost phone locked out at once, its last key included, and the lockdown lifted after an identity check (Lens B41.116).
+  lockdown: () => getJSON<Lockdown>('/api/money/lockdown', { active: 'boolean' }),
+  lockOut: (deviceIDs: string[], reason: string) => send<Lockdown>('POST', '/api/money/lockdown', { device_ids: deviceIDs, reason }),
+  liftLockdown: () => send<{ active: boolean }>('POST', '/api/money/lockdown/lift'),
   /** B54.34 — approving with always_allow signs that allowance too, so the challenge is asked for with it (Lens B54.29). */
   approvalChallenge: (approvalID: string, alwaysAllow?: PayeeAllowance) =>
     send<{ challenge: string; allow_credentials: string[] | null }>(
@@ -2539,6 +2543,13 @@ export interface DeviceKey {
   platform: string
   name: string
   revoked_at?: string
+}
+
+/** B28.68 — where a lost-phone lockdown stands (Lens B41.116). */
+export interface Lockdown {
+  active: boolean
+  started_at?: string
+  reason?: string
 }
 
 /** B55.3 — a key registered on one device, waiting for a key on the other to let it in (Lens B55.1). */

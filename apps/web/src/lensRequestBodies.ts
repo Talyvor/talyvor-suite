@@ -1637,6 +1637,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/devices/{id}/push-token", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensDevicePushTokenBody",
   },
+  // B28.68 — a lost phone locked out from the web (Lens B41.116).
+  {
+    route: "POST /v1/money/lockdown",
+    file: "apps/bff/money_lockdown.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyLockdown(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/lockdown_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/lockdown", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensLockdownBody",
+  },
   // B55.28 — where a workspace is paid, and a room's payout by its terms (Lens B46.11).
   {
     route: "PUT /v1/money/payout-details",
