@@ -108,13 +108,26 @@ func (p *roleProofs) lastHour(key string, now time.Time) []time.Time {
 	return kept
 }
 
-// roleEmail is an address as the person typed it, lower-cased, or "" when it is not one plain address.
+// roleEmailChars are the characters a role's address may hold. A code is mailed to it, so the address is rebuilt from
+// these alone, never passed on as typed, and nothing the person types reaches a mail's headers.
+const roleEmailChars = "abcdefghijklmnopqrstuvwxyz0123456789.@_+-"
+
+// roleEmail is an address as the person typed it, lower-cased, or "" when it is not one plain address of
+// roleEmailChars.
 func roleEmail(s string) string {
 	e := strings.ToLower(strings.TrimSpace(s))
 	if !plainAddress(e) {
 		return ""
 	}
-	return e
+	out := make([]byte, 0, len(e))
+	for i := 0; i < len(e); i++ {
+		k := strings.IndexByte(roleEmailChars, e[i])
+		if k < 0 {
+			return ""
+		}
+		out = append(out, roleEmailChars[k])
+	}
+	return string(out)
 }
 
 // handleWorkspaceRoles — the owner's roles: GET lists them, PUT gives one, DELETE takes one away.
