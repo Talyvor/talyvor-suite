@@ -112,6 +112,31 @@ describe('help and complaints, closing the account, your data (B59.28)', () => {
     expect(deletes).toEqual([{ confirm: 'ada@example.com' }, { confirm: 'ada@example.com' }])
   })
 
+  // B57.209 — the dialog as Pocket Live's close-account sheet: the lead line ends "can’t be undone", and Keep my account,
+  // drawn first, closes it having asked nothing.
+  it('keeps your account when Keep my account is pressed', async () => {
+    const deletes: unknown[] = []
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: { sub: 'sub-ada', email: 'ada@example.com' } })
+      if (url === '/auth/account/delete') deletes.push(url)
+      if (url === '/api/workspace/requests') return json({ requests: [] })
+      return new Response('null', { status: 404 })
+    })
+    open('/settings/close')
+    const card = await screen.findByRole('region', { name: 'Delete your account' })
+    fireEvent.click(within(card).getByRole('button', { name: 'Delete your account' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete your account?' })
+    expect(dialog.textContent).toContain('This can’t be undone.')
+    const [keep, yes] = within(dialog).getAllByRole('button', { name: /account/ })
+    expect([keep.textContent, yes.textContent]).toEqual(['Keep my account', 'Yes, delete my account'])
+    fireEvent.click(keep)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete your account?' })).toBeNull())
+    expect(deletes).toEqual([])
+  })
+
   it('asks for a copy of the data and downloads it once it is done', async () => {
     const posts = mockBff([req({ id: 5, kind: 'data_export', state: 'done' }), req({ id: 4, kind: 'data_deletion', state: 'in_progress' })])
     open('/settings/data')

@@ -321,8 +321,12 @@ export function CloseAccountScreen() {
   )
 }
 
-/** B52.38 — deletes every account the person holds, then signs them out everywhere. Asks once, with the email typed back. */
+/**
+ * B52.38 — deletes every account the person holds, then signs them out everywhere. Asks once, with the email typed back.
+ * B57.209 — the dialog as Pocket Live's close-account sheet: Keep my account first, both full width, one above the other.
+ */
 function DeleteYourAccount() {
+  const heading = useId()
   const qc = useQueryClient()
   const me = useAuthMeReader()
   const [asking, setAsking] = useState(false)
@@ -350,8 +354,10 @@ function DeleteYourAccount() {
   }
   const matches = typed.trim().toLowerCase() === confirm.toLowerCase()
   return (
-    <Card>
-      <h3 className="font-display text-reading font-bold text-ink">Delete your account</h3>
+    <Card role="region" aria-labelledby={heading}>
+      <h3 id={heading} className="font-display text-reading font-bold text-ink">
+        Delete your account
+      </h3>
       <p className="mt-1 text-body text-ink-2">
         Deletes every account you hold and signs you out everywhere: every browser, every phone and every connected assistant. It can’t be
         undone. Billing and ledger records, statements included, are kept as the law requires.
@@ -368,16 +374,16 @@ function DeleteYourAccount() {
           title="Delete your account?"
           actions={
             <>
-              <Button variant="secondary" disabled={gone.isPending} onClick={close}>
-                Cancel
+              <Button size="lg" className="w-full" disabled={gone.isPending} onClick={close}>
+                Keep my account
               </Button>
-              <Button variant="danger" disabled={!matches || gone.isPending} onClick={() => gone.mutate()}>
+              <Button size="lg" variant="danger" className="w-full" disabled={!matches || gone.isPending} onClick={() => gone.mutate()}>
                 {gone.isPending ? 'Deleting…' : 'Yes, delete my account'}
               </Button>
             </>
           }
         >
-          <p>Every account you hold is deleted, and every browser, phone and connected assistant is signed out.</p>
+          <p>Every account you hold is deleted, and every browser, phone and connected assistant is signed out. This can’t be undone.</p>
           <Field label={`Type ${confirm} to confirm`}>
             <Input value={typed} autoComplete="off" spellCheck={false} onChange={(e) => setTyped(e.target.value)} />
           </Field>
