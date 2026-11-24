@@ -144,3 +144,44 @@ describe('a lost phone, locked out and replaced by a recovery passkey (B28.68)',
     expect(state.approval.status).toBe('approved')
   })
 })
+
+// B57.210 — in Pocket: Lost your phone? is a row of Your phone's card, as w-security draws its buttons (an icon and the
+// words); its dialog is the remove-key dialog's, the danger action saying what it is doing while Lens answers; and the
+// lockdown card heads the page as Stop everything heads its own, its action carrying the Verification shield.
+describe('Lost your phone? and the lockdown card, in Pocket (B57.210)', () => {
+  it('draws Lost your phone? in Your phone, and says it is locking out while Lens answers', async () => {
+    fakeLens()
+    // Lens does not answer the lockout yet.
+    const answered = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation((input, init) =>
+      String(input) === '/api/money/lockdown' && init?.method === 'POST' ? new Promise<Response>(() => {}) : answered(input, init),
+    )
+    window.history.pushState({}, '', '/settings/devices')
+    render(<App />)
+
+    const phone = await screen.findByRole('region', { name: 'Your phone' })
+    const lost = await within(phone).findByRole('button', { name: 'Lost your phone?' })
+    expect(lost.querySelector('svg')).not.toBeNull()
+    fireEvent.click(lost)
+    const dialog = await screen.findByRole('dialog', { name: 'Lost your phone?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Lock out my phone' }))
+    const locking = await within(dialog).findByRole('button', { name: 'Locking out…' })
+    expect(locking).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  })
+
+  it('heads the page with the lockdown card while it stands, Lift the lockdown carrying the shield', async () => {
+    const { state } = fakeLens()
+    state.devices[0].revoked_at = '2026-11-24T10:00:00Z'
+    state.lockdown = { active: true, started_at: '2026-11-24T10:00:00Z' }
+    window.history.pushState({}, '', '/settings/devices')
+    render(<App />)
+
+    const card = await screen.findByRole('region', { name: 'Locked down' })
+    expect(within(card).getByRole('heading', { level: 2, name: 'Locked down after a lost phone' })).toBeTruthy()
+    const regions = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+    expect(regions.indexOf('Locked down')).toBeLessThan(regions.indexOf('Stop everything'))
+    const lift = within(card).getByRole('button', { name: 'Lift the lockdown' })
+    expect(lift.querySelector('svg')).not.toBeNull()
+  })
+})

@@ -1,0 +1,8 @@
+[
+  { "route": "/settings/devices", "screen": "w-security" },
+  { "route": "/settings/devices", "steps": ["Lost your phone?"] },
+  { "route": "/settings/devices?locked", "answers": { "/api/money/lockdown": { "active": true, "started_at": "2026-11-24T10:00:00Z", "reason": "lost phone" } } },
+  { "route": "/settings/devices", "screen": "w-security", "dark": true },
+  { "route": "/settings/devices", "steps": ["Lost your phone?"], "dark": true },
+  { "route": "/settings/devices?locked", "dark": true, "answers": { "/api/money/lockdown": { "active": true, "started_at": "2026-11-24T10:00:00Z", "reason": "lost phone" } } }
+]

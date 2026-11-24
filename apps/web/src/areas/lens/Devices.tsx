@@ -384,8 +384,9 @@ function LostPhone({ ids }: { ids: string[] }) {
   }
   return (
     <>
-      <div className="mt-3">
-        <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+      {/* B57.210 — a row of Your phone's card, as w-security draws Let it approve: an icon and the words. */}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" icon={<Icon name="phone" size={16} />} onClick={() => setOpen(true)}>
           Lost your phone?
         </Button>
       </div>
@@ -399,7 +400,7 @@ function LostPhone({ ids }: { ids: string[] }) {
               Cancel
             </Button>
             <Button variant="danger" disabled={lock.isPending} onClick={() => lock.mutate()}>
-              Lock out my phone
+              {lock.isPending ? 'Locking out…' : 'Lock out my phone'}
             </Button>
           </>
         }
@@ -446,7 +447,8 @@ function Lockdown() {
           </p>
         ) : null}
         <div className="mt-3">
-          <Button disabled={lift.isPending} onClick={() => lift.mutate()}>
+          {/* B57.210 — as Stop everything's Start every agent again, with Verification's shield: the identity check lifts it. */}
+          <Button icon={<Icon name="shield" size={16} />} disabled={lift.isPending} onClick={() => lift.mutate()}>
             Lift the lockdown
           </Button>
         </div>
