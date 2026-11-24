@@ -30,7 +30,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
 import { TaskSays, stoppedSentence } from './PaymentProof'
 import { ListFileDownload } from './ListFile'
-import { CryptoSendsWaiting } from './AgentCryptoSend'
+import { AwaitingCryptoSend, useCryptoSendsWaiting } from './AgentCryptoSend'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
@@ -69,10 +69,16 @@ export function usePendingApprovals(): number | null {
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests, ...poll })
   // B55.40 — and so does an agent's mandate request.
   const mandates = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates, ...poll })
+  // B57.202 — and an agent's send to a new address. Read once and on focus, not polled: one read per agent; Approvals and the
+  // agent's Send USDC panel refresh the same lists.
+  const { shows } = useAccount()
+  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book, enabled: Boolean(shows?.onChain) })
+  const sends = useCryptoSendsWaiting(book.data?.agents ?? [], Boolean(shows?.onChain))
   return list.data
     ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length +
         (prepared.data?.requests ?? []).length +
-        (mandates.data?.granted ?? []).filter((m) => m.status === 'requested').length
+        (mandates.data?.granted ?? []).filter((m) => m.status === 'requested').length +
+        sends.waiting.length
     : null
 }
 
@@ -218,8 +224,10 @@ function ApprovalsPage() {
   const waiting = all.filter((a) => a.status === 'pending')
   const requests = prepared.data?.requests ?? []
   const asked = (mandateRequests.data?.granted ?? []).filter((m) => m.status === 'requested')
-  // The sidebar's badge counts the same three lists (usePendingApprovals).
-  const count = waiting.length + requests.length + asked.length
+  // B57.202 — an agent's send to a new address, for a workspace with the on-chain side, is a row here too.
+  const sends = useCryptoSendsWaiting(agents, Boolean(shows?.onChain))
+  // The sidebar's badge counts the same four lists (usePendingApprovals).
+  const count = waiting.length + requests.length + asked.length + sends.waiting.length
   // B57.162 — the newest five of the agents' decided requests and the decided prepared payments together.
   const decided = [
     ...all.filter((a) => a.status !== 'pending').map((a) => ({ a, at: decidedAt(a) })),
@@ -366,6 +374,9 @@ function ApprovalsPage() {
                         onOutcome={(o) => showSnack({ title: o.text })}
                       />
                     ))}
+                    {sends.waiting.map(({ a, s }) => (
+                      <AwaitingCryptoSend key={s.id} agent={a} s={s} />
+                    ))}
                   </div>
                 ) : (
                   <p className="mt-2 text-body text-ink-3">
@@ -375,11 +386,10 @@ function ApprovalsPage() {
                 )}
                 {prepared.isError ? <p className="mt-2 text-body text-ink-2">The prepared payments could not be read just now.</p> : null}
                 {mandateRequests.isError ? <p className="mt-2 text-body text-ink-2">The mandate requests could not be read just now.</p> : null}
+                {sends.failed ? <p className="mt-2 text-body text-ink-2">Some agents’ sends could not be read just now.</p> : null}
               </>
             )}
           </Card>
-          {/* B48.36 — an agent's first send to a new address, for a workspace with the on-chain side. */}
-          {shows?.onChain ? <CryptoSendsWaiting agents={agents} /> : null}
           {list.isSuccess ? (
             <Card aria-label="Decided">
               <Title>Decided</Title>

@@ -94,7 +94,8 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
     expect(quote.textContent).toContain('Verified agent of Northwind Ltd')
     expect(quote.textContent).toContain('0.000042 ETH')
     expect(quote.textContent).toContain('Paid from your network fee budget')
-    expect(quote.textContent).toContain('In about 12 seconds')
+    expect(screen.getByTestId('crypto-send-arrives')).toHaveTextContent('Arrives in about 12 seconds')
+    expect(screen.getByTestId('crypto-send-amount')).toHaveTextContent('2.50 USDC')
     expect(screen.getByTestId('crypto-send-new-address')).toBeInTheDocument()
 
     fireEvent.click(within(quote).getByRole('button', { name: 'Send' }))
@@ -122,6 +123,7 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
     const box = row.closest('[data-crypto-send]') as HTMLElement
     expect(screen.getByTestId('crypto-send-history').textContent).toContain('From 0x2222…2222')
 
+    fireEvent.click(within(box).getByRole('button', { name: 'Review' }))
     fireEvent.click(within(box).getByRole('button', { name: 'Send a test amount first' }))
     fireEvent.change(within(box).getByLabelText('Test amount in USDC'), { target: { value: '0.1' } })
     fireEvent.click(within(box).getByRole('button', { name: 'Send the test amount' }))
