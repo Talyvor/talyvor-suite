@@ -175,6 +175,7 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/settings/email-branding': 'Email branding',
   '/settings/connect': 'Connect your AI',
   '/settings/company': 'Company details',
+  '/settings/team': 'Team and roles',
   '/cards': 'Cards',
   '/settings/help': 'Help and complaints',
   '/settings/close': 'Close this account',

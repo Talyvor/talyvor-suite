@@ -13,6 +13,8 @@ export interface PersonAccount {
   kind: MoneyKind | ''
   opened_at: string
   current: boolean
+  /** B28.70 — the role the person holds in an account that is someone else's; absent on their own. */
+  role?: string
 }
 
 export const ACCOUNTS_KEY = ['person-accounts'] as const

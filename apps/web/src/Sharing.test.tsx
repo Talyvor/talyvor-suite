@@ -124,6 +124,7 @@ describe('sharing consent', () => {
       '/settings/connect',
       '/members',
       '/billing',
+      '/settings/team',
       '/settings/verification',
       '/settings/payout-details',
       '/settings/terms',

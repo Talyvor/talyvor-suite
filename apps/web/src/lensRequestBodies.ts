@@ -276,6 +276,17 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/member-invites", keyOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMemberInviteBody",
   },
+  // B28.70 — Settings → Team and roles gives an email a role.
+  {
+    route: "PUT /v1/workspaces/{wsID}/roles",
+    file: "apps/bff/workspace_roles.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"email": strings.TrimSpace(in.Email), "role": in.Role})',
+    upstreamFile: "cmd/lens/workspace_roles_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/roles", keyOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWorkspaceRoleBody",
+  },
   // B19.4 — the Agent Bank: creating an agent (B57.124: with its helper's colour; B61.102: or its picture), issuing it a key, moving LXC, its rules, paying.
   {
     route: "POST /v1/workspaces/{wsID}/agents",

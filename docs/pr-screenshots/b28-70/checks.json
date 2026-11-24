@@ -1,0 +1,10 @@
+[
+  { "route": "/settings/team" },
+  {
+    "route": "/settings/team?personal",
+    "answers": {
+      "/api/workspace/account": { "account_type": "personal", "money_kind": "fiat" },
+      "/api/accounts": { "accounts": [{ "id": "ws_2", "name": "Maya Lind", "type": "personal", "kind": "fiat", "opened_at": "2026-11-15T00:00:00Z", "current": true }] }
+    }
+  }
+]

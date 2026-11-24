@@ -67,6 +67,10 @@ type provisionResult struct {
 	CachePoolable bool   `json:"cache_poolable"`
 	Token         string `json:"token"`
 	ExpiresAt     string `json:"expires_at"`
+	// Role is the role a role session holds (B28.70, workspace_roles.go); "" on the person's own account. roleEmail
+	// is the proved email it was given to, so the re-mint asks by the same one.
+	Role      string `json:"role,omitempty"`
+	roleEmail string
 }
 
 // provisionIdentity is the opaque, stable string the BFF presents to Lens.
@@ -302,8 +306,15 @@ func (a *app) refreshWorkspaceToken(ctx context.Context, sid string, s session) 
 		return s
 	}
 	// For the account the session is on (B61.8), never the identity's first: that would move a person who switched
-	// back to their first account when the token ran out.
-	prov, err := a.provisionAccount(ctx, a.identityOf(s.sub), s.workspaceID)
+	// back to their first account when the token ran out. A role session (B28.70) asks again by its proved email, so a
+	// role the owner took away is not re-minted.
+	var prov provisionResult
+	var err error
+	if s.role != "" {
+		prov, err = a.roleSessionBy(ctx, a.identityOf(s.sub), s.roleEmail, s.workspaceID)
+	} else {
+		prov, err = a.provisionAccount(ctx, a.identityOf(s.sub), s.workspaceID)
+	}
 	if err != nil {
 		log.Printf("bff: workspace token re-mint FAILED for sub=%s (request continues with the "+
 			"expired one, and will surface as a 401): %s", s.sub, redactSecret(err.Error()))
@@ -316,6 +327,7 @@ func (a *app) refreshWorkspaceToken(ctx context.Context, sid string, s session) 
 		cur.workspaceID = prov.WorkspaceID
 		cur.lensToken = prov.Token
 		cur.lensTokenExp = parseExpiry(prov.ExpiresAt)
+		cur.role = prov.Role
 		return cur
 	})
 	if !ok {
