@@ -112,6 +112,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	// the UI can tell the difference. Google sign-in is gone (B61.29).
 	a.mux.HandleFunc("/auth/logout", a.handleLogout)
 	a.mux.HandleFunc("/auth/logout-everywhere", a.handleLogoutEverywhere) // B52.9 — signout_everywhere.go
+	a.mux.HandleFunc("/auth/account/delete", a.handleAccountDelete)       // B52.38 — account_delete.go
 	a.mux.HandleFunc("/auth/me", a.handleMe)
 	// B61.25 — the door by phone number, the passcode and the passkey; the phone app's lock.
 	// See phone_signin.go.

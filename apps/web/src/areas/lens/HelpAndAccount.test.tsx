@@ -74,6 +74,44 @@ describe('help and complaints, closing the account, your data (B59.28)', () => {
     expect(posts).toEqual([{ kind: 'account_closure', message: '' }])
   })
 
+  // B52.38 — deleting the account asks for the email typed back, shows Lens's refusal in its words, and on success
+  // re-reads who is signed in, so the sign-in page takes over.
+  it('deletes your account once your email is typed back', async () => {
+    const deletes: unknown[] = []
+    let mes = 0
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+      if (url === '/auth/me') {
+        mes++
+        return json({ mode: 'disabled', authenticated: false, user: { sub: 'sub-ada', email: 'ada@example.com' } })
+      }
+      if (url === '/auth/account/delete') {
+        deletes.push(JSON.parse(String(init?.body)))
+        return deletes.length === 1
+          ? json({ error: 'your account still holds £12.50, so it can’t be deleted yet. Move the money out and finish or cancel what is open, then try again.' }, 409)
+          : new Response(null, { status: 204 })
+      }
+      if (url === '/api/workspace/requests') return json({ requests: [] })
+      return new Response('null', { status: 404 })
+    })
+    open('/settings/close')
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete your account' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete your account?' })
+    const yes = within(dialog).getByRole('button', { name: 'Yes, delete my account' }) as HTMLButtonElement
+    fireEvent.change(within(dialog).getByLabelText('Type ada@example.com to confirm'), { target: { value: 'ada@example' } })
+    expect(yes.disabled).toBe(true)
+    fireEvent.change(within(dialog).getByLabelText('Type ada@example.com to confirm'), { target: { value: 'ada@example.com' } })
+    fireEvent.click(yes)
+
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('still holds £12.50')
+    const before = mes
+    fireEvent.click(yes)
+    await waitFor(() => expect(mes).toBeGreaterThan(before))
+    expect(deletes).toEqual([{ confirm: 'ada@example.com' }, { confirm: 'ada@example.com' }])
+  })
+
   it('asks for a copy of the data and downloads it once it is done', async () => {
     const posts = mockBff([req({ id: 5, kind: 'data_export', state: 'done' }), req({ id: 4, kind: 'data_deletion', state: 'in_progress' })])
     open('/settings/data')

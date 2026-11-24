@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useId, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, Input, KindTile, Money, Row, Select, pocketFocusRing, showSnack, showToast } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Crumb, Dialog, EmptyState, Field, Icon, Input, KindTile, Money, Row, Select, pocketFocusRing, showSnack, showToast } from '@talyvor/ui/pocket'
 import { cn } from '@talyvor/ui'
+import { ApiError } from '../../lib/api'
+import { useAuthMeReader } from '../../lib/authMe'
 import { isSessionExpired } from '../../lib/productState'
 import { readFailure } from './WalletMoney'
 import {
@@ -293,26 +295,104 @@ export function CloseAccountScreen() {
         <div className="wide:col-span-7">
           <SentList kinds={['account_closure']} title="What you asked" empty="You have not asked to close this account." />
         </div>
-        <Card className="wide:col-span-5">
-          <h3 className="font-display text-reading font-bold text-ink">Ask to close</h3>
-          <form
-            className="mt-2 grid gap-3"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (!close.isPending) close.mutate(message, { onSuccess: () => setMessage('') })
-            }}
-          >
-            <MessageBox label="Anything we should know (optional)" value={message} onChange={setMessage} />
-            {close.isError ? <Refused error={close.error} /> : null}
-            <div>
-              <Button type="submit" variant="danger" disabled={close.isPending}>
-                {close.isPending ? 'Sending…' : 'Ask to close this account'}
-              </Button>
-            </div>
-          </form>
-        </Card>
+        <div className="grid gap-4 wide:col-span-5">
+          <Card>
+            <h3 className="font-display text-reading font-bold text-ink">Ask to close</h3>
+            <form
+              className="mt-2 grid gap-3"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!close.isPending) close.mutate(message, { onSuccess: () => setMessage('') })
+              }}
+            >
+              <MessageBox label="Anything we should know (optional)" value={message} onChange={setMessage} />
+              {close.isError ? <Refused error={close.error} /> : null}
+              <div>
+                <Button type="submit" variant="danger" disabled={close.isPending}>
+                  {close.isPending ? 'Sending…' : 'Ask to close this account'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+          <DeleteYourAccount />
+        </div>
       </div>
     </div>
+  )
+}
+
+/** B52.38 — deletes every account the person holds, then signs them out everywhere. Asks once, with the email typed back. */
+function DeleteYourAccount() {
+  const qc = useQueryClient()
+  const me = useAuthMeReader()
+  const [asking, setAsking] = useState(false)
+  const [typed, setTyped] = useState('')
+  // The BFF asks for the email back, or DELETE from a person signed in without one (account_delete.go).
+  const confirm = me.data?.user?.email || 'DELETE'
+  const gone = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/auth/account/delete', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: typed }),
+      })
+      if (res.ok) return
+      const said = (await res.json().catch(() => ({}))) as { error?: unknown }
+      throw typeof said.error === 'string' && res.status !== 401 ? new Error(said.error) : new ApiError(res.status, '/auth/account/delete')
+    },
+    // This browser is signed out with the rest; re-probe so the sign-in page takes over.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['auth-me'] }),
+  })
+  const close = () => {
+    setAsking(false)
+    setTyped('')
+    gone.reset()
+  }
+  const matches = typed.trim().toLowerCase() === confirm.toLowerCase()
+  return (
+    <Card>
+      <h3 className="font-display text-reading font-bold text-ink">Delete your account</h3>
+      <p className="mt-1 text-body text-ink-2">
+        Deletes every account you hold and signs you out everywhere: every browser, every phone and every connected assistant. It can’t be
+        undone. Billing and ledger records, statements included, are kept as the law requires.
+      </p>
+      <div className="mt-3">
+        <Button variant="danger" onClick={() => setAsking(true)}>
+          Delete your account
+        </Button>
+      </div>
+      {asking ? (
+        <Dialog
+          open
+          onClose={close}
+          title="Delete your account?"
+          actions={
+            <>
+              <Button variant="secondary" disabled={gone.isPending} onClick={close}>
+                Cancel
+              </Button>
+              <Button variant="danger" disabled={!matches || gone.isPending} onClick={() => gone.mutate()}>
+                {gone.isPending ? 'Deleting…' : 'Yes, delete my account'}
+              </Button>
+            </>
+          }
+        >
+          <p>Every account you hold is deleted, and every browser, phone and connected assistant is signed out.</p>
+          <Field label={`Type ${confirm} to confirm`}>
+            <Input value={typed} autoComplete="off" spellCheck={false} onChange={(e) => setTyped(e.target.value)} />
+          </Field>
+          {gone.isError ? (
+            <p role="alert" className="text-body text-danger">
+              {gone.error instanceof ApiError
+                ? isSessionExpired(gone.error)
+                  ? 'Nothing was deleted. Sign in again.'
+                  : 'Nothing was deleted. You can try again.'
+                : gone.error.message}
+            </p>
+          ) : null}
+        </Dialog>
+      ) : null}
+    </Card>
   )
 }
 

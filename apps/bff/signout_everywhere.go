@@ -32,21 +32,30 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "signing out everywhere is not available on this server yet"})
 		return
 	}
+	if err := a.endEverywhere(r.Context(), s); err != nil {
+		log.Printf("bff: sign out everywhere: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "you could not be signed out everywhere; try again"})
+		return
+	}
+	clearCookie(w, sessionCookieName)
+	log.Printf("bff: signed out everywhere (sub=%s)", s.sub)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// endEverywhere ends every sign-in of s's person, in the table first and then in memory, and tells Lens. Deleting the
+// account ends them the same way (B52.38, account_delete.go). a.oauth.db must be set.
+func (a *app) endEverywhere(ctx context.Context, s session) error {
 	at := time.Now()
-	if err := a.oauth.db.endPerson(r.Context(), s.sub, s.workspaceID, at, func() {
+	if err := a.oauth.db.endPerson(ctx, s.sub, s.workspaceID, at, func() {
 		// Every token resolves through its grant (oauthGrantFrom), so the grants going ends them all.
 		a.oauth.grants.deleteWhere(func(g oauthGrant) bool { return g.Who.sub == s.sub })
 		a.oauth.codes.deleteWhere(func(c oauthCode) bool { return c.who.sub == s.sub })
 		a.auth.endPerson(s.sub, at)
 	}); err != nil {
-		log.Printf("bff: sign out everywhere: %v", err)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "you could not be signed out everywhere; try again"})
-		return
+		return err
 	}
 	a.connectionsEnded() // endPerson owed Lens the ending of every assistant of theirs (B54.21)
-	clearCookie(w, sessionCookieName)
-	log.Printf("bff: signed out everywhere (sub=%s)", s.sub)
-	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 // endPerson ends every session of sub, and no seal of theirs issued until at is restored.
