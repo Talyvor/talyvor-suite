@@ -455,9 +455,18 @@ func (a *app) handleMCP(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	g, ok := a.oauthGrantFrom(w, r)
-	if !ok || !a.allow(w, limitMCPGrant, g.ID) {
-		return
+	// B48.41: an agent's own Lens key reaches Lens's wallet tools (mcp_agent_wallet.go); every other bearer is a connection's.
+	key, agentKey := lensAgentKey(r)
+	var g oauthGrant
+	if agentKey {
+		if !a.allow(w, limitMCPGrant, "agent:"+tokenKey(key)) {
+			return
+		}
+	} else {
+		var ok bool
+		if g, ok = a.oauthGrantFrom(w, r); !ok || !a.allow(w, limitMCPGrant, g.ID) {
+			return
+		}
 	}
 	status := http.StatusOK
 	var req mcpMessage
@@ -479,6 +488,18 @@ func (a *app) handleMCP(w http.ResponseWriter, r *http.Request) {
 		// A notification (notifications/initialized, …): nothing to send back.
 		w.WriteHeader(http.StatusAccepted)
 		return
+	case agentKey:
+		var err error
+		if resp, err = a.agentWalletDispatch(r.Context(), key, cmp.Or(modern, header), req); errors.Is(err, errLensRefusedAgentKey) {
+			a.oauthGrantFrom(w, r) // answers 401 invalid_token: the key is no connection's either
+			return
+		} else if err != nil {
+			log.Printf("bff: mcp %s for an agent's key: %v", req.Method, err)
+			resp = mcpErr(req.ID, -32603, "Talyvor could not answer just now. Try again shortly.")
+		}
+		if modern != "" {
+			status = mcpStateless(&resp, req.Method)
+		}
 	default:
 		resp = a.mcpDispatch(r.Context(), g, cmp.Or(modern, header), req)
 		if modern != "" {
