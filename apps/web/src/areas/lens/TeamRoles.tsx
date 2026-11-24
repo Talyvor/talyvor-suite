@@ -183,7 +183,7 @@ function YourTeam() {
   const given = useQuery({ queryKey: GIVEN_ROLES_KEY, queryFn: rolesApi.given, retry: false })
   const [removing, setRemoving] = useState<GivenRole | null>(null)
   return (
-    <section aria-labelledby="your-team" className="grid min-w-0 content-start gap-4 wide:col-span-7">
+    <section aria-labelledby="your-team" className="min-w-0 wide:col-span-7">
       <Card tone="white" className="grid gap-3.5">
         <CardHeading id="your-team">Your team</CardHeading>
         {given.isPending ? (
@@ -251,7 +251,7 @@ function SecondApprover({ team }: { team: GivenRole[] }) {
   const named = (id: string) => team.find((r) => r.user_id === id)?.email ?? 'someone no longer in your team'
   const now = line.data && line.data.user_id && line.data.above_minor > 0 ? line.data : null
   return (
-    <Card tone="white" className="grid gap-3.5">
+    <Card tone="white" className="mt-4 grid gap-3.5">
       <CardHeading id="second-approver" line="Above an amount you choose, a payment needs two people to approve it, and one of them is your second approver.">
         Second approver
       </CardHeading>
