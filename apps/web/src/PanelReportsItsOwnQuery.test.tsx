@@ -116,6 +116,7 @@ function bodyFor(url: string): unknown {
   if (url.includes('/api/money/payment-requests')) return { requests: [] }
   if (url.includes('/api/people/finding')) return { name: '', email: '', phone: '+447700900456', by_name: false, by_phone: false, by_email: false } // B61.93
   if (url.includes('/api/money/mandates')) return { granted: [], received: [] } // B55.40: the badge counts an agent's mandate request
+  if (url === '/api/agents/agt_1/crypto-sends') return { sends: [] } // B57.202: and an agent's send to a new address
   if (url.includes('/api/agents/briefing')) return { items: [], spent_yesterday: [], quiet: true, line: 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.' }
   // B57.18 — Home's balances, the Researcher's wallet and the plan.
   if (url.includes('/api/money/accounts')) return { accounts: [] }
@@ -171,26 +172,26 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/agt_1/wallet', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/lxc/topup-options', '/api/money/accounts', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/verification', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/agt_1/rules', '/api/agents/agt_1/wallet', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/lxc/topup-options', '/api/money/accounts', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/verification', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/overview': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/ledger': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B61.59 — Settings, Plan reads the plan and the ladders, and no longer the top-up, the balance or the allowance.
-  '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/keys': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/member-invites', '/api/workspace/members', '/api/workspace/name'],
+  '/billing': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/keys': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/setup': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/spend': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/members': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/member-invites', '/api/workspace/members', '/api/workspace/name'],
   // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
   // B57.171 — Settings' Plan row says what the page holds, so /settings no longer reads the plan itself.
-  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/people/finding', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/settings': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/people/finding', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
   // so every address asks for /api/docs/pins again — one read, for the sidebar. B27.15 asks Docs
   // whether the person is a member first (/api/docs/membership), and reads pins only if so.
   // B4.2 added /api/track/projects — the issue list's Project filter.
-  '/track': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/docs': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/track': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/docs': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
 }
 
 const FAILURE_WORDING = /Couldn[’']t (load|check)/i
@@ -289,7 +290,8 @@ describe('the swept set', () => {
     // allowance; /settings' Plan row reads the plan's name instead of the subscription.
     // 131 → 130 at B57.171: /settings' Plan row is Pocket Live's line, and the plan's name is on Settings, Plan.
     // 130 → 131 at B61.93: /settings' Privacy reads how the person is found.
-    expect(pairs).toBe(133) // 131 → 133 at B52.36: /members reads its invite links and who joined by one.
+    // 133 → 144 at B57.202: and each agent's sends to a new address, which its Approvals badge counts, on every address.
+    expect(pairs).toBe(144) // 131 → 133 at B52.36: /members reads its invite links and who joined by one.
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
