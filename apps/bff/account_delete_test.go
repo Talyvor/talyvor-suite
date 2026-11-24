@@ -150,3 +150,78 @@ func TestDeleteAccountEndsEveryAssistant(t *testing.T) {
 		t.Fatalf("grants left: Ada %d (want 0), Bob %d (want 1), %v", ada_, bob_, err)
 	}
 }
+
+// TestDeleteAccountForgetsTheProvedAddresses is B61.123's DONE on a real Postgres: a person with two addresses proved
+// for roles and a role session in someone else's account deletes their account, and none of their proved addresses is
+// kept, also after a restart, and the role session is gone; another person's proved address is untouched.
+func TestDeleteAccountForgetsTheProvedAddresses(t *testing.T) {
+	dsn := os.Getenv("BFF_TEST_DATABASE_URL")
+	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("BFF_TEST_DATABASE_URL is unset in CI: this test would prove nothing by skipping")
+		}
+		t.Skip("BFF_TEST_DATABASE_URL unset")
+	}
+	ctx := context.Background()
+	lens := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/account/delete" || r.Header.Get(provisionSecretHeader) != testProvisionSecret {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"deleted":true,"workspace_id":"ws-ada","workspace_ids":["ws-ada"]}`))
+	}))
+	t.Cleanup(lens.Close)
+	boot := func() *app {
+		a, _ := oauthApp(t)
+		a.cfg.lensBaseURL = lens.URL
+		db, err := openOAuthDB(ctx, dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(db.close)
+		if err := a.useOAuthDB(ctx, db); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	first, err := openOAuthDB(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.pool.Exec(ctx, `TRUNCATE person_proved_emails, signed_out_everywhere`); err != nil {
+		t.Fatal(err)
+	}
+	first.close()
+	a := boot()
+	for _, p := range [][2]string{{"sub-ada", "ada@northwind.example"}, {"sub-ada", "ada@fabrikam.example"}, {"sub-bob", "bob@northwind.example"}} {
+		if err := a.proveEmail(ctx, p[0], p[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Ada's role session in Northwind, opened by one of the addresses she proved, as the accounts switcher opens it.
+	seedProvisionedSession(a.auth, "sid-ada-northwind", "sub-ada", "ada@example.com", "ws-northwind")
+	roleSid := &http.Cookie{Name: sessionCookieName, Value: "sid-ada-northwind"}
+	if rec := serve(a, "GET", "/api/connect/assistants", "", "", nil, roleSid); rec.Code != http.StatusOK {
+		t.Fatalf("the role session did not work before the deletion: %d", rec.Code)
+	}
+
+	ada := &http.Cookie{Name: sessionCookieName, Value: "sid-ada"}
+	if rec := serve(a, "POST", "/auth/account/delete", oauthOrigin, `{"confirm":"ada@example.com"}`, nil, ada); rec.Code != http.StatusNoContent {
+		t.Fatalf("deleting the account: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := serve(a, "GET", "/api/connect/assistants", "", "", nil, roleSid); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Ada's role session in Northwind outlived her account: %d", rec.Code)
+	}
+	for i := 0; i < 2; i++ { // in this process, then after a restart
+		var adas, bobs int
+		if err := a.oauth.db.pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE sub = 'sub-ada'), count(*) FILTER (WHERE sub = 'sub-bob')
+			FROM person_proved_emails`).Scan(&adas, &bobs); err != nil || adas != 0 || bobs != 1 {
+			t.Fatalf("run %d: proved addresses left: Ada %d (want 0), Bob %d (want 1), %v", i, adas, bobs, err)
+		}
+		if got, err := a.provedEmails(ctx, "sub-ada"); err != nil || len(got) != 0 {
+			t.Fatalf("run %d: Ada's proved addresses still read %v, %v", i, got, err)
+		}
+		a = boot()
+	}
+}
