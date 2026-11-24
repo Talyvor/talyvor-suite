@@ -9,6 +9,7 @@ import { readFailure } from './WalletMoney'
 import { amountMinor } from './Wallets'
 import { minorText } from './OperatorCompliance'
 import { setSecondApproverSigned } from './passkeys'
+import { useKeys } from './AgentBank'
 import {
   APPROVING_ROLES,
   GIVEN_ROLES_KEY,
@@ -227,107 +228,197 @@ function lineRefusal(err: unknown): string {
   return refusal(err, 'The second approver wasn’t saved. Try again.')
 }
 
-/** B28.40 — the owner's second approver: who, and above which amount a payment needs two approvals. */
-function SecondApprover({ team }: { team: GivenRole[] }) {
+/** No second approver: Lens clears the line it is sent empty. */
+const NO_LINE: SecondApproverLine = { user_id: '', above_minor: 0, currency: '' }
+
+/** The words a saved or removed second approver is told in. */
+function savedSnack(l: SecondApproverLine) {
+  showSnack(l.user_id ? { title: 'Second approver saved', line: `Above ${minorText(l.above_minor, l.currency)}, a payment needs two approvals.` } : { title: 'Second approver removed', line: 'One approval is enough again.' })
+}
+
+/** B57.212 — choosing the second approver and the line, in a dialog as Give a role is: Who, Above and Currency, then Save. */
+function SecondApproverDialog({ people, now, currencies, signs, onClose }: { people: GivenRole[]; now: SecondApproverLine | null; currencies: string[]; signs: boolean; onClose: () => void }) {
   const qc = useQueryClient()
-  const { shows } = useAccount()
-  const currencies = [...(shows?.bankTransfers !== false ? ['GBP', 'EUR', 'USD'] : []), ...(shows?.onChain ? ['USDC'] : [])]
-  const line = useQuery({ queryKey: SECOND_APPROVER_KEY, queryFn: rolesApi.secondApprover, retry: false })
-  const people = team.filter((r) => APPROVING_ROLES.includes(r.role) && !!r.user_id)
-  const [who, setWho] = useState('')
+  const [who, setWho] = useState(now && people.some((r) => r.user_id === now.user_id) ? now.user_id : (people[0]?.user_id ?? ''))
   const [amount, setAmount] = useState('')
-  const [currency, setCurrency] = useState('')
+  const [currency, setCurrency] = useState(now?.currency || currencies[0] || 'GBP')
   const [wrong, setWrong] = useState<string | null>(null)
   const save = useMutation({
     mutationFn: (l: SecondApproverLine) => setSecondApproverSigned(l),
     onSuccess: async (_, l) => {
-      setAmount('')
-      showSnack(l.user_id ? { title: 'Second approver saved', line: `Above ${minorText(l.above_minor, l.currency)}, a payment needs two approvals.` } : { title: 'Second approver removed', line: 'One approval is enough again.' })
+      savedSnack(l)
+      onClose()
       await qc.invalidateQueries({ queryKey: SECOND_APPROVER_KEY })
     },
   })
-  const pickedWho = who || people[0]?.user_id || ''
-  const pickedCurrency = currency || line.data?.currency || currencies[0] || 'GBP'
-  const named = (id: string) => team.find((r) => r.user_id === id)?.email ?? 'someone no longer in your team'
-  const now = line.data && line.data.user_id && line.data.above_minor > 0 ? line.data : null
   return (
-    <Card tone="white" className="mt-4 grid gap-3.5">
-      <CardHeading id="second-approver" line="Above an amount you choose, a payment needs two people to approve it, and one of them is your second approver.">
-        Second approver
-      </CardHeading>
-      {line.isPending ? (
-        <p className="text-body text-ink-2">Reading…</p>
-      ) : line.isError ? (
-        <p className="text-body text-ink-2">{readFailure(line.error, 'Your second approver')}</p>
-      ) : now ? (
-        <div data-testid="second-approver-now">
-          <Row
-            leading={<Initial of={named(now.user_id)} />}
-            title={<span className="break-all">{named(now.user_id)}</span>}
-            wrap
-            line={`Above ${minorText(now.above_minor, now.currency)}`}
-            action={
-              <Button size="sm" variant="secondary" disabled={save.isPending} onClick={() => save.mutate({ user_id: '', above_minor: 0, currency: '' })}>
-                Remove
-              </Button>
-            }
-          />
-        </div>
-      ) : (
-        <p className="text-body text-ink-2">No second approver: one approval is enough.</p>
-      )}
-      {people.length > 0 ? (
-        <form
-          className="grid gap-3"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const minor = amountMinor(amount, pickedCurrency)
-            setWrong(minor === null ? 'Enter an amount above 0.' : null)
-            if (minor !== null && !save.isPending) save.mutate({ user_id: pickedWho, above_minor: minor, currency: pickedCurrency })
-          }}
-        >
-          <Field label="Who">
-            <Select value={pickedWho} onChange={(e) => setWho(e.target.value)}>
-              {people.map((r) => (
-                <option key={r.user_id} value={r.user_id}>
-                  {`${r.email} · ${roleName(r.role)}`}
+    <Dialog
+      open
+      onClose={onClose}
+      title="Second approver"
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="second-approver-line" disabled={save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <p>Above this amount, a payment needs two people to approve it, and one of them is the person you pick here.</p>
+      <form
+        id="second-approver-line"
+        className="grid gap-3.5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const minor = amountMinor(amount, currency)
+          setWrong(minor === null ? 'Enter an amount above 0.' : null)
+          if (minor !== null && !save.isPending) save.mutate({ user_id: who, above_minor: minor, currency })
+        }}
+      >
+        <Field label="Who">
+          <Select value={who} onChange={(e) => setWho(e.target.value)} disabled={save.isPending}>
+            {people.map((r) => (
+              <option key={r.user_id} value={r.user_id}>
+                {`${r.email} · ${roleName(r.role)}`}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Above">
+            <Input inputMode="decimal" autoComplete="off" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={save.isPending} />
+          </Field>
+          <Field label="Currency">
+            <Select value={currency} onChange={(e) => setCurrency(e.target.value)} disabled={save.isPending}>
+              {currencies.map((c) => (
+                <option key={c} value={c}>
+                  {c}
                 </option>
               ))}
             </Select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Above">
-              <Input inputMode="decimal" autoComplete="off" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </Field>
-            <Field label="Currency">
-              <Select value={pickedCurrency} onChange={(e) => setCurrency(e.target.value)}>
-                {currencies.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          {wrong ? (
-            <p role="alert" className="text-body text-danger">
-              {wrong}
-            </p>
-          ) : null}
-          <div>
-            <Button type="submit" disabled={save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <p className="text-body text-ink-2">Give someone the Approver or Admin role. Once they have signed in, you can pick them here.</p>
-      )}
+        </div>
+        {signs ? <p className="text-caption text-ink-3">Saving asks for your passkey.</p> : null}
+      </form>
+      {wrong ? (
+        <p role="alert" className="text-danger">
+          {wrong}
+        </p>
+      ) : null}
       {save.isError ? (
-        <p role="alert" className="text-body text-danger">
+        <p role="alert" className="text-danger">
           {lineRefusal(save.error)}
         </p>
       ) : null}
+    </Dialog>
+  )
+}
+
+/** B57.212 — Remove asks first, as a role's Remove does, and is signed as saving is. */
+function RemoveSecondApproverDialog({ email, signs, onClose }: { email: string; signs: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const remove = useMutation({
+    mutationFn: () => setSecondApproverSigned(NO_LINE),
+    onSuccess: async () => {
+      savedSnack(NO_LINE)
+      onClose()
+      await qc.invalidateQueries({ queryKey: SECOND_APPROVER_KEY })
+    },
+  })
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={<span className="break-all">{`Remove “${email}” as second approver?`}</span>}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Keep it
+          </Button>
+          <Button variant="danger" disabled={remove.isPending} onClick={() => remove.mutate()}>
+            {remove.isPending ? 'Removing…' : 'Remove it'}
+          </Button>
+        </>
+      }
+    >
+      <p>One approval is enough again, whatever the amount.</p>
+      {signs ? <p className="text-caption text-ink-3">Removing asks for your passkey.</p> : null}
+      {remove.isError ? (
+        <p role="alert" className="text-danger">
+          {lineRefusal(remove.error)}
+        </p>
+      ) : null}
+    </Dialog>
+  )
+}
+
+/**
+ * B28.40 — the owner's second approver: who, and above which amount a payment needs two approvals.
+ * B57.212 — drawn in Pocket: the line set is a w-members row (initial, who, the amount, their role as a chip) with Remove,
+ * which asks first; Choose or Change opens the line in a dialog, as Give a role does.
+ */
+function SecondApprover({ team }: { team: GivenRole[] }) {
+  const { shows } = useAccount()
+  const { thisBrowserSigns } = useKeys()
+  const currencies = [...(shows?.bankTransfers !== false ? ['GBP', 'EUR', 'USD'] : []), ...(shows?.onChain ? ['USDC'] : [])]
+  const line = useQuery({ queryKey: SECOND_APPROVER_KEY, queryFn: rolesApi.secondApprover, retry: false })
+  const people = team.filter((r) => APPROVING_ROLES.includes(r.role) && !!r.user_id)
+  const [editing, setEditing] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const person = (id: string) => team.find((r) => r.user_id === id)
+  const named = (id: string) => person(id)?.email ?? 'someone no longer in your team'
+  const now = line.data && line.data.user_id && line.data.above_minor > 0 ? line.data : null
+  const role = now ? person(now.user_id)?.role : undefined
+  return (
+    <Card tone="white" className="mt-4 grid gap-3.5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <CardHeading id="second-approver" line="Above an amount you choose, a payment needs two people to approve it, and one of them is your second approver.">
+          Second approver
+        </CardHeading>
+        {line.isSuccess && people.length > 0 ? (
+          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+            {now ? 'Change' : 'Choose'}
+          </Button>
+        ) : null}
+      </div>
+      {line.isPending ? (
+        <p className="text-body text-ink-2">Reading…</p>
+      ) : line.isError ? (
+        <p className="text-body text-ink-2">{readFailure(line.error, 'Your second approver')}</p>
+      ) : (
+        <>
+          {now ? (
+            <ul aria-label="Second approver" data-testid="second-approver-now">
+              <li>
+                <Row
+                  leading={<Initial of={named(now.user_id)} />}
+                  title={<span className="break-all">{named(now.user_id)}</span>}
+                  wrap
+                  line={`Above ${minorText(now.above_minor, now.currency)}`}
+                  action={
+                    <span className="flex items-center gap-2">
+                      {role ? <Chip>{roleName(role)}</Chip> : null}
+                      <Button size="sm" variant="secondary" onClick={() => setRemoving(true)}>
+                        Remove
+                      </Button>
+                    </span>
+                  }
+                />
+              </li>
+            </ul>
+          ) : (
+            <p className="text-body text-ink-2">No second approver: one approval is enough.</p>
+          )}
+          {people.length === 0 ? (
+            <p className="text-body text-ink-2">Give someone the Approver or Admin role. Once they have signed in, you can pick them here.</p>
+          ) : null}
+        </>
+      )}
+      {editing ? <SecondApproverDialog people={people} now={now} currencies={currencies} signs={thisBrowserSigns} onClose={() => setEditing(false)} /> : null}
+      {removing && now ? <RemoveSecondApproverDialog email={named(now.user_id)} signs={thisBrowserSigns} onClose={() => setRemoving(false)} /> : null}
     </Card>
   )
 }

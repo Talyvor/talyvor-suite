@@ -122,7 +122,7 @@ describe('Settings → Team and roles', () => {
 
   // B28.40 — the second approver is an Approver or Admin who has signed in, picked with the amount above which a payment
   // needs two approvals; the line Lens is asked to sign and then set is exactly the one picked, in minor units.
-  it('lets a Business owner name a second approver above an amount', async () => {
+  it('lets a Business owner name a second approver above an amount in a dialog, and remove them once asked', async () => {
     let line = { user_id: '', above_minor: 0, currency: '' }
     const sent: { method: string; url: string; body: unknown }[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -151,18 +151,39 @@ describe('Settings → Team and roles', () => {
     })
     renderScreen()
     expect(await screen.findByText('No second approver: one approval is enough.')).toBeTruthy()
-    const who = screen.getByLabelText('Who') as HTMLSelectElement
+    // B57.212 — the line is chosen in a dialog, as a role is given.
+    expect(screen.queryByLabelText('Who')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Choose' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Second approver' })
+    const who = within(dialog).getByLabelText('Who') as HTMLSelectElement
     expect([...who.options].map((o) => o.textContent)).toEqual(['ada@northwind.example · Approver'])
 
-    fireEvent.change(screen.getByLabelText('Above'), { target: { value: '5000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.change(within(dialog).getByLabelText('Above'), { target: { value: '5000' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const now = await screen.findByTestId('second-approver-now')
     expect(within(now).getByText('ada@northwind.example')).toBeTruthy()
     expect(within(now).getByText('Above £5,000.00')).toBeTruthy()
+    expect(within(now).getByText('Approver')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     const picked = { user_id: 'pada', above_minor: 500000, currency: 'GBP' }
-    expect(sent.filter((s) => s.url.startsWith('/api/workspace/second-approver') && s.method !== 'GET').map((s) => [s.method, s.url, s.body])).toEqual([
+    const changes = () => sent.filter((s) => s.url.startsWith('/api/workspace/second-approver') && s.method !== 'GET').map((s) => [s.method, s.url, s.body])
+    expect(changes()).toEqual([
       ['POST', '/api/workspace/second-approver/challenge', picked],
       ['PUT', '/api/workspace/second-approver', picked],
+    ])
+
+    // B57.212 — Remove asks first, and Keep it sends nothing.
+    fireEvent.click(within(now).getByRole('button', { name: 'Remove' }))
+    const ask = await screen.findByRole('dialog', { name: 'Remove “ada@northwind.example” as second approver?' })
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }))
+    expect(changes()).toHaveLength(2)
+    fireEvent.click(within(screen.getByTestId('second-approver-now')).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove it' }))
+    expect(await screen.findByText('No second approver: one approval is enough.')).toBeTruthy()
+    const none = { user_id: '', above_minor: 0, currency: '' }
+    expect(changes().slice(2)).toEqual([
+      ['POST', '/api/workspace/second-approver/challenge', none],
+      ['PUT', '/api/workspace/second-approver', none],
     ])
   })
 })
