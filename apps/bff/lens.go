@@ -502,6 +502,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/workspace/member-invites/{id}", a.requireTenant(a.handleMemberInvite))
 	a.mux.HandleFunc("/api/workspace/members", a.requireTenant(a.handleWorkspaceMembers))
 	a.mux.HandleFunc("/api/workspace/members/{id}", a.requireTenant(a.handleWorkspaceMember))
+	a.mux.HandleFunc("/api/invites/preview", a.requireSession(a.handleInvitePreview))
 	a.mux.HandleFunc("/api/invites/accept", a.requireSession(a.handleInviteAccept))
 	// B28.70 — the owner's roles, and proving an email a role was given to (workspace_roles.go).
 	a.mux.HandleFunc("/api/workspace/roles", a.requireTenant(a.handleWorkspaceRoles))

@@ -1785,7 +1785,7 @@ export const NON_LENS_ANON_SITES = [
   },
   {
     file: "workspace_members.go",
-    what: "provisionSecretPost (B52.36) marshals whichever body its caller built and posts it to Lens's member routes on the provision secret: {identity, token} to /v1/provision/invites/accept and {identity} to /v1/provision/workspaces. Those ARE key sets talyvor-lens binds — the inline structs in cmd/lens/workspace_members_handler.go mountMemberProvisionRoutes — and this site is exempt from the table because it is one relay for two bodies, not because there is nothing to ask. A renamed identity is Lens's 400 \"identity required\" and a renamed token is a 404, never a silent default; workspace_members_test.go reads both keys as Lens received them.",
+    what: "provisionSecretPost (B52.36) marshals whichever body its caller built and posts it to Lens's member routes on the provision secret: {identity, token} to /v1/provision/invites/accept and /v1/provision/invites/preview (B52.46), and {identity} to /v1/provision/workspaces. Those ARE key sets talyvor-lens binds — the inline structs in cmd/lens/workspace_members_handler.go mountMemberProvisionRoutes — and this site is exempt from the table because it is one relay for three bodies, not because there is nothing to ask. A renamed identity is Lens's 400 \"identity required\" and a renamed token is a 404, never a silent default; workspace_members_test.go reads both keys as Lens received them.",
   },
   {
     file: "session_seal.go",

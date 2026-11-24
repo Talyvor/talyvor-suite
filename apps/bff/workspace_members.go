@@ -9,9 +9,10 @@ package main
 //	DELETE /api/workspace/member-invites/{id}   revoke one link
 //	GET    /api/workspace/members               {"members": [{id, role, added_at}]} — who joined by invite
 //	DELETE /api/workspace/members/{id}          remove one of them
+//	POST   /api/invites/preview                 {"token"} → {"workspace_id", "name"} — what the link is to; adds nobody
 //	POST   /api/invites/accept                  {"token"} → {"workspace_id", "name", "created"}
 //
-// THE ACCEPT IS THE SESSION'S. The identity Lens adds is the one the session was signed in as (accountsCaller); the
+// THE PREVIEW AND THE ACCEPT ARE THE SESSION'S. The identity Lens adds is the one the session was signed in as (accountsCaller); the
 // browser sends the token and nothing else is read from its body, so no one can join a workspace as someone else.
 // A member's identity is the sign-in's issuer and subject: it is never sent to the browser.
 
@@ -125,6 +126,72 @@ func (a *app) handleWorkspaceMember(w http.ResponseWriter, r *http.Request, t te
 	a.agentBankRelay(w, r, t, http.MethodDelete, workspaceMembersAPI+"/"+url.PathEscape(r.PathValue("id")), nil)
 }
 
+// inviteToken reads {"token"} and nothing else from the browser's body; false when it has answered a refusal.
+func inviteToken(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil || strings.TrimSpace(in.Token) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send {"token": "…"}`})
+		return "", false
+	}
+	return strings.TrimSpace(in.Token), true
+}
+
+// writeDeadInvite answers Lens's refusal of an invite (404 or 409) in the person's words; false for any other status.
+func writeDeadInvite(w http.ResponseWriter, status int) bool {
+	switch status {
+	case http.StatusNotFound:
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "This invite link has expired, been used or been revoked. Ask for a new one."})
+	case http.StatusConflict:
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "This invite is to your own workspace."})
+	default:
+		return false
+	}
+	return true
+}
+
+// handleInvitePreview — POST {"token"}: which workspace the invite is to, for the session's person, before they join
+// (Lens B52.45). Lens adds nobody and the link is not used; a dead link is refused exactly as the accept refuses it.
+func (a *app) handleInvitePreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	if a.cfg.provisionSecret == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "sign-in is not set up on this server yet"})
+		return
+	}
+	c, ok := a.accountsCaller(w, r)
+	if !ok {
+		return
+	}
+	token, ok := inviteToken(w, r)
+	if !ok {
+		return
+	}
+	var got struct {
+		WorkspaceID string `json:"workspace_id"`
+		Name        string `json:"name"`
+	}
+	// UPSTREAM-BINDS-ONLY lensInvitePreviewBody: none
+	status, raw, err := a.provisionSecretPost(r.Context(), "/v1/provision/invites/preview", map[string]string{"identity": c.identity, "token": token})
+	if err == nil && status == http.StatusOK {
+		err = json.Unmarshal(raw, &got)
+	}
+	if err != nil {
+		log.Printf("bff: previewing an invite: %s", redactSecret(err.Error()))
+	}
+	if err == nil && writeDeadInvite(w, status) {
+		return
+	}
+	if err != nil || status != http.StatusOK || got.WorkspaceID == "" {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "That did not work just now. Try again."})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"workspace_id": got.WorkspaceID, "name": got.Name})
+}
+
 // handleInviteAccept — POST {"token"}: the session's person joins the invite's workspace.
 func (a *app) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -139,11 +206,8 @@ func (a *app) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil || strings.TrimSpace(in.Token) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send {"token": "…"}`})
+	token, ok := inviteToken(w, r)
+	if !ok {
 		return
 	}
 	if c.s.synthetic {
@@ -157,7 +221,7 @@ func (a *app) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 		Created bool `json:"created"`
 	}
 	// UPSTREAM-BINDS-ONLY lensInviteAcceptBody: none
-	status, raw, err := a.provisionSecretPost(r.Context(), "/v1/provision/invites/accept", map[string]string{"identity": c.identity, "token": strings.TrimSpace(in.Token)})
+	status, raw, err := a.provisionSecretPost(r.Context(), "/v1/provision/invites/accept", map[string]string{"identity": c.identity, "token": token})
 	if err == nil && status == http.StatusOK {
 		err = json.Unmarshal(raw, &joined)
 	}
@@ -166,11 +230,7 @@ func (a *app) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 		log.Printf("bff: accepting an invite: %s", redactSecret(err.Error()))
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "That did not work just now. Try again."})
 		return
-	case status == http.StatusNotFound:
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "This invite link has expired, been used or been revoked. Ask for a new one."})
-		return
-	case status == http.StatusConflict:
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "This invite is to your own workspace."})
+	case writeDeadInvite(w, status):
 		return
 	case status != http.StatusOK || joined.Member.WorkspaceID == "":
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "That did not work just now. Try again."})

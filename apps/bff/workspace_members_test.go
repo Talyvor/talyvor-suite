@@ -17,11 +17,12 @@ import (
 
 // inviteLens answers B52.35's routes and hands every other request to the stranger Lens behind it.
 type inviteLens struct {
-	mu      sync.Mutex
-	accepts []map[string]string // each accept body, as Lens received it
-	secrets []string            // the provision secret header each accept carried
-	auths   []string            // the bearer each owner route carried
-	paths   []string            // method and path of each owner route
+	mu       sync.Mutex
+	accepts  []map[string]string // each accept body, as Lens received it
+	previews []map[string]string // each preview body, as Lens received it (B52.46)
+	secrets  []string            // the provision secret header each accept carried
+	auths    []string            // the bearer each owner route carried
+	paths    []string            // method and path of each owner route
 }
 
 func startMemberSuite(t *testing.T) (*strangerSuite, *inviteLens) {
@@ -31,6 +32,19 @@ func startMemberSuite(t *testing.T) (*strangerSuite, *inviteLens) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.URL.Path == "/v1/provision/invites/preview":
+			var in map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			ml.mu.Lock()
+			ml.previews = append(ml.previews, in)
+			ml.secrets = append(ml.secrets, r.Header.Get(provisionSecretHeader))
+			ml.mu.Unlock()
+			if in["token"] != "wsinvtok_good" {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = io.WriteString(w, `{"error":"not found: no such invite"}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"workspace_id":"ws_owner","name":"Northwind Studio"}`)
 		case r.URL.Path == "/v1/provision/invites/accept":
 			var in map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&in)
@@ -118,6 +132,41 @@ func TestB5236_AcceptNeedsASession(t *testing.T) {
 	code, _ := s.post(s.browser(), "/api/invites/accept", `{"token":"wsinvtok_good"}`)
 	if code != http.StatusUnauthorized || len(ml.accepts) != 0 {
 		t.Fatalf("an accept with no session answered %d and reached Lens %d times, want 401 and never", code, len(ml.accepts))
+	}
+}
+
+// B52.46: the Join page names the workspace before the press. The preview reaches Lens on the provision secret with the
+// session's identity and the token only, and joins nobody.
+func TestB5246_PreviewSendsTheSessionsIdentityAndTheTokenOnly(t *testing.T) {
+	s, ml := startMemberSuite(t)
+	br := s.signUp("b5246-di", "di@example.org")
+
+	code, body := s.post(br, "/api/invites/preview", `{"token":"wsinvtok_good","identity":"someone-else"}`)
+	if code != http.StatusOK || body == "" {
+		t.Fatalf("preview: %d %s, want 200", code, body)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(body), &got); err != nil || got["workspace_id"] != "ws_owner" || got["name"] != "Northwind Studio" || len(got) != 2 {
+		t.Fatalf("preview answered %s, want only the workspace Northwind Studio", body)
+	}
+	code, body = s.post(br, "/api/invites/preview", `{"token":"wsinvtok_revoked"}`)
+	if code != http.StatusNotFound || !strings.Contains(body, "Ask for a new one") {
+		t.Fatalf("a dead invite's preview answered %d %s, want 404 in words", code, body)
+	}
+	if code, _ := s.post(s.browser(), "/api/invites/preview", `{"token":"wsinvtok_good"}`); code != http.StatusUnauthorized {
+		t.Fatalf("a preview with no session answered %d, want 401", code)
+	}
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+	want := provisionIdentity(testIssuer, "b5246-di")
+	if len(ml.previews) != 2 || ml.previews[0]["identity"] != want || ml.previews[0]["token"] != "wsinvtok_good" || len(ml.previews[0]) != 2 {
+		t.Fatalf("Lens received %q, want only the session's identity %q and the token", ml.previews, want)
+	}
+	if ml.secrets[0] != testProvisionSecret {
+		t.Fatalf("the preview carried %q, want the provision secret", ml.secrets[0])
+	}
+	if len(ml.accepts) != 0 {
+		t.Fatalf("a preview reached Lens's accept %d times, want never", len(ml.accepts))
 	}
 }
 

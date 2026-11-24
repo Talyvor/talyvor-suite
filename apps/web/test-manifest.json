@@ -141,7 +141,7 @@
   "src/areas/lens/LostPhone.test.tsx": 3,
   "src/areas/lens/LowBalanceCard.test.tsx": 5,
   "src/areas/lens/lxcSplitCoverage.test.tsx": 5,
-  "src/areas/lens/MemberInvites.test.tsx": 7,
+  "src/areas/lens/MemberInvites.test.tsx": 8,
   "src/areas/lens/Members.test.tsx": 12,
   "src/areas/lens/mintAttribution.test.tsx": 5,
   "src/areas/lens/ModelTier.test.tsx": 5,
