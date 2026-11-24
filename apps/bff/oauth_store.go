@@ -307,8 +307,9 @@ func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (ma
 // tokens with it, ON DELETE CASCADE), every code not yet redeemed goes, the moment is kept, and Lens is owed the ending of
 // every assistant of theirs (B54.21): for workspaceID, the person's own, and for any other workspace a connection acted in.
 // Then, still under the lock, inMemory ends them in this process (B54.14), so a consent waiting for the lock (saveCode)
-// finds its session gone. The table goes first, so a failure there leaves them all whole.
-func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at time.Time, inMemory func()) error {
+// finds its session gone. The table goes first, so a failure there leaves them all whole. When forget is set the person
+// deleted their account (B52.38), and the addresses they proved for roles go in the same step (B61.123).
+func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at time.Time, forget bool, inMemory func()) error {
 	if d == nil {
 		inMemory()
 		return nil
@@ -337,6 +338,9 @@ func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at tim
 				SELECT w, '', clock_timestamp() FROM (SELECT workspace_id AS w FROM g UNION SELECT $3::text) ws WHERE w <> ''
 				ON CONFLICT (user_id, client_id) DO UPDATE SET owed_at = EXCLUDED.owed_at)
 			INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at, workspaceID)
+		if err == nil && forget {
+			_, err = tx.Exec(ctx, `DELETE FROM person_proved_emails WHERE sub = $1`, sub)
+		}
 		return err
 	})
 	if err != nil {

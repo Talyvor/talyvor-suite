@@ -246,7 +246,7 @@ func (a *app) endMovedPeople(ctx context.Context) error {
 	}
 	for _, o := range list {
 		at := time.Now()
-		if err := a.oauth.db.endPerson(ctx, o.sub, "", at, func() {
+		if err := a.oauth.db.endPerson(ctx, o.sub, "", at, false, func() {
 			a.oauth.grants.deleteWhere(func(g oauthGrant) bool { return g.Who.sub == o.sub })
 			a.oauth.codes.deleteWhere(func(c oauthCode) bool { return c.who.sub == o.sub })
 			if a.auth != nil {

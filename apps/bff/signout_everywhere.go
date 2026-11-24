@@ -32,7 +32,7 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "signing out everywhere is not available on this server yet"})
 		return
 	}
-	if err := a.endEverywhere(r.Context(), s); err != nil {
+	if err := a.endEverywhere(r.Context(), s, false); err != nil {
 		log.Printf("bff: sign out everywhere: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "you could not be signed out everywhere; try again"})
 		return
@@ -43,14 +43,18 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 }
 
 // endEverywhere ends every sign-in of s's person, in the table first and then in memory, and tells Lens. Deleting the
-// account ends them the same way (B52.38, account_delete.go). a.oauth.db must be set.
-func (a *app) endEverywhere(ctx context.Context, s session) error {
+// account ends them the same way (B52.38, account_delete.go), with forget set: the addresses the person proved for
+// roles, and any code still waiting for them, go too (B61.123). a.oauth.db must be set.
+func (a *app) endEverywhere(ctx context.Context, s session, forget bool) error {
 	at := time.Now()
-	if err := a.oauth.db.endPerson(ctx, s.sub, s.workspaceID, at, func() {
+	if err := a.oauth.db.endPerson(ctx, s.sub, s.workspaceID, at, forget, func() {
 		// Every token resolves through its grant (oauthGrantFrom), so the grants going ends them all.
 		a.oauth.grants.deleteWhere(func(g oauthGrant) bool { return g.Who.sub == s.sub })
 		a.oauth.codes.deleteWhere(func(c oauthCode) bool { return c.who.sub == s.sub })
 		a.auth.endPerson(s.sub, at)
+		if forget {
+			a.roles.forget(s.sub)
+		}
 	}); err != nil {
 		return err
 	}

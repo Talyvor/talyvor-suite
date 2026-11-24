@@ -4,7 +4,9 @@ package main
 // back, asks Lens's POST /v1/account/delete (talyvor-lens B52.37) to delete every account of the session's identity,
 // on the provision secret. Only once Lens has, the BFF ends every sign-in of the person as sign out everywhere does
 // (endEverywhere): every browser and phone session and every assistant connected through Connect, in the table first
-// and then in memory, so a restart brings none of them back. The Help chats Talyvor kept for those accounts go too.
+// and then in memory, so a restart brings none of them back; a role session the person holds in someone else's account
+// ends with them, and the addresses they proved for roles are deleted (B61.123). The Help chats Talyvor kept for those
+// accounts go too.
 //
 // Lens answers 404 to an identity with no account left, so a deletion whose ending failed is finished by asking again.
 
@@ -102,7 +104,7 @@ func (a *app) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 			log.Printf("bff: account deletion: a deleted account's Help chat not deleted (workspace=%s): %v", ws, err)
 		}
 	}
-	if err := a.endEverywhere(r.Context(), s); err != nil {
+	if err := a.endEverywhere(r.Context(), s, true); err != nil {
 		log.Printf("bff: account deletion: deleted, but not signed out everywhere: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "your account is deleted, but you are still signed in somewhere. Try again to sign out everywhere."})
 		return

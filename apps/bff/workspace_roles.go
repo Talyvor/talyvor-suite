@@ -108,6 +108,14 @@ func (p *roleProofs) lastHour(key string, now time.Time) []time.Time {
 	return kept
 }
 
+// forget drops what is kept for sub: the addresses they proved and the code waiting for them (B61.123).
+func (p *roleProofs) forget(sub string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.proved, sub)
+	delete(p.codes, sub)
+}
+
 // roleEmailChars are the characters a role's address may hold. A code is mailed to it, so the address is rebuilt from
 // these alone, never passed on as typed, and nothing the person types reaches a mail's headers.
 const roleEmailChars = "abcdefghijklmnopqrstuvwxyz0123456789.@_+-"
