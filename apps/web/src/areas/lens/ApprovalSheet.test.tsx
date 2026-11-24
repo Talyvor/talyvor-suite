@@ -61,6 +61,12 @@ function mockBff({ approvals = [acme()], phoneOnly = false, paused = false, proo
     if (decision) {
       decisions.push({ id: decision[1], decision: decision[2], body })
       const a = approvals.find((x) => x.id === decision[1])!
+      // B28.40 — over the second-approver line (Lens B28.315): the first approval leaves it waiting, and the same person again is refused.
+      if (decision[2] === 'approve' && a.over_second_approver_line) {
+        if (a.waiting_for_second_approver) return json({ error: 'economy: approved by you; waiting for a second approver', code: 'same_approver' }, 409)
+        a.waiting_for_second_approver = true
+        return json(a)
+      }
       a.status = decision[2] === 'approve' ? 'approved' : 'denied'
       return json(a)
     }
@@ -156,6 +162,25 @@ describe('the approval sheet', () => {
     expect(decisions).toEqual([
       { id: 'apr_A', decision: 'deny', body: { assertion: expect.objectContaining({ signature: b64u(bytes('sig-over-challenge-apr_A')) }), reason: 'not this month' } },
     ])
+  })
+
+  it('over a Business’s second approver line, says why it asks and that the first approval waits for a second approver', async () => {
+    const { decisions } = mockBff({ approvals: [acme({ over_second_approver_line: true })] })
+    const sheet = await openSheet('/?approval=apr_A')
+    expect(sheet.querySelector('dl')).toHaveTextContent('Why it’s askingOver the second approver line')
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Approve with your passkey' }))
+    expect(await screen.findByText('Approved by you. Waiting for a second approver.')).toBeInTheDocument()
+    expect(screen.getByText('Nothing is paid until a second person approves it.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Approved: /)).toBeNull()
+    expect(decisions.map((d) => d.decision)).toEqual(['approve'])
+  })
+
+  it('refuses the same person’s second approval over the line in words', async () => {
+    mockBff({ approvals: [acme({ over_second_approver_line: true, waiting_for_second_approver: true })] })
+    const sheet = await openSheet('/?approval=apr_A')
+    expect(within(sheet).getByTestId('approval-sheet-second')).toHaveTextContent('Approved once. Waiting for a second approver.')
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Approve with your passkey' }))
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent('Approved by you. Waiting for a second approver.')
   })
 
   it('says a paused agent’s approval waits until it runs again', async () => {

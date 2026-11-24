@@ -119,4 +119,50 @@ describe('Settings → Team and roles', () => {
     expect(within(shared).getByText('Viewer')).toBeTruthy()
     await waitFor(() => expect(within(shared).getByRole('button', { name: 'Open' })).toBeTruthy())
   })
+
+  // B28.40 — the second approver is an Approver or Admin who has signed in, picked with the amount above which a payment
+  // needs two approvals; the line Lens is asked to sign and then set is exactly the one picked, in minor units.
+  it('lets a Business owner name a second approver above an amount', async () => {
+    let line = { user_id: '', above_minor: 0, currency: '' }
+    const sent: { method: string; url: string; body: unknown }[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined
+      sent.push({ method, url, body })
+      if (url === '/api/workspace/account') return json({ account_type: 'business', money_kind: 'fiat' })
+      if (url === '/api/accounts') return json({ accounts: [{ id: 'ws_own', name: 'Own', type: 'business', kind: 'fiat', opened_at: '', current: true }] })
+      if (url === '/api/workspace/roles')
+        return json({
+          items: [
+            { email: 'ada@northwind.example', role: 'approver', signed_in: true, granted_at: '', user_id: 'pada' },
+            { email: 'finn@northwind.example', role: 'finance', signed_in: true, granted_at: '', user_id: 'pfinn' },
+            { email: 'new@northwind.example', role: 'admin', signed_in: false, granted_at: '', user_id: '' },
+          ],
+        })
+      if (url === '/api/workspace/second-approver/challenge') return json({ challenge: 'c1', allow_credentials: [] })
+      if (url === '/api/workspace/second-approver' && method === 'PUT') {
+        line = body
+        return json(line)
+      }
+      if (url === '/api/workspace/second-approver') return json(line)
+      if (url === '/api/roles') return json({ emails: [], accounts: [] })
+      return json({}, 404)
+    })
+    renderScreen()
+    expect(await screen.findByText('No second approver: one approval is enough.')).toBeTruthy()
+    const who = screen.getByLabelText('Who') as HTMLSelectElement
+    expect([...who.options].map((o) => o.textContent)).toEqual(['ada@northwind.example · Approver'])
+
+    fireEvent.change(screen.getByLabelText('Above'), { target: { value: '5000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const now = await screen.findByTestId('second-approver-now')
+    expect(within(now).getByText('ada@northwind.example')).toBeTruthy()
+    expect(within(now).getByText('Above £5,000.00')).toBeTruthy()
+    const picked = { user_id: 'pada', above_minor: 500000, currency: 'GBP' }
+    expect(sent.filter((s) => s.url.startsWith('/api/workspace/second-approver') && s.method !== 'GET').map((s) => [s.method, s.url, s.body])).toEqual([
+      ['POST', '/api/workspace/second-approver/challenge', picked],
+      ['PUT', '/api/workspace/second-approver', picked],
+    ])
+  })
 })

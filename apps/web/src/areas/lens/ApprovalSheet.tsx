@@ -8,7 +8,7 @@ import { Button, Dialog, Face, Field, Input, Layer, Money, SheetFrame, pocketFoc
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, rulesKey, useKeys } from './AgentBank'
-import { type AgentApproval, agentBankApi } from './agentBankApi'
+import { type AgentApproval, AgentBankError, agentBankApi } from './agentBankApi'
 import { useMoney } from './money'
 import { signApproval } from './passkeys'
 import { PaymentProofSection, TaskSays, stoppedSentence } from './PaymentProof'
@@ -73,8 +73,16 @@ export function expiresText(iso: string, now = new Date()): string {
 function refusal(err: unknown): string {
   if (err instanceof DOMException && err.name === 'NotAllowedError') return 'Cancelled. Nothing changed.'
   if (isSessionExpired(err)) return 'Nothing was decided. Sign in again, then try once more.'
+  // B28.40 — over the second-approver line (Lens B28.315's codes): two different people approve, one of them the second approver.
+  const code = err instanceof AgentBankError ? err.body.code : undefined
+  if (code === 'same_approver') return WAITING_FOR_SECOND
+  if (code === 'second_approver_needed') return 'Your second approver must be one of the two approvals. Nothing was paid.'
+  if (code === 'approver_unknown') return 'Over the second approver line, only a person signed in to Talyvor can approve. Nothing was paid.'
   return 'Nothing was decided. You can try again.'
 }
+
+/** DESIGN.md P8: a Business payment over the second-approver line, after the first of its two approvals. */
+export const WAITING_FOR_SECOND = 'Approved by you. Waiting for a second approver.'
 
 const DECIDED: Record<string, string> = { approved: 'approved', used: 'approved and used', denied: 'declined' }
 
@@ -130,10 +138,12 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
   const decide = useMutation({
     mutationFn: async ({ decision, reason }: { decision: 'approve' | 'deny'; reason?: string }) =>
       agentBankApi.decide(a.id, decision, keys.signed ? await signApproval(a.id) : undefined, undefined, reason),
-    onSuccess: (_, { decision }) => {
+    onSuccess: (got, { decision }) => {
       onClose()
       showSnack(
-        decision === 'approve'
+        decision === 'approve' && got?.waiting_for_second_approver
+          ? { title: WAITING_FOR_SECOND, line: 'Nothing is paid until a second person approves it.' }
+          : decision === 'approve'
           ? {
               title: (
                 <>
@@ -201,7 +211,8 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
   }
 
   const facts: { label: React.ReactNode; value: React.ReactNode }[] = []
-  if (a.asks_above_ulxc != null)
+  if (a.over_second_approver_line) facts.push({ label: 'Why it’s asking', value: 'Over the second approver line' })
+  else if (a.asks_above_ulxc != null)
     facts.push({
       label: 'Why it’s asking',
       value: (
@@ -311,6 +322,11 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
               {paused ? (
                 <p className="rounded-inset bg-tangerine-50 px-3.5 py-2.5 text-body text-ink" data-testid="approval-sheet-paused">
                   {name} is paused: nothing goes through until it runs again. An approval lasts 24 hours.
+                </p>
+              ) : null}
+              {a.waiting_for_second_approver ? (
+                <p className="rounded-inset bg-tangerine-50 px-3.5 py-2.5 text-body text-ink" data-testid="approval-sheet-second">
+                  Approved once. Waiting for a second approver.
                 </p>
               ) : null}
               {failed}
