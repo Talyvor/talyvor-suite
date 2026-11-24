@@ -1,0 +1,4 @@
+[
+  { "route": "/settings/team" },
+  { "route": "/settings/team", "steps": ["Change"] }
+]
