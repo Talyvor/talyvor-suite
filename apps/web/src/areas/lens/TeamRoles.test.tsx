@@ -64,21 +64,34 @@ function renderScreen() {
 afterEach(() => vi.restoreAllMocks())
 
 describe('Settings → Team and roles', () => {
-  it('lets a Business owner give an email a role, and take it away', async () => {
+  it('lets a Business owner give an email a role from its dialog, and take it away once asked', async () => {
     const sent = standInBff('business')
     renderScreen()
     expect(await screen.findByText('You haven’t given anyone a role yet.')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'finn@northwind.example' } })
-    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'finance' } })
-    expect(screen.getByText('Sees everything, and adds, pays, sends and converts money.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Give role' }))
 
+    // B57.211 — as w-members' Add a member: Give a role opens the form in a dialog.
+    fireEvent.click(await screen.findByRole('button', { name: 'Give a role' }))
+    const give = await screen.findByRole('dialog', { name: 'Give a role' })
+    fireEvent.change(within(give).getByLabelText('Email'), { target: { value: 'finn@northwind.example' } })
+    fireEvent.change(within(give).getByLabelText('Role'), { target: { value: 'finance' } })
+    expect(within(give).getByText('Sees everything, and adds, pays, sends and converts money.')).toBeTruthy()
+    fireEvent.click(within(give).getByRole('button', { name: 'Give role' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Give a role' })).toBeNull())
+
+    // Each person is a w-members row: the email, whether they signed in, and the role as its chip.
     const team = await screen.findByRole('list', { name: 'Your team' })
     expect(within(team).getByText('finn@northwind.example')).toBeTruthy()
-    expect(within(team).getByText('Finance · Hasn’t signed in yet')).toBeTruthy()
+    expect(within(team).getByText('Hasn’t signed in yet')).toBeTruthy()
+    expect(within(team).getByText('Finance')).toBeTruthy()
     expect(sent.find((s) => s.method === 'PUT')?.body).toEqual({ email: 'finn@northwind.example', role: 'finance' })
 
+    // Remove asks first, as w-security does for a key; Keep it removes nothing.
     fireEvent.click(within(team).getByRole('button', { name: 'Remove' }))
+    const ask = await screen.findByRole('dialog', { name: 'Remove “finn@northwind.example”?' })
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }))
+    expect(sent.some((s) => s.method === 'DELETE')).toBe(false)
+    fireEvent.click(within(team).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove it' }))
     expect(await screen.findByText('You haven’t given anyone a role yet.')).toBeTruthy()
     expect(sent.some((s) => s.method === 'DELETE' && s.url === '/api/workspace/roles?email=finn%40northwind.example')).toBe(true)
   })
@@ -87,7 +100,7 @@ describe('Settings → Team and roles', () => {
     standInBff('personal')
     renderScreen()
     expect(await screen.findByRole('heading', { name: 'Open an account someone gave you a role in' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Give role' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Give a role' })).toBeNull()
 
     fireEvent.change(await screen.findByLabelText('Your email'), { target: { value: 'finn@northwind.example' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
@@ -102,7 +115,8 @@ describe('Settings → Team and roles', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     const shared = await screen.findByRole('list', { name: 'Accounts shared with you' })
     expect(within(shared).getByText('Northwind')).toBeTruthy()
-    expect(within(shared).getByText('Viewer · finn@northwind.example')).toBeTruthy()
+    expect(within(shared).getByText('finn@northwind.example')).toBeTruthy()
+    expect(within(shared).getByText('Viewer')).toBeTruthy()
     await waitFor(() => expect(within(shared).getByRole('button', { name: 'Open' })).toBeTruthy())
   })
 })
