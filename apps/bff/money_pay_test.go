@@ -195,6 +195,38 @@ func TestPaymentSignatureReachesLensUnchanged(t *testing.T) {
 	}
 }
 
+// B28.76 — a payment to a saved payee by its name (Lens B28.346) goes up with payee_name, and so does the challenge it is
+// signed over, so Lens resolves the one payee of that name and pays it as it pays its id.
+func TestPaymentByPayeeNameReachesLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(raw))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"challenge":"Y2g","allow_credentials":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	payment := `"account_id":"macc_1","payee_id":"","amount_minor":2000,"currency":"GBP","reference":"Rent","idempotency_key":"k1","payee_name":"Acme Hosting"`
+	for _, path := range []string{"/api/money/payments/challenge", "/api/money/payments"} {
+		if rec := doJSON(a, http.MethodPost, path, `{`+payment+`}`); rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		`POST /v1/money/payments/challenge {` + payment + `}`,
+		`POST /v1/money/payments {` + payment + `}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens received\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+	}
+}
+
 // B58.6 — approving a payout batch goes up with its signature exactly as the browser or the phone sent it (Lens B58.5),
 // and the challenge it is signed over, naming the batch as it stands, is relayed with no body of the browser's.
 func TestPayoutApprovalSignatureReachesLensUnchanged(t *testing.T) {

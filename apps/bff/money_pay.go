@@ -23,7 +23,8 @@ import (
 //	                          afresh and holds every payment to it for 24 hours (held_until), with its notice
 //	GET  /api/money/payments                        the payments out, newest first
 //	POST /api/money/payments {account_id, payee_id, amount_minor, currency, reference, idempotency_key, assertion}   pay a
-//	                          saved payee; B54.35: "assertion" is the passkey's or the phone's signature over the challenge
+//	                          saved payee; B54.35: "assertion" is the passkey's or the phone's signature over the challenge;
+//	                          B28.76: payee_name in place of payee_id pays the one saved payee of that name (Lens B28.346)
 //	POST /api/money/payments/challenge {the payment, as it will be sent}   B54.35: the challenge it is signed over
 //	GET  /api/money/mandates ?status=               the mandates granted and, for the owner, received; with status
 //	                          (requested, active, revoked, expired, declined) only the granted ones in it
@@ -200,6 +201,7 @@ func (a *app) handleMoneyPayments(challenge bool) func(http.ResponseWriter, *htt
 				Currency       string          `json:"currency"`
 				Reference      string          `json:"reference"`
 				IdempotencyKey string          `json:"idempotency_key"`
+				PayeeName      string          `json:"payee_name,omitempty"` // B28.76: in place of payee_id, the one saved payee of this name (Lens B28.346)
 				Assertion      json.RawMessage `json:"assertion,omitempty"`
 			}
 			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
@@ -210,7 +212,7 @@ func (a *app) handleMoneyPayments(challenge bool) func(http.ResponseWriter, *htt
 			if challenge {
 				in.Assertion, path = nil, path+"/challenge"
 			}
-			// UPSTREAM-BINDS-ONLY lensMoneyPaymentBody: agent_id, created_at, detail, funding, id, partner, partner_ref, payee_name, status, updated_at, value_ulxc, workspace_id
+			// UPSTREAM-BINDS-ONLY lensMoneyPaymentBody: agent_id, created_at, detail, funding, id, partner, partner_ref, status, updated_at, value_ulxc, workspace_id
 			body, _ := json.Marshal(in)
 			a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
 		case challenge:
