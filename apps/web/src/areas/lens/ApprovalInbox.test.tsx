@@ -326,6 +326,32 @@ describe('Approvals in Pocket (B57.17)', () => {
     expect(await screen.findByRole('link', { name: 'Approvals 2 waiting' })).toBeInTheDocument()
   })
 
+  it('lists an agent’s send to a new address in Waiting for you, counted with the rest, and Review opens its answers (B57.202)', async () => {
+    mockBff([], [], 1)
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    const to = '0x1111111111111111111111111111111111111111'
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/agents/agt_1/crypto-sends'
+        ? Response.json({
+            sends: [{ id: 'cs_wait', agent_id: 'agt_1', direction: 'out', status: 'awaiting_owner', to, to_kind: 'address', network: 'base', token: 'USDC', amount_minor: 2_500_000, new_address: true, requested_by: 'key:k1', created_at: '2026-11-20T01:00:00Z', updated_at: '2026-11-20T01:00:00Z' }],
+          })
+        : String(input) === '/api/agents/agt_2/crypto-sends'
+          ? Response.json({ sends: [] })
+          : inner(input, init),
+    )
+    const waiting = await page()
+    const row = await waiting.findByText('Researcher wants to send to a new address')
+    const box = row.closest<HTMLElement>('[data-crypto-send="cs_wait"]')!
+    expect(box).toHaveTextContent(`${to} on Base · asked`)
+    expect(box).toHaveTextContent('2.50 USDC')
+    await waitFor(() => expect(screen.getByTestId('approvals-waiting')).toHaveTextContent('2 waiting'))
+    expect(await screen.findByRole('link', { name: 'Approvals 2 waiting' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Sends to a new address')).toBeNull()
+    expect(within(box).queryByRole('button', { name: 'Approve' })).toBeNull()
+    fireEvent.click(within(box).getByRole('button', { name: 'Review' }))
+    for (const name of ['Approve', 'Send a test amount first', 'Decline']) expect(within(box).getByRole('button', { name })).toBeInTheDocument()
+  })
+
   it('names a listing it would use as a link, and where it is paid from and when it expires', async () => {
     mockBff([], [], 0)
     const inner = vi.mocked(fetch).getMockImplementation()!

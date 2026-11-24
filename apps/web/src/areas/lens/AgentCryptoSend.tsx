@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, Facts, Field, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
+import { Button, Chip, Facts, Field, Icon, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
 import { inlineLink } from '@talyvor/ui'
+import { DESIGN_ATTR } from '../../pocketPending'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { AgentFace } from './AgentFace'
+import { formatWhen } from './format'
+import { ArrivesChip } from './InstantTransfer'
 import { Note, PanelForm, readFailure } from './WalletMoney'
 import { AgentBankError, type Agent, type CryptoSend, type CryptoSendQuote, type CryptoSendRequest, cryptoSendApi, newMoveKey, refusalText, usdcMinorOf } from './agentBankApi'
 
@@ -11,6 +16,8 @@ import { AgentBankError, type Agent, type CryptoSend, type CryptoSendQuote, type
 // Idempotency-Key — kept until Lens answers, so a retry after no answer sends that same send once — then the receipt
 // with its explorer link. A first send the agent asked for to a new address waits for the owner, who approves it,
 // sends a test amount there first, or declines it, here and on Approvals. History lists what was sent and received.
+// B57.202 — in Pocket: the quote is W3's quote card (its facts with the amount as the strong row, the ink Arrives chip,
+// the note) and a send waiting for the owner is a w-approvals waiting row, with Review, inside Approvals' Waiting for you.
 
 export const cryptoSendsKey = (id: string) => ['agent-crypto-sends', id]
 
@@ -43,6 +50,8 @@ function arrivalText(seconds?: number): string {
   return seconds < 90 ? `In about ${seconds} seconds` : `In about ${Math.round(seconds / 60)} minutes`
 }
 
+const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1)
+
 const STATUS: Record<CryptoSend['status'], { words: string; tone: ChipTone }> = {
   awaiting_owner: { words: 'Waiting for you', tone: 'wait' },
   sending: { words: 'Sending', tone: 'wait' },
@@ -66,7 +75,6 @@ function QuoteFacts({ q, agent }: { q: CryptoSendQuote; agent: Agent }) {
   return (
     <Facts
       facts={[
-        { label: 'You send', value: <Money minor={q.amount_minor} currency="USDC" /> },
         { label: 'To', value: <Recipient q={q} /> },
         { label: 'Network', value: networkName(q.network) },
         {
@@ -78,7 +86,14 @@ function QuoteFacts({ q, agent }: { q: CryptoSendQuote; agent: Agent }) {
             </span>
           ),
         },
-        { label: 'Arrives', value: arrivalText(q.arrival_seconds) },
+        {
+          label: <span className="font-semibold text-ink">You send</span>,
+          value: (
+            <span data-testid="crypto-send-amount" className="font-display text-title font-bold">
+              <Money minor={q.amount_minor} currency="USDC" />
+            </span>
+          ),
+        },
       ]}
     />
   )
@@ -125,9 +140,11 @@ function sendFailure(err: unknown): string {
   return err instanceof AgentBankError && err.status < 500 ? refusalText(err) : 'There was no answer. Press Send again: it is sent once, however many times you press.'
 }
 
-/** The owner's answer to a send waiting for them: Approve, Send a test amount first, or Decline. */
+/** The owner's answer to a send waiting for them, as w-approvals draws a waiting row: Review opens Approve, Send a test
+ *  amount first and Decline. The address is shown in full, so the owner reads the whole of it before approving. */
 export function AwaitingCryptoSend({ agent, s }: { agent: Agent; s: CryptoSend }) {
   const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
   const [testing, setTesting] = useState(false)
   const [test, setTest] = useState('')
   const testMinor = usdcMinorOf(test)
@@ -138,47 +155,63 @@ export function AwaitingCryptoSend({ agent, s }: { agent: Agent; s: CryptoSend }
   })
   const busy = answer.isPending
   return (
-    <div data-crypto-send={s.id} className="grid gap-2 border-t border-line py-2 first:border-t-0">
+    <div data-crypto-send={s.id} {...{ [DESIGN_ATTR]: 'pocket' }} className="border-t border-line first:border-t-0">
       <Row
         wrap
+        leading={<AgentFace agent={agent} waiting />}
         title={`${agent.name} wants to send to a new address`}
         line={
-          <>
-            <span className="break-all font-figure">{s.to}</span> on {networkName(s.network)}
-            {s.to_kind === 'agent' && s.to_label ? ` · ${s.to_label}` : ''}
-          </>
+          // Sandbox or live, as Approvals' other waiting rows say it (B56.11).
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+            <WorkspaceLabel capability="stablecoins" />
+            <span className="whitespace-normal">
+              <span className="break-all font-figure">{s.to}</span> on {networkName(s.network)}
+              {s.to_kind === 'agent' && s.to_label ? ` · ${s.to_label}` : ''} · asked <span className="font-figure">{formatWhen(s.created_at)}</span>
+            </span>
+          </span>
         }
         amount={<Money minor={s.amount_minor} currency="USDC" />}
+        action={
+          open ? null : (
+            <Button variant="secondary" size="sm" data-tangerine="your-move" onClick={() => setOpen(true)}>
+              Review
+            </Button>
+          )
+        }
       />
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" disabled={busy} onClick={() => answer.mutate({ approve: true })}>
-          Approve
-        </Button>
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => setTesting((t) => !t)} aria-expanded={testing}>
-          Send a test amount first
-        </Button>
-        <Button size="sm" variant="danger" disabled={busy} onClick={() => answer.mutate({ approve: false })}>
-          Decline
-        </Button>
-      </div>
-      {testing ? (
-        <PanelForm onSubmit={() => (testMinor !== null && testMinor < s.amount_minor && !busy ? answer.mutate({ approve: true, test: testMinor }) : undefined)}>
-          <Field label="Test amount in USDC">
-            <Input inputMode="decimal" placeholder="0.10" value={test} onChange={(e) => setTest(e.target.value)} />
-          </Field>
-          <div>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={busy}
-              disabledReason={testMinor !== null && testMinor < s.amount_minor ? undefined : 'Type an amount less than the send first'}
-            >
-              Send the test amount
+      {open ? (
+        <div className="grid gap-2 pb-3">
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={busy} onClick={() => answer.mutate({ approve: true })}>
+              Approve
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setTesting((t) => !t)} aria-expanded={testing}>
+              Send a test amount first
+            </Button>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => answer.mutate({ approve: false })}>
+              Decline
             </Button>
           </div>
-        </PanelForm>
+          {testing ? (
+            <PanelForm onSubmit={() => (testMinor !== null && testMinor < s.amount_minor && !busy ? answer.mutate({ approve: true, test: testMinor }) : undefined)}>
+              <Field label="Test amount in USDC">
+                <Input inputMode="decimal" placeholder="0.10" value={test} onChange={(e) => setTest(e.target.value)} />
+              </Field>
+              <div>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={busy}
+                  disabledReason={testMinor !== null && testMinor < s.amount_minor ? undefined : 'Type an amount less than the send first'}
+                >
+                  Send the test amount
+                </Button>
+              </div>
+            </PanelForm>
+          ) : null}
+          {answer.isError ? <Note ok={false}>{refusalText(answer.error)}</Note> : null}
+        </div>
       ) : null}
-      {answer.isError ? <Note ok={false}>{refusalText(answer.error)}</Note> : null}
     </div>
   )
 }
@@ -219,7 +252,9 @@ function History({ agent }: { agent: Agent }) {
                 line={
                   <span className="inline-flex flex-wrap items-center gap-2">
                     <Chip tone={STATUS[s.status].tone}>{STATUS[s.status].words}</Chip>
-                    <span>{networkName(s.network)}</span>
+                    <span>
+                      <span className="font-figure">{formatWhen(s.created_at)}</span> · {networkName(s.network)}
+                    </span>
                     {s.explorer_url ? (
                       <a href={s.explorer_url} target="_blank" rel="noreferrer" className={`font-semibold text-ink ${inlineLink}`}>
                         See it on the explorer
@@ -282,19 +317,19 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
       {quote ? (
         <div className="grid gap-3" data-testid="crypto-send-quote">
           <QuoteFacts q={quote} agent={agent} />
+          <ArrivesChip data-testid="crypto-send-arrives">Arrives {lowerFirst(arrivalText(quote.arrival_seconds))}</ArrivesChip>
+          <Button size="lg" className="w-full" disabled={sent.isPending} onClick={() => sent.mutate()}>
+            {sent.isPending ? 'Sending…' : 'Send'}
+          </Button>
+          <Button variant="secondary" className="w-full" disabled={sent.isPending} onClick={change}>
+            Change
+          </Button>
           {quote.new_address ? (
-            <p className="text-body text-ink" data-testid="crypto-send-new-address">
-              A new address: this workspace has not paid it before.
+            <p className="flex items-start gap-2 rounded-card-tight bg-cloud p-3.5 text-body text-ink-2" data-testid="crypto-send-new-address">
+              <Icon name="key" size={16} />
+              <span>A new address: this workspace has not paid it before.</span>
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={sent.isPending} onClick={() => sent.mutate()}>
-              {sent.isPending ? 'Sending…' : 'Send'}
-            </Button>
-            <Button variant="secondary" disabled={sent.isPending} onClick={change}>
-              Change
-            </Button>
-          </div>
           {sent.isError ? <Note ok={false}>{sendFailure(sent.error)}</Note> : null}
         </div>
       ) : (
@@ -350,23 +385,17 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
   )
 }
 
-/** B48.36 — on Approvals: every agent's send to a new address that waits for the owner. Nothing while none waits. */
-export function CryptoSendsWaiting({ agents }: { agents: Agent[] }) {
+/**
+ * B48.36, B57.202 — every agent's send to a new address that waits for the owner, for Approvals' Waiting for you and the
+ * sidebar's badge. `failed` is whether some agent's sends could not be read. Nothing is read for a workspace without the
+ * on-chain side.
+ */
+export function useCryptoSendsWaiting(agents: Agent[], enabled: boolean): { waiting: { a: Agent; s: CryptoSend }[]; failed: boolean } {
   const lists = useQueries({
-    queries: agents.map((a) => ({ queryKey: cryptoSendsKey(a.id), queryFn: () => cryptoSendApi.list(a.id), retry: false })),
+    queries: (enabled ? agents : []).map((a) => ({ queryKey: cryptoSendsKey(a.id), queryFn: () => cryptoSendApi.list(a.id), retry: false })),
   })
-  const waiting = agents.flatMap((a, i) => (lists[i]?.data?.sends ?? []).filter((s) => s.direction === 'out' && s.status === 'awaiting_owner').map((s) => ({ a, s })))
-  const failed = lists.some((l) => l.isError)
-  if (waiting.length === 0 && !failed) return null
-  return (
-    <Card tone="white" aria-label="Sends to a new address" data-testid="approvals-crypto-sends">
-      <h2 className="font-display text-reading font-bold text-ink">Sends to a new address</h2>
-      <div className="mt-2">
-        {waiting.map(({ a, s }) => (
-          <AwaitingCryptoSend key={s.id} agent={a} s={s} />
-        ))}
-      </div>
-      {failed ? <p className="mt-2 text-body text-ink-2">Some agents’ sends could not be read just now.</p> : null}
-    </Card>
+  const waiting = (enabled ? agents : []).flatMap((a, i) =>
+    (lists[i]?.data?.sends ?? []).filter((s) => s.direction === 'out' && s.status === 'awaiting_owner').map((s) => ({ a, s })),
   )
+  return { waiting, failed: lists.some((l) => l.isError) }
 }
