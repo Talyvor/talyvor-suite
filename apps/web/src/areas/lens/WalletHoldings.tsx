@@ -17,6 +17,7 @@ import {
   retryMoveThroughRestart,
 } from './agentBankApi'
 import { Note, PanelForm, readFailure } from './WalletMoney'
+import { assertOver } from './passkeys'
 import { WorkspaceLabel } from '../../labels/workspace'
 
 // WalletHoldings.tsx — B22.12: Agent Wallets' escrow (Lens B22.6), pots (B22.7), simulated portfolios and
@@ -554,7 +555,11 @@ export function CashOutCard({ agent }: { agent: Agent }) {
   const micros = parseLXC(amount)
   const ready = micros !== null && destination.trim() !== ''
   const ask = useMutation({
-    mutationFn: () => agentBankApi.requestCashOut(agent.id, micros ?? 0, destination.trim()),
+    mutationFn: async () => {
+      const c = await agentBankApi.cashOutChallenge(agent.id, micros ?? 0, destination.trim())
+      const assertion = (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined
+      return agentBankApi.requestCashOut(agent.id, micros ?? 0, destination.trim(), assertion)
+    },
     onSuccess: () => setAmount(''),
     onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: CASH_OUTS_KEY }), qc.invalidateQueries({ queryKey: BOOK_KEY })]),
   })

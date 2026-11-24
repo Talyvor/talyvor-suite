@@ -1564,8 +1564,11 @@ export const agentBankApi = {
   cancelOrder: (id: string, pfid: string, oid: string) =>
     send<SimOrder>('POST', `/api/agents/${e(id)}/portfolios/${e(pfid)}/orders/${e(oid)}/cancel`),
   cashOuts: () => getJSON<{ cash_outs: CashOut[] | null }>('/api/wallets/cash-outs', { cash_outs: 'list' }),
-  requestCashOut: (id: string, amount_ulxc: number, destination: string) =>
-    send<CashOut>('POST', `/api/agents/${e(id)}/cash-outs`, { amount_ulxc, destination }),
+  // B28.67 — a cash-out is signed with a passkey or the phone's key over Lens B28.339's challenge for that amount and destination.
+  cashOutChallenge: (id: string, amount_ulxc: number, destination: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/cash-out-challenge`, { amount_ulxc, destination }),
+  requestCashOut: (id: string, amount_ulxc: number, destination: string, assertion?: PasskeyAssertion) =>
+    send<CashOut>('POST', `/api/agents/${e(id)}/cash-outs`, { amount_ulxc, destination, assertion }),
   // B30.97 — invoices from an agent's currency account and their pay page (Lens B30.20), and the accounts they are paid into (B30.13).
   moneyAccounts: () => getJSON<{ accounts: CurrencyAccount[] | null }>('/api/money/accounts', { accounts: 'list' }),
   openMoneyAccount: (currency: string, agent_id: string) => send<CurrencyAccount>('POST', '/api/money/accounts', { currency, agent_id }),

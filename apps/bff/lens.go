@@ -727,7 +727,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/portfolios/{pfid}/orders", a.requireTenant(a.handlePortfolioOrder))
 	a.mux.HandleFunc("/api/agents/{id}/portfolios/{pfid}/orders/{oid}/cancel", a.requireTenant(a.handlePortfolioOrderCancel))
 	a.mux.HandleFunc("/api/wallets/cash-outs", a.requireTenant(a.handleCashOuts))
-	a.mux.HandleFunc("/api/agents/{id}/cash-outs", a.requireTenant(a.handleAgentCashOut))
+	a.mux.HandleFunc("/api/agents/{id}/cash-outs", a.requireTenant(a.handleAgentCashOut(false)))
+	a.mux.HandleFunc("/api/agents/{id}/cash-out-challenge", a.requireTenant(a.handleAgentCashOut(true))) // B28.67
 	// B20.3 — the marketplace: browse, publish, use a listing, and what the seller earned. See marketplace.go.
 	a.mux.HandleFunc("/api/marketplace/listings", a.requireTenant(a.handleMarketListings))
 	a.mux.HandleFunc("/api/marketplace/listings/{id}", a.requireTenant(a.handleMarketListing))

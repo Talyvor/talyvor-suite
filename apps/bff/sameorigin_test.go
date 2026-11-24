@@ -365,6 +365,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/x1/portfolios/x1/orders", body: `{"instrument":"EUR","side":"buy","type":"market","quantity_micros":1}`},
 		{method: http.MethodPost, path: "/api/agents/x1/portfolios/x1/orders/x1/cancel", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/x1/cash-outs", body: `{"amount_ulxc":1,"destination":"test"}`},
+		{method: http.MethodPost, path: "/api/agents/x1/cash-out-challenge", body: `{"amount_ulxc":1,"destination":"test"}`}, // B28.67
 		// B19.24 — issuing an agent its test-mode card.
 		{method: http.MethodPost, path: "/api/agents/x1/card", body: `{"first_name":"a","last_name":"b","line1":"c","city":"d","postal_code":"e"}`},
 		{method: http.MethodPost, path: "/api/marketplace/payouts/connect", body: `{"country":"GB"}`},
