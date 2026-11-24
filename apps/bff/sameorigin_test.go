@@ -300,6 +300,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payments/challenge", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`}, // B54.35
 		{method: http.MethodPost, path: "/api/money/instant-transfers/quote", body: `{"send_minor":100,"send_currency":"USD","receive_currency":"EUR","to":"talyvor_account"}`},                 // B59.19
 		{method: http.MethodPost, path: "/api/agents/x1/instant-transfers", body: `{"quote_id":"itq_1","to_account_id":"macc_1"}`},                                                              // B59.19
+		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends/quote", body: `{"to":"0x1","network":"base","token":"USDC","amount_minor":100}`},                                           // B48.36
+		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends", body: `{"to":"0x1","network":"base","token":"USDC","amount_minor":100}`},                                                 // B48.36
+		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends/s1/approve", body: `{"test_amount_minor":1}`},                                                                              // B48.36
+		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends/s1/decline", body: `{}`},                                                                                                   // B48.36
 		{method: http.MethodPost, path: "/api/money/accounts/x1/top-up", body: `{"amount_minor":100}`},                                                                                          // B59.52
 		{method: http.MethodPost, path: "/api/money/accounts/x1/withdraw/challenge", body: `{"payee_id":"x1","amount_minor":100}`},                                                              // B59.52
 		{method: http.MethodPost, path: "/api/money/accounts/x1/withdraw", body: `{"payee_id":"x1","amount_minor":100}`},                                                                        // B59.52

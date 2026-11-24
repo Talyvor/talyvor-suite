@@ -537,7 +537,13 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts", a.requireTenant(a.handleAgentRuleBoosts))          // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts/{rule}", a.requireTenant(a.handleAgentRuleBoostEnd)) // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/wallet", a.requireTenant(a.handleAgentWallet))                    // B46.9
-	a.mux.HandleFunc("/api/agents/{id}/summary", a.requireTenant(a.handleAgentSummary))                  // B57.20
+	// B48.36 — Send USDC from the agent's crypto wallet (Lens B48.9). See crypto_sends.go.
+	a.mux.HandleFunc("/api/agents/{id}/smart-account", a.requireTenant(a.handleAgentSmartAccount))
+	a.mux.HandleFunc("/api/agents/{id}/crypto-sends", a.requireTenant(a.handleCryptoSends))
+	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/quote", a.requireTenant(a.handleCryptoSendQuote))
+	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/{sid}/approve", a.requireTenant(a.handleCryptoSendApprove))
+	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/{sid}/decline", a.requireTenant(a.handleCryptoSendDecline))
+	a.mux.HandleFunc("/api/agents/{id}/summary", a.requireTenant(a.handleAgentSummary)) // B57.20
 	a.mux.HandleFunc("/api/agents/{id}/statement", a.requireTenant(a.handleAgentStatement))
 	a.mux.HandleFunc("/api/agents/statement", a.requireTenant(a.handleBankStatement))       // B19.22
 	a.mux.HandleFunc("/api/agents/{id}/analytics", a.requireTenant(a.handleAgentAnalytics)) // B28.53

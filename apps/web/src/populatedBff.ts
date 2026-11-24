@@ -880,6 +880,9 @@ const BY_PATH: Record<string, unknown> = {
   },
   // B46.9 — the Researcher's wallet on the money layer, served by the sandbox: nothing to pay into yet.
   // B57.18 — the Writer's wallet, as Home reads every agent's in a workspace that holds coins.
+  // B48.36 — the agents' crypto sends: none waiting, none sent yet.
+  '/api/agents/agt_writer/crypto-sends': { sends: [] },
+  '/api/agents/agt_research/crypto-sends': { sends: [] },
   '/api/agents/agt_writer/wallet': { account_id: 'macc_writer', agent_id: 'agt_writer', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' },
   '/api/agents/agt_research/wallet': {
     account_id: 'macc_research',
