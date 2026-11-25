@@ -243,7 +243,7 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
         </>,
       )}
       {panel('credit', 'Credit line', <CreditLinePanel />)}
-      {panel('wallet', nWallets > 1 ? `${name}’s wallets` : `${name}’s wallet`, <AgentMoneyWalletCard agent={agent} />)}
+      {panel('wallet', nWallets > 1 ? `${name}’s wallets` : `${name}’s wallet`, <AgentMoneyWalletCard agent={agent} agents={agents} />)}
       {panel('crypto-send', 'Send USDC', <AgentCryptoSend agent={agent} agents={agents} />)}
       {panel('investing', 'Investing, simulated', <Portfolios agent={agent} />)}
     </Card>

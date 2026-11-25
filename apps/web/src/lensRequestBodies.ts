@@ -1399,6 +1399,38 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/crypto-sends/{sendID}/"+answer, func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensCryptoSendApproveBody",
   },
+  // B48.47 — an agent's crypto wallet topped up or cashed out (Lens B48.8), and asked to be paid (Lens B48.10).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/wallet-moves/quote",
+    file: "apps/bff/agent_wallet_moves.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleWalletMoveQuote(",
+    anchor: "var in struct {",
+    upstreamFile: "internal/economy/agent_wallet_moves.go",
+    upstreamAnchor: "type WalletMoveRequest struct {",
+    subject: "lensWalletMoveQuoteBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/wallet-moves/{moveID}/confirm",
+    file: "apps/bff/agent_wallet_moves.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleWalletMoveConfirm(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/wallet-moves/{moveID}/confirm", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWalletMoveConfirmBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/crypto-requests",
+    file: "apps/bff/agent_wallet_moves.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleAgentCryptoRequests(",
+    anchor: "var in struct {",
+    upstreamFile: "internal/economy/crypto_payment_requests.go",
+    upstreamAnchor: "type CryptoRequestIn struct {",
+    subject: "lensCryptoRequestBody",
+  },
   // B59.52 — Wallets' top up, withdraw and convert, for the web and the phone (Lens B17.255 and B59.51).
   {
     route: "POST /v1/money/accounts/{id}/test-money",

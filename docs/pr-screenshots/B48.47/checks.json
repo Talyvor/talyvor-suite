@@ -1,0 +1,45 @@
+[
+  { "route": "/agents/agt_research", "steps": ["Its wallet", "Top up"] },
+  { "route": "/agents/agt_research", "steps": ["Its wallet", "Cash out"] },
+  {
+    "route": "/agents/agt_research",
+    "steps": ["Its wallet", "Request"],
+    "answers": {
+      "/api/agents/agt_research/crypto-requests": {
+        "requests": [
+          { "id": "creq_1", "token": "USDC", "network": "base", "pay_to": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "amount_minor": 40000000, "memo": "October research report",
+            "expires_at": "2026-10-29T09:30:00Z", "status": "open", "received_minor": 0, "remaining_minor": 40000000, "created_at": "2026-10-22T09:00:00Z",
+            "link": "https://app.talyvor.com/pay/creq_1", "uri": "ethereum:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913@8453/transfer?address=0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed&uint256=40000000" },
+          { "id": "creq_0", "token": "USDC", "network": "base", "pay_to": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "amount_minor": 12500000, "memo": "Data pull for Sales",
+            "expires_at": "2026-10-20T09:30:00Z", "status": "paid", "received_minor": 12500000, "remaining_minor": 0, "created_at": "2026-10-13T09:00:00Z",
+            "link": "https://app.talyvor.com/pay/creq_0", "uri": "ethereum:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913@8453/transfer" }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": ["Its wallet", "Activity"],
+    "answers": {
+      "/api/agents/agt_research/wallet/activity": {
+        "lines": [
+          { "entry_id": "e3", "line": 1, "at": "2026-10-21T15:10:00Z", "account_id": "macc_research", "account_name": "chain:base", "currency": "USDC", "kind": "chain_deposit",
+            "amount_minor": 12500000, "counterparty": "0x1111111111111111111111111111111111111111", "ref": "0xabababababababababababababababababababababababababababababababab:4", "memo": "Data pull for Sales", "balance_after_minor": 2500000 },
+          { "entry_id": "e2", "line": 1, "at": "2026-10-19T11:00:00Z", "account_id": "macc_research", "account_name": "sandbox", "currency": "USDC", "kind": "wallet_cash_out", "amount_minor": -20000000, "balance_after_minor": -10000000 },
+          { "entry_id": "e1", "line": 1, "at": "2026-10-14T09:00:00Z", "account_id": "macc_research", "account_name": "sandbox", "currency": "USDC", "kind": "wallet_top_up", "amount_minor": 10000000, "balance_after_minor": 10000000 }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": ["Its wallet", "Statements"],
+    "answers": {
+      "/api/agents/agt_research/wallet/statement": {
+        "from": "2026-10-01T00:00:00Z", "to": "2026-11-01T00:00:00Z",
+        "accounts": [{ "account_id": "macc_research", "account_name": "sandbox", "currency": "USDC", "opening_minor": 0, "in_minor": 22500000, "out_minor": 20000000, "closing_minor": 2500000 }],
+        "lines": []
+      }
+    }
+  }
+]
