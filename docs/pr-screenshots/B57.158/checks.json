@@ -1,0 +1,4 @@
+[
+  { "route": "/settings/connect", "steps": ["Sign out everywhere"] },
+  { "route": "/settings/connect", "steps": ["Sign out everywhere"], "dark": true }
+]
