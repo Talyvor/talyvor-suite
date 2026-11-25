@@ -1431,6 +1431,28 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "type CryptoRequestIn struct {",
     subject: "lensCryptoRequestBody",
   },
+  // B48.48 — an agent's Limits and permissions, prepared and then kept signed by the owner's passkey (Lens B48.3).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/spend-permission/prepare",
+    file: "apps/bff/agent_spend_permission.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleAgentSpendPermissionPrepare(",
+    anchor: "var in struct {",
+    upstreamFile: "internal/money/smartaccount/permission.go",
+    upstreamAnchor: "type Permission struct {",
+    subject: "lensSpendPermissionPrepareBody",
+  },
+  {
+    route: "PUT /v1/workspaces/{wsID}/agents/{agentID}/spend-permission",
+    file: "apps/bff/agent_spend_permission.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleAgentSpendPermission(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/agents/{agentID}/spend-permission", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendPermissionSetBody",
+  },
   // B59.52 — Wallets' top up, withdraw and convert, for the web and the phone (Lens B17.255 and B59.51).
   {
     route: "POST /v1/money/accounts/{id}/test-money",

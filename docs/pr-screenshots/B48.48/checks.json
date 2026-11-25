@@ -1,0 +1,15 @@
+[
+  {
+    "route": "/agents/agt_research",
+    "steps": ["Its wallet", "Limits and permissions"],
+    "answers": {
+      "/api/agents/agt_research/spend-permission": {
+        "number": 3, "account": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "canonical": "{}", "credential_id": "Y3JlZDE", "signed_by": "u1", "signed_at": "2026-10-20T09:00:00Z",
+        "permission": {
+          "tokens": [{ "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "allowance": 50000000, "period": "week", "per_payment": 10000000 }],
+          "allowed": [], "blocked": ["0x2222222222222222222222222222222222222222"], "expires": "2027-06-30T23:59:59Z"
+        }
+      }
+    }
+  }
+]
