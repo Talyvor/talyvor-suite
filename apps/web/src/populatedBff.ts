@@ -908,6 +908,12 @@ const BY_PATH: Record<string, unknown> = {
     receive: { asset: 'USDC' },
     mode: 'TEST',
   },
+  // B48.18 — the Researcher's wallets: a crypto agent, so the one above.
+  '/api/agents/agt_research/wallets': {
+    agent_id: 'agt_research',
+    wallet_kind: 'crypto',
+    wallets: [{ account_id: 'macc_research', agent_id: 'agt_research', asset: 'USDC', partner: 'sandbox', balance_minor: 2_500_000, receive: { asset: 'USDC' }, mode: 'TEST' }],
+  },
   // B28.31 — the Researcher's rules history: saved with a 5 LXC daily limit, then a person asked to approve above 2 LXC.
   '/api/agents/agt_research/rules/history': {
     versions: [

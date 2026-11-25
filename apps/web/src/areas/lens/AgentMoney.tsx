@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card, Dialog, Icon, KindTile, Money, pocketFocusRing, type IconName } from '@talyvor/ui/pocket'
 import { IfArea } from '../../lib/workspaceAreas'
-import { walletKey, AgentMoneyWalletCard } from './AgentMoneyWallet'
+import { Holds, walletsKey, AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { AgentCryptoSend } from './AgentCryptoSend'
 import { type Agent, agentBankApi, useAccount } from './agentBankApi'
 import { CASH_OUTS_KEY, CashOutCard, CashOuts, ESCROWS_KEY, Escrows, PayIntoEscrow, Portfolios, Pots, potsKey } from './WalletHoldings'
@@ -70,7 +70,8 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
   const escrows = useQuery({ queryKey: ESCROWS_KEY, queryFn: agentBankApi.escrows })
   const cashOuts = useQuery({ queryKey: CASH_OUTS_KEY, queryFn: agentBankApi.cashOuts })
   const credit = useQuery({ queryKey: CREDIT_KEY, queryFn: agentBankApi.creditLine })
-  const wallet = useQuery({ queryKey: walletKey(id), queryFn: () => agentBankApi.wallet(id) })
+  const wallets = useQuery({ queryKey: walletsKey(id), queryFn: () => agentBankApi.wallets(id) })
+  const nWallets = wallets.data?.wallets.length ?? 1
   const nRequests = (requests.data?.requests ?? []).filter((r) => r.from_agent_id === id || r.to_agent_id === id).length
   const nTransfers = (transfers.data?.transfers ?? []).length
   const nPots = (pots.data?.pots ?? []).length
@@ -171,11 +172,12 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
         <MoneyRow
           testId="money-row-wallet"
           icon="payments"
-          title="Its wallet"
+          title={nWallets > 1 ? 'Its wallets' : 'Its wallet'}
           line={
-            wallet.data ? (
+            wallets.data && nWallets > 0 ? (
               <>
-                {name} holds <Money minor={wallet.data.balance_minor} currency="USDC" />: add money to it{shows?.bankTransfers ? ', or send to a saved payee' : ''}
+                {name} holds <Holds wallets={wallets.data} />: add money to {nWallets > 1 ? 'them' : 'it'}
+                {shows?.bankTransfers ? ', or send to a saved payee' : ''}
               </>
             ) : (
               `What ${name} holds, and how to add money to it`
@@ -241,7 +243,7 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
         </>,
       )}
       {panel('credit', 'Credit line', <CreditLinePanel />)}
-      {panel('wallet', `${name}’s wallet`, <AgentMoneyWalletCard agent={agent} />)}
+      {panel('wallet', nWallets > 1 ? `${name}’s wallets` : `${name}’s wallet`, <AgentMoneyWalletCard agent={agent} />)}
       {panel('crypto-send', 'Send USDC', <AgentCryptoSend agent={agent} agents={agents} />)}
       {panel('investing', 'Investing, simulated', <Portfolios agent={agent} />)}
     </Card>

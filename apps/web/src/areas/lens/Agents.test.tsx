@@ -18,7 +18,7 @@ const PRICING = {
   plan_gates: { order: ['free', 'team', 'business'], plans: { free: { agents: 3 }, team: { agents: 25 }, business: { agents: -1 } } },
 }
 
-function mockBff({ agents, plan, create }: { agents: ReturnType<typeof agent>[]; plan: { plan: string; agents: number; agents_used: number }; create?: () => Response }) {
+function mockBff({ agents, plan, create, account }: { agents: ReturnType<typeof agent>[]; plan: { plan: string; agents: number; agents_used: number }; create?: () => Response; account?: { account_type: string; money_kind: string } }) {
   const sent: Array<{ method: string; url: string; body: Record<string, unknown> }> = []
   const rules: Record<string, Record<string, unknown>> = {}
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -33,6 +33,7 @@ function mockBff({ agents, plan, create }: { agents: ReturnType<typeof agent>[];
     if (url === '/api/plan' && !('seats' in plan)) return json({ ...plan, seats: 1 })
     if (url === '/api/plan') return json(plan)
     if (url === '/api/pricing') return json(PRICING)
+    if (url === '/api/workspace/account' && account) return json(account) // B48.18
     // B61.13 — the peg New agent reads its dollars at, and the saved payees More rules offers.
     if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [], usd_per_lxc: 0.1 })
     if (url === '/api/money/payees') return json({ payees: [{ id: 'pye_1', name: 'Hetzner', country: 'DE' }] })
@@ -211,6 +212,35 @@ describe('New agent (B61.13)', () => {
     const put = sent.find((s) => s.method === 'PUT')!.body
     // Lens asks above its smallest amount: the first payment, of any size, waits for approval.
     expect(put).toMatchObject({ currency: 'USD', max_per_payment_minor: 0, daily_limit_minor: 0, monthly_limit_minor: 0, approval_above_minor: 1, allowed_payees: ['pye_1'] })
+  })
+
+  // B48.18 — a Hybrid account asks which wallets a new agent opens with; a Fiat only one opens its own and asks nothing.
+  it('in a Hybrid account asks Fiat, crypto or both?, and Both creates the agent with both wallets', async () => {
+    const { sent } = mockBff({ agents: [agent('agt_1', 'Books')], plan: { plan: 'free', agents: 3, agents_used: 1 }, account: { account_type: 'business', money_kind: 'hybrid' } })
+    await openNewAgent()
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Treasurer' } })
+    const kinds = await within(dialog).findByRole('group', { name: 'Fiat, crypto or both?' })
+    expect(within(kinds).getAllByRole('button').map((b) => b.textContent)).toEqual(['Fiat', 'Crypto', 'Both'])
+    fireEvent.click(within(kinds).getByRole('button', { name: 'Crypto' }))
+    fireEvent.click(within(kinds).getByRole('button', { name: 'Both' }))
+    expect(within(kinds).getByRole('button', { name: 'Both' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))
+    expect(sent[0]).toMatchObject({ method: 'POST', url: '/api/agents', body: { name: 'Treasurer', wallet_kind: 'both' } })
+  })
+
+  it('in a Fiat only account asks no kind and sends none', async () => {
+    const { sent } = mockBff({ agents: [agent('agt_1', 'Books')], plan: { plan: 'free', agents: 3, agents_used: 1 }, account: { account_type: 'business', money_kind: 'fiat' } })
+    await openNewAgent()
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Payroll' } })
+    expect(within(dialog).queryByRole('group', { name: 'Fiat, crypto or both?' })).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))
+    expect(sent[0].body).not.toHaveProperty('wallet_kind')
   })
 
   // B61.64 — More rules names the merchant categories it may pay in by card; the summary says them in words.

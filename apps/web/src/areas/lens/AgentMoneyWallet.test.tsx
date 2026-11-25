@@ -24,7 +24,7 @@ function mockBff(wallet: unknown) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
-    if (url === '/api/agents/agt_1/wallet') return json(wallet)
+    if (url === '/api/agents/agt_1/wallets') return json(Array.isArray(wallet) ? { agent_id: 'agt_1', wallet_kind: 'both', wallets: wallet } : { agent_id: 'agt_1', wallet_kind: 'crypto', wallets: [wallet] })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/money/payees')
@@ -83,6 +83,21 @@ describe('the agent’s money-layer wallet', () => {
     expect(within(card).getByRole('img', { name: /QR code/ }).querySelector('path')?.getAttribute('d')).toMatch(/^M\d/)
     fireEvent.click(within(card).getByRole('button', { name: 'Copy address' }))
     expect(writeText).toHaveBeenCalledWith(ADDRESS)
+  })
+
+  // B48.18 — a "both" agent owns two wallets (Lens B48.1): each shows its balance and how to add money to it.
+  it('of a "both" agent shows its fiat wallet and its USDC wallet, each with its own details', async () => {
+    const fiat = { ...LIVE_IBAN, asset: 'EUR', balance_minor: 1_000, payment_reference: 'TLV-RESEARCHER' }
+    const { writeText } = mockBff([fiat, LIVE_ADDRESS])
+    const card = await screen.findByTestId('agent-money-wallet')
+    await waitFor(() => expect(within(card).getByText(/^Researcher holds/).textContent).toMatch(/^Researcher holds €10\.00 and 2\.50\sUSDC\.$/))
+    const eur = within(card).getByRole('region', { name: 'Its EUR wallet' })
+    expect(within(eur).getByText('FR7630006000011234567890189')).toBeTruthy()
+    fireEvent.click(within(eur).getByRole('button', { name: 'Copy reference' }))
+    expect(writeText).toHaveBeenCalledWith('TLV-RESEARCHER')
+    const usdc = within(card).getByRole('region', { name: 'Its USDC wallet' })
+    expect(within(usdc).getByText(ADDRESS)).toBeTruthy()
+    expect(within(usdc).getByText(/Send USDC on Base to this address/)).toBeTruthy()
   })
 
   it('from a live e-money partner shows the IBAN in the holder’s name and copies it', async () => {

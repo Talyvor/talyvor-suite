@@ -1260,12 +1260,14 @@ export const agentBankApi = {
   /** B57.124 — with the colour of the helper its owner picked; without one, Lens picks. */
   /** B61.87 — with fiat_currency (GBP, EUR or USD), its own account is opened in that currency; Lens picks one otherwise. */
   /** B61.102 — or with one of the twenty pictures, which sets its colour. */
-  create: (name: string, look: { colour?: string; picture?: string } = {}, fiat_currency?: string) =>
+  /** B48.18 — and with wallet_kind, fiat, crypto or both, the wallets it opens with; Lens opens the account's kind otherwise. */
+  create: (name: string, look: { colour?: string; picture?: string } = {}, fiat_currency?: string, wallet_kind?: WalletKind) =>
     send<Agent>('POST', '/api/agents', {
       name,
       ...(look.colour ? { colour: look.colour } : {}),
       ...(look.picture ? { picture: look.picture } : {}),
       ...(fiat_currency ? { fiat_currency } : {}),
+      ...(wallet_kind ? { wallet_kind } : {}),
     }),
   /** B46.16 — the workspace's name (Lens B46.15): asked at sign-up on Home's first-agent card, shown in the sidebar. */
   workspaceName: () => getJSON<{ id: string; name: string }>('/api/workspace/name', { name: 'string' }),
@@ -1311,6 +1313,8 @@ export const agentBankApi = {
     getJSON<SpendAnalytics>(`/api/agents/${e(id)}/analytics?${new URLSearchParams({ from })}`, { buckets: 'list', out_ulxc: 'number', returned_ulxc: 'number', spent_ulxc: 'number' }),
   /** B46.9 — the agent's wallet on the money layer (Lens B46.4): its balance and how to pay into it. */
   wallet: (id: string) => getSaid<AgentMoneyWallet>(`/api/agents/${e(id)}/wallet`),
+  /** B48.18 — every wallet it owns, one of each kind it is (Lens B48.1), each with its balance and how to pay into it. */
+  wallets: (id: string) => getSaid<AgentWallets>(`/api/agents/${e(id)}/wallets`),
   statementFile,
   /** B56.15 — what the agent put on its company's marketplace bill in [from, to) (Lens B56.14); its balance moves not. */
   marketplaceBill: (id: string, from: string, to: string) =>
@@ -1859,6 +1863,19 @@ export interface AgentMoneyWallet {
   /** TEST while the sandbox serves it: its details are made up and there is nothing to pay into */
   mode: 'TEST' | 'LIVE'
   notice?: string
+  /** B48.1 — quoted with receive when they are the owner's details, not the wallet's own */
+  payment_reference?: string
+}
+
+/** B48.18 — an agent is fiat, crypto or both, and owns one wallet of each kind it is (Lens B48.1). */
+export type WalletKind = 'fiat' | 'crypto' | 'both'
+
+/** Lens economy.AgentWallets: the agent's kind and its wallets, the fiat one first. */
+export interface AgentWallets {
+  agent_id: string
+  wallet_kind: WalletKind
+  fiat_currency?: string
+  wallets: AgentMoneyWallet[]
 }
 
 export interface OutsidePayee {

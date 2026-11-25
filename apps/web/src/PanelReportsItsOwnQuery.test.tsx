@@ -120,6 +120,7 @@ function bodyFor(url: string): unknown {
   if (url.includes('/api/agents/briefing')) return { items: [], spent_yesterday: [], quiet: true, line: 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.' }
   // B57.18 — Home's balances, the Researcher's wallet and the plan.
   if (url.includes('/api/money/accounts')) return { accounts: [] }
+  if (url === '/api/agents/agt_1/wallets') return { agent_id: 'agt_1', wallet_kind: 'crypto', wallets: [{ account_id: 'macc_1', agent_id: 'agt_1', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' }] } // B48.18
   if (url.includes('/api/agents/agt_1/wallet')) return { account_id: 'macc_1', agent_id: 'agt_1', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' }
   if (url.includes('/api/plan')) return { plan: 'free', agents: 3, agents_used: 1, seats: 1 }
   if (url.includes('/api/agents/agt_1/rules'))

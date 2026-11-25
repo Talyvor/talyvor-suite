@@ -17,7 +17,7 @@ import { AGENT_KINDS, EVERY_PAYMENT_ASKS_MINOR, type AgentKindChoice, type Sugge
 import { CURRENCY_WORDS, parseRuleAmount, useAccountCurrency } from './rulesCurrency'
 import { PAYEES_KEY } from './Pay'
 import { MERCHANT_CATEGORIES, merchantCategoriesText } from './merchantCategories'
-import { type Agent, type AgentRulesSave, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText } from './agentBankApi'
+import { type Agent, type AgentRulesSave, type WalletKind, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText, useAccount } from './agentBankApi'
 
 // Agents.tsx — B57.19: /agents as Pocket's w-agents. The workspace's total, split between its agents and what is free to
 // fund them; Statements and New agent; one AgentCard (B57.16) per agent, each opening its own page; and a room's wallet,
@@ -87,6 +87,13 @@ function LimitReached({ at, names, onClose }: { at: AtLimit; names: string[]; on
     </>
   )
 }
+
+/** B48.18 — the wallets a new agent opens with, asked only where the account holds both kinds of money (Hybrid). */
+const WALLET_KINDS: { kind: WalletKind; name: string }[] = [
+  { kind: 'fiat', name: 'Fiat' },
+  { kind: 'crypto', name: 'Crypto' },
+  { kind: 'both', name: 'Both' },
+]
 
 const pick = cn('inline-flex h-8.5 items-center gap-2 whitespace-nowrap rounded-pill bg-cloud px-3.5 text-body font-semibold text-ink aria-pressed:bg-page aria-pressed:shadow-pick', pocketFocusRing)
 // A row button the whole of which presses: its button holds only the name, one line, and stretches over the row.
@@ -234,6 +241,9 @@ function Details({
   const [more, setMore] = useState(false)
   const [payees, setPayees] = useState<string[]>([])
   const [merchants, setMerchants] = useState<string[]>([])
+  const [walletKind, setWalletKind] = useState<WalletKind>('both')
+  // B48.18 — a Fiat only or Stablecoin and crypto only account opens its own kind's wallet; Lens refuses another.
+  const asksKind = useAccount().account?.money_kind === 'hybrid'
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const saved = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees, retry: false, enabled: more })
   const payeeChoices = [
@@ -246,7 +256,8 @@ function Details({
   const create = useMutation({
     mutationFn: async (r: AgentRulesSave) => {
       // B61.87 — the agent's own account is opened in the account's currency, the one its rules are typed in.
-      const a = await agentBankApi.create(name.trim(), picture ? lookFor(picture) : {}, r.currency === 'USDC' ? undefined : r.currency)
+      // B48.18 — and with the wallets the owner chose, which Lens opens at once.
+      const a = await agentBankApi.create(name.trim(), picture ? lookFor(picture) : {}, r.currency === 'USDC' ? undefined : r.currency, asksKind ? walletKind : undefined)
       const unsaved: string[] = []
       if (does.trim() !== '') {
         try {
@@ -323,6 +334,18 @@ function Details({
       <Field label="Name">
         <Input placeholder="Agent name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
+      {asksKind ? (
+        <div className="grid gap-1.5">
+          <span className="text-body font-semibold text-ink-2">Fiat, crypto or both?</span>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Fiat, crypto or both?" data-testid="new-agent-wallet-kind">
+            {WALLET_KINDS.map((k) => (
+              <button key={k.kind} type="button" className={pick} aria-pressed={walletKind === k.kind} onClick={() => setWalletKind(k.kind)}>
+                {k.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {ours ? null : (
         <>
           <div className="grid gap-1.5">

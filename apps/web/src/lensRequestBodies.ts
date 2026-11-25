@@ -287,12 +287,12 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/workspaces/{wsID}/roles", keyOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensWorkspaceRoleBody",
   },
-  // B19.4 — the Agent Bank: creating an agent (B57.124: with its helper's colour; B61.102: or its picture), issuing it a key, moving LXC, its rules, paying.
+  // B19.4 — the Agent Bank: creating an agent (B57.124: with its helper's colour; B61.102: or its picture; B48.18: fiat, crypto or both), issuing it a key, moving LXC, its rules, paying.
   {
     route: "POST /v1/workspaces/{wsID}/agents",
     file: "apps/bff/agent_bank.go",
     kind: "map-literal",
-    anchor: 'json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "picture": in.Picture, "fiat_currency": in.FiatCurrency})',
+    anchor: 'json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "picture": in.Picture, "fiat_currency": in.FiatCurrency, "wallet_kind": in.WalletKind})',
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor:
       'r.Post("/v1/workspaces/{wsID}/agents", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',

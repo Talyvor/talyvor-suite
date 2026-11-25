@@ -7,7 +7,7 @@ import { Note, PanelForm, readFailure } from './WalletMoney'
 import { PAYEES_KEY } from './Pay'
 import { CopyButton } from '../chat/CopyButton'
 import { PreparedPayment } from '../chat/PaymentCards'
-import { type Agent, type AgentMoneyWallet, type OutsidePayee, type Shows, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText, useAccount } from './agentBankApi'
+import { type Agent, type AgentMoneyWallet, type AgentWallets, type OutsidePayee, type Shows, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText, useAccount } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { MONEY_WALLET } from '../../labels/capabilities'
 
@@ -18,8 +18,26 @@ import { MONEY_WALLET } from '../../labels/capabilities'
 // B59.10 — by the workspace's kind (account.ts): a Fiat only account renders no address, a Stablecoin and crypto only
 // account no IBAN and no Send, which pays a saved bank payee.
 // B57.21 — a panel in Pocket's fields and <Money>, opened from Its wallet on the agent's page (AgentMoney.tsx).
+// B48.18 — every wallet the agent owns, one of each kind it is (Lens B48.1): a "both" agent's fiat wallet and its USDC
+// wallet, each with its balance and how to add money to it.
 
 export const walletKey = (id: string) => ['agent-money-wallet', id]
+export const walletsKey = (id: string) => ['agent-money-wallets', id]
+
+/** "€10.00 and 2.50 USDC": what the agent holds across its wallets, each figure a <Money>. */
+export function Holds({ wallets }: { wallets: AgentWallets }) {
+  const all = wallets.wallets
+  return (
+    <>
+      {all.map((x, i) => (
+        <span key={x.asset}>
+          {i === 0 ? '' : i === all.length - 1 ? ' and ' : ', '}
+          <Money minor={x.balance_minor} currency={x.asset} />
+        </span>
+      ))}
+    </>
+  )
+}
 
 /** Lens keeps USDC to six decimal places. */
 export const usdcText = (minor: number) => formatMinor(minor, 'USDC')
@@ -83,6 +101,7 @@ function AddMoney({ agent, wallet, shows }: { agent: Agent; wallet: AgentMoneyWa
       {r.holder ? <Detail name="Account holder" value={r.holder} /> : null}
       <Detail name="IBAN" value={r.iban ?? ''} />
       {r.bic ? <Detail name="BIC" value={r.bic} /> : null}
+      {wallet.payment_reference ? <Detail name="Reference" value={wallet.payment_reference} /> : null}
     </div>
   )
 }
@@ -147,26 +166,37 @@ function Send({ agent }: { agent: Agent }) {
   )
 }
 
-/** The agent's wallet: balance, how to add money, and Send. */
+/** The agent's wallets: each one's balance and how to add money to it, then Send. */
 export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
-  const wallet = useQuery({ queryKey: walletKey(agent.id), queryFn: () => agentBankApi.wallet(agent.id) })
+  const wallets = useQuery({ queryKey: walletsKey(agent.id), queryFn: () => agentBankApi.wallets(agent.id) })
   const { shows } = useAccount()
+  const all = wallets.data?.wallets ?? []
   return (
     <div className="grid gap-4" data-testid="agent-money-wallet">
       <WorkspaceLabel capability={MONEY_WALLET} className="justify-self-start" />
-      {wallet.isPending ? (
+      {wallets.isPending ? (
         <p>Reading the wallet…</p>
-      ) : wallet.isError ? (
-        <p>{readFailure(wallet.error, `${agent.name}’s wallet`)}</p>
+      ) : wallets.isError ? (
+        <p>{readFailure(wallets.error, `${agent.name}’s wallet`)}</p>
+      ) : all.length === 0 ? (
+        <p>{agent.name} has no wallet yet.</p>
       ) : (
         <>
           <p className="text-ink">
-            {agent.name} holds <Money minor={wallet.data.balance_minor} currency="USDC" />.
+            {agent.name} holds <Holds wallets={wallets.data} />.
           </p>
-          <section className="grid gap-2" aria-label="Add money">
-            <h3 className="font-semibold text-ink">Add money</h3>
-            {shows ? <AddMoney agent={agent} wallet={wallet.data} shows={shows} /> : null}
-          </section>
+          {all.map((w) => (
+            <section key={w.asset} className="grid gap-2" aria-label={all.length > 1 ? `Its ${w.asset} wallet` : 'Add money'} data-testid={`agent-wallet-${w.asset}`}>
+              {all.length > 1 ? (
+                <h3 className="flex items-baseline justify-between gap-2 font-semibold text-ink">
+                  <span>Its {w.asset} wallet</span>
+                  <Money minor={w.balance_minor} currency={w.asset} />
+                </h3>
+              ) : null}
+              <h3 className={all.length > 1 ? 'text-body font-semibold text-ink-2' : 'font-semibold text-ink'}>Add money</h3>
+              {shows ? <AddMoney agent={agent} wallet={w} shows={shows} /> : null}
+            </section>
+          ))}
         </>
       )}
       {shows?.bankTransfers ? (
