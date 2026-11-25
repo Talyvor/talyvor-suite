@@ -864,6 +864,22 @@ func (a *app) handleAgentCardFreeze(freeze bool) func(http.ResponseWriter, *http
 	}
 }
 
+// handleAgentCardEnd — POST /api/agents/{id}/card/replace and /card/cancel (B28.47, Lens B28.321). Replace: Lens
+// issues a new card to the same cardholder, carrying the old one's freeze and merchant lock, and cancels the old one;
+// 201, the new card. Cancel: the card is cancelled for good and the agent holds none until it is issued another; 200,
+// the cancelled card. A purchase on a cancelled card is declined and nothing leaves the agent.
+func (a *app) handleAgentCardEnd(action string) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		if suffix, ok := agentSuffix(w, r, "card/"+action); ok {
+			a.agentBankRelay(w, r, t, http.MethodPost, suffix, nil)
+		}
+	}
+}
+
 // handleAgentPay — POST /api/agents/{id}/pay: the agent pays another of this workspace's agents,
 // judged by the payer's rules. A payment above its approval amount is refused naming the approval
 // it filed; once a person approves that, the same payment sent again goes through, once.

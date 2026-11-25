@@ -928,6 +928,9 @@ export interface AgentCard {
   /** B28.360 — frozen: Lens declines every purchase on it until it is unfrozen */
   frozen?: boolean
   frozen_at?: string
+  /** B28.47 — cancelled (Lens B28.321): every purchase on it is declined; replaced_by names the card that took its place */
+  cancelled_at?: string
+  replaced_by?: string
 }
 
 /** Lens economy.CardAuthorizationRecord: one purchase on the card, approved or declined by the agent's rules. */
@@ -1371,6 +1374,10 @@ export const agentBankApi = {
   /** B28.360 — every purchase on the agent's card refused until it is unfrozen; Lens answers the card. */
   freezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/freeze`),
   unfreezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/unfreeze`),
+  /** B28.47 — a new card to the same cardholder, with the old one's freeze and merchant lock; the old one is cancelled. */
+  replaceCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/replace`),
+  /** B28.47 — the card, cancelled for good: the agent holds none until it is issued another. */
+  cancelCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/cancel`),
   /** B28.21 — renames the agent and/or sets what it is for, and (B57.124) its helper's colour or (B61.102) its picture; Lens answers the agent. */
   update: (id: string, change: { name?: string; description?: string; colour?: string; face?: string; picture?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
   /** B28.21 — retires the agent: its balance back to the workspace, its keys revoked, its top-up and schedules stopped. */
