@@ -17,8 +17,10 @@ import (
 
 // agentWalletTools are B48.16's tools on Lens's /mcp that an agent's key reaches here (talyvor-lens
 // internal/mcp/agent_wallet_tools.go). wallet_send and wallet_request are the USDC wallet's only with a network: without
-// one Lens reads them as the credit tools, which are not offered here.
-var agentWalletTools = []string{"wallet_list", "wallet_balance", "wallet_receive_details", "wallet_history", "wallet_send", "wallet_request"}
+// one Lens reads them as the credit tools, which are not offered here. B48.46: wallet_topup_link (B48.39) is Lens's too — it
+// asks the agent's owner for a top-up by quote and link, and nothing moves until the owner confirms on Lens.
+var agentWalletTools = []string{"wallet_list", "wallet_balance", "wallet_receive_details", "wallet_history", "wallet_send", "wallet_request",
+	"wallet_topup_link"}
 
 // lensAgentKeyShape is a Lens API key as talyvor-lens internal/auth mints one ("tlv_" and 64 hex characters): an agent's
 // own key is one of these. None of this server's tokens (tlv_oat_…) has the shape.
