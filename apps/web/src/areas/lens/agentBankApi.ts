@@ -3114,7 +3114,8 @@ export function usePersonal(): boolean {
 
 // B48.36 — Send USDC from an agent's crypto wallet (Lens B48.9, the BFF's crypto_sends.go).
 
-/** What is asked to be sent: to a 0x address, on a network, in USDC's six-decimal minor units. */
+/** What is asked to be sent: to a 0x address, a name.eth or a saved name (B48.50), on a network, in USDC's six-decimal
+ *  minor units. */
 export interface CryptoSendRequest {
   to: string
   network: string
@@ -3132,6 +3133,10 @@ export interface CryptoSendQuote {
   to_kind: 'agent' | 'address'
   /** another Talyvor agent's trust level: "Verified agent of <business>" or "Unverified agent" */
   to_label?: string
+  /** B48.50 — the name.eth `to` was resolved from, on the network's own registry */
+  ens_name?: string
+  /** B48.50 — the name the owner saved `to` under */
+  saved_name?: string
   /** the workspace never paid it: a send the agent asks for waits for the owner */
   new_address: boolean
   /** the most the network fee can be, in wei of the network's coin */
@@ -3156,20 +3161,51 @@ export interface CryptoSend extends CryptoSendQuote {
   updated_at: string
 }
 
+/** B48.50 — an address the owner saved and named (Lens economy.CryptoAddress). */
+export interface CryptoAddress {
+  id: string
+  name: string
+  address: string
+  saved_by: string
+  created_at: string
+  updated_at: string
+}
+
+/** What the owner's send or yes is signed over; no credentials while the workspace signs nothing yet. */
+export interface CryptoSendChallenge {
+  challenge: string
+  allow_credentials: string[] | null
+  /** the send's own challenge names the quote it binds: the address `to` resolved to and the amount */
+  quote?: CryptoSendQuote
+}
+
 export const cryptoSendApi = {
   /** The agent's crypto wallet, for its address; 404 while it has none. */
   smartAccount: (id: string) => getSaid<{ agent_id: string; address: string }>(`/api/agents/${e(id)}/smart-account`),
   /** Nothing moves: the amount, the most the fee can be and who pays it, the arrival and who it is. */
   quote: (id: string, body: CryptoSendRequest) => send<CryptoSendQuote>('POST', `/api/agents/${e(id)}/crypto-sends/quote`, body),
+  /** B48.50 — what the owner's send is signed over, under the same body and `key` as the send. */
+  challenge: (id: string, body: CryptoSendRequest, key: string) =>
+    send<CryptoSendChallenge>('POST', `/api/agents/${e(id)}/crypto-sends/challenge`, body, { 'Idempotency-Key': key }),
   /** Sent once however many times `key` arrives: a retry after no answer sends the same one again. */
-  send: (id: string, body: CryptoSendRequest, key: string) =>
-    send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends`, body, { 'Idempotency-Key': key }),
+  send: (id: string, body: CryptoSendRequest, key: string, assertion?: PasskeyAssertion) =>
+    send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends`, assertion ? { ...body, assertion } : body, { 'Idempotency-Key': key }),
   /** What the agent sent and was sent, newest first. */
   list: (id: string) => getSaid<{ sends: CryptoSend[] }>(`/api/agents/${e(id)}/crypto-sends`),
   /** The owner says yes to a send to a new address; with a test amount, that much goes first. */
-  approve: (id: string, sendID: string, testAmountMinor?: number) =>
-    send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends/${e(sendID)}/approve`, testAmountMinor ? { test_amount_minor: testAmountMinor } : {}),
+  approve: (id: string, sendID: string, testAmountMinor?: number, assertion?: PasskeyAssertion) =>
+    send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends/${e(sendID)}/approve`, {
+      ...(testAmountMinor ? { test_amount_minor: testAmountMinor } : {}),
+      ...(assertion ? { assertion } : {}),
+    }),
+  /** B48.50 — what that yes, or its test amount, is signed over. */
+  approveChallenge: (id: string, sendID: string, testAmountMinor?: number) =>
+    send<CryptoSendChallenge>('POST', `/api/agents/${e(id)}/crypto-sends/${e(sendID)}/approve/challenge`, testAmountMinor ? { test_amount_minor: testAmountMinor } : {}),
   decline: (id: string, sendID: string) => send<CryptoSend>('POST', `/api/agents/${e(id)}/crypto-sends/${e(sendID)}/decline`),
+  /** B48.50 — the workspace's saved addresses, by name. */
+  addresses: () => getSaid<{ addresses: CryptoAddress[] | null }>('/api/crypto-addresses'),
+  saveAddress: (name: string, address: string) => send<CryptoAddress>('POST', '/api/crypto-addresses', { name, address }),
+  removeAddress: (addressID: string) => send<unknown>('DELETE', `/api/crypto-addresses/${e(addressID)}`),
 }
 
 /** "2.5" → 2500000: an amount typed in USDC, to its six-decimal minor unit; null when it is not a positive amount. */

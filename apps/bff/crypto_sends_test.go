@@ -96,3 +96,77 @@ func TestCryptoSendsReachLensAsNamed(t *testing.T) {
 		}
 	}
 }
+
+// B48.50 — the owner's send is signed over Lens's challenge, asked under the send's own body and Idempotency-Key; the
+// send and the yes carry the passkey's assertion up as the browser made it (the BFF dropped it before); the yes's
+// challenge carries its test amount and never an assertion; and the saved addresses reach Lens's workspace routes.
+func TestCryptoSendSignaturesAndAddressBookReachLens(t *testing.T) {
+	var mu sync.Mutex
+	got := []string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got = append(got, r.Method+" "+r.URL.Path+" key="+r.Header.Get("Idempotency-Key")+" "+string(raw))
+		mu.Unlock()
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"challenge":"ch_1","allow_credentials":["cred_1"]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	const assertion = `{"credential_id":"cred_1","client_data_json":"cd","authenticator_data":"ad","signature":"sig"}`
+	send := `{"to":"northwind.eth","network":"base","token":"USDC","amount_minor":2500000`
+	for _, c := range []struct{ method, path, key, body string }{
+		{http.MethodPost, "/api/agents/agt_remy/crypto-sends/challenge", "send-1", send + `,"assertion":` + assertion + `}`},
+		{http.MethodPost, "/api/agents/agt_remy/crypto-sends", "send-1", send + `,"assertion":` + assertion + `}`},
+		{http.MethodPost, "/api/agents/agt_remy/crypto-sends/cs_1/approve/challenge", "", `{"test_amount_minor":100000,"assertion":` + assertion + `}`},
+		{http.MethodPost, "/api/agents/agt_remy/crypto-sends/cs_1/approve", "", `{"assertion":` + assertion + `}`},
+		{http.MethodGet, "/api/crypto-addresses", "", ``},
+		{http.MethodPost, "/api/crypto-addresses", "", `{"name":"Treasury","address":"0x00000000000000000000000000000000000000a1","saved_by":"x"}`},
+		{http.MethodDelete, "/api/crypto-addresses/caddr_1", "", ``},
+	} {
+		req := httptest.NewRequest(c.method, c.path, strings.NewReader(c.body))
+		req.Header.Set("Content-Type", "application/json")
+		if c.key != "" {
+			req.Header.Set("Idempotency-Key", c.key)
+		}
+		rec := httptest.NewRecorder()
+		a.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
+			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	want := []struct{ call, body string }{
+		{"POST /agents/agt_remy/crypto-sends/challenge key=send-1", `{"to":"northwind.eth","network":"base","token":"USDC","amount_minor":2500000}`},
+		{"POST /agents/agt_remy/crypto-sends key=send-1", send + `,"assertion":` + assertion + `}`},
+		{"POST /agents/agt_remy/crypto-sends/cs_1/approve/challenge key=", `{"test_amount_minor":100000}`},
+		{"POST /agents/agt_remy/crypto-sends/cs_1/approve key=", `{"assertion":` + assertion + `}`},
+		{"GET /crypto-addresses key=", ``},
+		{"POST /crypto-addresses key=", `{"name":"Treasury","address":"0x00000000000000000000000000000000000000a1"}`},
+		{"DELETE /crypto-addresses/caddr_1 key=", ``},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Lens saw %d calls, want %d:\n  %s", len(got), len(want), strings.Join(got, "\n  "))
+	}
+	for i, w := range want {
+		method, rest, _ := strings.Cut(w.call, " ")
+		path, key, _ := strings.Cut(rest, " ")
+		if !strings.HasPrefix(got[i], method+" /v1/workspaces/") || !strings.Contains(got[i], path+" "+key+" ") {
+			t.Errorf("call %d = %s, want %s", i, got[i], w.call)
+		}
+		if body := got[i][strings.Index(got[i], " key=")+len(" "+key)+1:]; body != w.body {
+			t.Errorf("call %d went up with %s, want %s", i, body, w.body)
+		}
+	}
+}

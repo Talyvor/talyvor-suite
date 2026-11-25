@@ -8,7 +8,8 @@ import { AgentFace } from './AgentFace'
 import { formatWhen } from './format'
 import { ArrivesChip } from './InstantTransfer'
 import { Note, PanelForm, readFailure } from './WalletMoney'
-import { AgentBankError, type Agent, type CryptoSend, type CryptoSendQuote, type CryptoSendRequest, cryptoSendApi, newMoveKey, refusalText, usdcMinorOf } from './agentBankApi'
+import { AgentBankError, type Agent, type CryptoAddress, type CryptoSend, type CryptoSendQuote, type CryptoSendRequest, cryptoSendApi, newMoveKey, refusalText, usdcMinorOf } from './agentBankApi'
+import { assertOver } from './passkeys'
 
 // AgentCryptoSend.tsx — B48.36: Send USDC from an agent's crypto wallet (Lens B48.9). To any 0x address or to another of
 // the workspace's agents, on a network: the quote first (the amount, the most the network fee can be and who pays it,
@@ -19,6 +20,10 @@ import { AgentBankError, type Agent, type CryptoSend, type CryptoSendQuote, type
 // B48.47 — or to a person on Talyvor by their @name, email or phone number, which Lens resolves to the wallet they chose.
 // B57.202 — in Pocket: the quote is W3's quote card (its facts with the amount as the strong row, the ink Arrives chip,
 // the note) and a send waiting for the owner is a w-approvals waiting row, with Review, inside Approvals' Waiting for you.
+// B48.50 — or to a name.eth or a name the owner saved an address under (Lens B48.49), the quote showing the address it
+// resolved to; the owner keeps their saved addresses under Send; and once the workspace has a passkey, the owner's send,
+// and their yes to an agent's send to a new address or its test amount, are signed with it over Lens's challenge for
+// exactly that send. Nothing is signed when the challenge names another address or amount than the one reviewed.
 
 export const cryptoSendsKey = (id: string) => ['agent-crypto-sends', id]
 
@@ -30,8 +35,6 @@ const NETWORKS: { value: string; name: string }[] = [
 const networkName = (n: string) => NETWORKS.find((x) => x.value === n)?.name ?? n
 
 const isAddress = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s.trim())
-/** B48.47 — a person on Talyvor, by @name, email or phone number; Lens answers the wallet they chose, or nobody found. */
-const isHandle = (s: string) => /^@[A-Za-z0-9][A-Za-z0-9_.-]{1,62}$/.test(s.trim()) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim()) || /^\+?[0-9][0-9 ]{6,18}$/.test(s.trim())
 const shortAddress = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a)
 
 /** Wei as the network's coin, to at most six decimals: "0.000042 ETH". */
@@ -75,10 +78,17 @@ function Recipient({ q }: { q: Pick<CryptoSendQuote, 'to' | 'to_kind' | 'to_labe
 }
 
 function QuoteFacts({ q, agent }: { q: CryptoSendQuote; agent: Agent }) {
+  const named = q.saved_name || q.ens_name
   return (
     <Facts
       facts={[
-        { label: 'To', value: <Recipient q={q} /> },
+        // B48.50 — a saved or ENS name is shown with the address it resolved to, which is what is signed and sent to.
+        ...(named
+          ? [
+              { label: 'To', value: <span data-testid="crypto-send-name">{named}</span> },
+              { label: 'Address', value: <span className="break-all font-figure" data-testid="crypto-send-resolved">{q.to}</span> },
+            ]
+          : [{ label: 'To', value: <Recipient q={q} /> }]),
         { label: 'Network', value: networkName(q.network) },
         {
           label: 'Network fee, at most',
@@ -140,8 +150,32 @@ function Receipt({ s }: { s: CryptoSend }) {
 
 /** A send Lens did not answer may have gone: pressing Send again under the same key sends it once, never twice. */
 function sendFailure(err: unknown): string {
+  if (err instanceof DOMException && err.name === 'NotAllowedError') return 'Cancelled. Nothing was sent.'
   return err instanceof AgentBankError && err.status < 500 ? refusalText(err) : 'There was no answer. Press Send again: it is sent once, however many times you press.'
 }
+
+/**
+ * B48.50 — the owner's send, signed with their passkey over Lens's challenge for exactly this body and key once the
+ * workspace has one. The challenge names the address `to` resolves to now; when that, the amount or the network is not
+ * what the owner reviewed, nothing is signed or sent.
+ */
+async function sendSigned(agentID: string, body: CryptoSendRequest, key: string, reviewed: CryptoSendQuote): Promise<CryptoSend> {
+  const c = await cryptoSendApi.challenge(agentID, body, key)
+  const q = c.quote
+  // A name pointed elsewhere since it was reviewed: refused here, as Lens refuses a send that no longer matches.
+  if (q && (q.to.toLowerCase() !== reviewed.to.toLowerCase() || q.amount_minor !== reviewed.amount_minor || q.network !== reviewed.network)) {
+    throw new AgentBankError(409, `/api/agents/${agentID}/crypto-sends/challenge`, `The address changed: ${body.to} now goes to ${q.to}, not the address you reviewed. Nothing was sent: review it again.`)
+  }
+  return cryptoSendApi.send(agentID, body, key, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/** B48.50 — the owner's yes, or their test amount, signed the same way over the challenge naming that answer. */
+async function approveSigned(agentID: string, sendID: string, test?: number): Promise<CryptoSend> {
+  const c = await cryptoSendApi.approveChallenge(agentID, sendID, test)
+  return cryptoSendApi.approve(agentID, sendID, test, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+const answerFailure = (err: unknown) => (err instanceof DOMException && err.name === 'NotAllowedError' ? 'Cancelled. Nothing changed.' : refusalText(err))
 
 /** The owner's answer to a send waiting for them, as w-approvals draws a waiting row: Review opens Approve, Send a test
  *  amount first and Decline. The address is shown in full, so the owner reads the whole of it before approving. */
@@ -153,7 +187,7 @@ export function AwaitingCryptoSend({ agent, s }: { agent: Agent; s: CryptoSend }
   const testMinor = usdcMinorOf(test)
   const answer = useMutation({
     mutationFn: (a: { approve: boolean; test?: number }) =>
-      a.approve ? cryptoSendApi.approve(agent.id, s.id, a.test) : cryptoSendApi.decline(agent.id, s.id),
+      a.approve ? approveSigned(agent.id, s.id, a.test) : cryptoSendApi.decline(agent.id, s.id),
     onSettled: () => qc.invalidateQueries({ queryKey: cryptoSendsKey(agent.id) }),
   })
   const busy = answer.isPending
@@ -212,10 +246,80 @@ export function AwaitingCryptoSend({ agent, s }: { agent: Agent; s: CryptoSend }
               </div>
             </PanelForm>
           ) : null}
-          {answer.isError ? <Note ok={false}>{refusalText(answer.error)}</Note> : null}
+          {answer.isError ? <Note ok={false}>{answerFailure(answer.error)}</Note> : null}
         </div>
       ) : null}
     </div>
+  )
+}
+
+const addressesKey = ['crypto-addresses']
+
+/** B48.50 — the workspace's saved addresses: pressing one sends to it by its name; the owner saves and removes them. */
+function SavedAddresses({ onPick }: { onPick: (name: string) => void }) {
+  const qc = useQueryClient()
+  const book = useQuery({ queryKey: addressesKey, queryFn: cryptoSendApi.addresses, retry: false })
+  const [name, setName] = useState('')
+  const [address, setAddress] = useState('')
+  const saved = () => qc.invalidateQueries({ queryKey: addressesKey })
+  const save = useMutation({
+    mutationFn: () => cryptoSendApi.saveAddress(name.trim(), address.trim()),
+    onSuccess: () => {
+      setName('')
+      setAddress('')
+    },
+    onSettled: saved,
+  })
+  const remove = useMutation({ mutationFn: (a: CryptoAddress) => cryptoSendApi.removeAddress(a.id), onSettled: saved })
+  const busy = save.isPending || remove.isPending
+  const ok = name.trim() !== '' && isAddress(address)
+  const list = book.data?.addresses ?? []
+  return (
+    <section aria-label="Saved addresses" className="grid gap-1" data-testid="crypto-saved-addresses">
+      <h3 className="font-semibold text-ink">Saved addresses</h3>
+      {book.isPending ? (
+        <p className="text-body text-ink-3">Reading…</p>
+      ) : book.isError ? (
+        <p className="text-body text-ink-2">{readFailure(book.error, 'Your saved addresses')}</p>
+      ) : list.length === 0 ? (
+        <p className="text-body text-ink-3">No saved addresses yet.</p>
+      ) : (
+        list.map((a) => (
+          <div key={a.id} className="border-t border-line first:border-t-0">
+            <Row
+              title={
+                <button type="button" className={`font-semibold text-ink ${inlineLink}`} onClick={() => onPick(a.name)}>
+                  {a.name}
+                </button>
+              }
+              line={<span className="font-figure">{shortAddress(a.address)}</span>}
+              action={
+                <Button variant="secondary" size="sm" aria-label={`Remove ${a.name}`} disabled={busy} onClick={() => remove.mutate(a)}>
+                  Remove
+                </Button>
+              }
+            />
+          </div>
+        ))
+      )}
+      <PanelForm className="pt-2" onSubmit={() => (ok && !busy ? save.mutate() : undefined)}>
+        <div className="grid gap-3 wide:grid-cols-2">
+          <Field label="Name">
+            <Input placeholder="Treasury" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Address">
+            <Input placeholder="0x…" spellCheck={false} autoComplete="off" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </Field>
+        </div>
+        <div>
+          <Button type="submit" variant="secondary" disabled={busy} disabledReason={ok ? undefined : 'Type a name and a 0x address first'}>
+            {save.isPending ? 'Saving…' : 'Save address'}
+          </Button>
+        </div>
+        {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
+        {remove.isError ? <Note ok={false}>{refusalText(remove.error)}</Note> : null}
+      </PanelForm>
+    </section>
   )
 }
 
@@ -280,7 +384,8 @@ function History({ agent }: { agent: Agent }) {
   )
 }
 
-/** Send USDC: to an address or another agent → the quote → Send → the receipt; then the history. */
+/** Send USDC: to an address, a name.eth, a saved name, a person or another agent → the quote, with the address it
+ *  resolved to → Send, signed with the owner's passkey → the receipt; then the saved addresses and the history. */
 export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent[] }) {
   const qc = useQueryClient()
   const [toAgent, setToAgent] = useState('')
@@ -302,7 +407,7 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
   const request = (): CryptoSendRequest => ({ to: address, network, token: 'USDC', amount_minor: minor ?? 0 })
   const ask = useMutation({ mutationFn: () => cryptoSendApi.quote(agent.id, request()), onSuccess: setQuote })
   const sent = useMutation({
-    mutationFn: () => cryptoSendApi.send(agent.id, request(), key),
+    mutationFn: (reviewed: CryptoSendQuote) => sendSigned(agent.id, request(), key, reviewed),
     onSuccess: () => {
       setKey(newMoveKey())
       setQuote(null)
@@ -314,14 +419,15 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
     setQuote(null)
     ask.reset()
   }
-  const ready = (isAddress(address) || (!toAgent && isHandle(address))) && minor !== null
+  // A name.eth, a saved name or a person is checked by Lens, which answers the address it names or nobody found.
+  const ready = (toAgent ? isAddress(address) : address !== '') && minor !== null
   return (
     <div className="grid gap-4" data-testid="agent-crypto-send">
       {quote ? (
         <div className="grid gap-3" data-testid="crypto-send-quote">
           <QuoteFacts q={quote} agent={agent} />
           <ArrivesChip data-testid="crypto-send-arrives">Arrives {lowerFirst(arrivalText(quote.arrival_seconds))}</ArrivesChip>
-          <Button size="lg" className="w-full" disabled={sent.isPending} onClick={() => sent.mutate()}>
+          <Button size="lg" className="w-full" disabled={sent.isPending} onClick={() => sent.mutate(quote)}>
             {sent.isPending ? 'Sending…' : 'Send'}
           </Button>
           <Button variant="secondary" className="w-full" disabled={sent.isPending} onClick={change}>
@@ -354,8 +460,8 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
               <Note ok={false}>{others.find((a) => a.id === toAgent)?.name ?? 'That agent'} has no crypto wallet yet.</Note>
             ) : null
           ) : (
-            <Field label="Wallet address, @name, email or phone">
-              <Input placeholder="0x… or @name" spellCheck={false} autoComplete="off" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Field label="Wallet address, name.eth, saved name, @name, email or phone">
+              <Input placeholder="0x…, name.eth or @name" spellCheck={false} autoComplete="off" value={to} onChange={(e) => setTo(e.target.value)} />
             </Field>
           )}
           <div className="grid gap-3 wide:grid-cols-2">
@@ -373,7 +479,7 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
             </Field>
           </div>
           <div>
-            <Button type="submit" disabled={ask.isPending} disabledReason={ready ? undefined : 'Type a 0x address or @name and an amount first'}>
+            <Button type="submit" disabled={ask.isPending} disabledReason={ready ? undefined : 'Type who it goes to and an amount first'}>
               {ask.isPending ? 'Reading the quote…' : 'Review'}
             </Button>
           </div>
@@ -381,6 +487,16 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
         </PanelForm>
       )}
       {sent.data ? <Receipt s={sent.data} /> : null}
+      {quote ? null : (
+        <div className="border-t border-line pt-3">
+          <SavedAddresses
+            onPick={(name) => {
+              setToAgent('')
+              setTo(name)
+            }}
+          />
+        </div>
+      )}
       <div className="border-t border-line pt-3">
         <History agent={agent} />
       </div>

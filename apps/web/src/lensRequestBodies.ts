@@ -1377,27 +1377,39 @@ export const LENS_BODIES: LensBody[] = [
     subject: "lensInstantSendBody",
   },
   // B48.36 — Send USDC from an agent's crypto wallet (Lens B48.9): the quote and the send carry one body, and the owner's
-  // approve its test amount.
+  // approve its test amount. B48.50: the send and the approve also carry the owner's passkey assertion (Lens B48.49).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/crypto-sends",
     file: "apps/bff/crypto_sends.go",
     kind: "anon-struct",
     fn: "func cryptoSendBody(",
     anchor: "var in struct {",
-    upstreamFile: "internal/economy/agent_crypto_sends.go",
-    upstreamAnchor: "type CryptoSendRequest struct {",
+    upstreamFile: "cmd/lens/agent_crypto_sends_handler.go",
+    upstreamAnchor:
+      "signedBody := func(w http.ResponseWriter, req *http.Request) (economy.CryptoSendRequest, *passkey.Assertion, bool) {",
     subject: "lensCryptoSendBody",
   },
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/crypto-sends/{sendID}/approve",
     file: "apps/bff/crypto_sends.go",
     kind: "anon-struct",
-    fn: "func (a *app) handleCryptoSendApprove(",
+    fn: "func cryptoSendAnswerBody(",
     anchor: "var in struct {",
     upstreamFile: "cmd/lens/agent_crypto_sends_handler.go",
     upstreamAnchor:
-      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/crypto-sends/{sendID}/"+answer, func(w http.ResponseWriter, req *http.Request) {',
+      "answerBody := func(w http.ResponseWriter, req *http.Request) (testMinor int64, a *passkey.Assertion, ok bool) {",
     subject: "lensCryptoSendApproveBody",
+  },
+  // B48.50 — the owner's saved addresses (Lens B48.49), which a send names instead of the 0x address.
+  {
+    route: "POST /v1/workspaces/{wsID}/crypto-addresses",
+    file: "apps/bff/crypto_sends.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleCryptoAddresses(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/crypto_address_book_handler.go",
+    upstreamAnchor: "var in struct{ Name, Address string }",
+    subject: "lensCryptoAddressBody",
   },
   // B48.47 — an agent's crypto wallet topped up or cashed out (Lens B48.8), and asked to be paid (Lens B48.10).
   {
