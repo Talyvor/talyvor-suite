@@ -49,6 +49,11 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "paused": false})
 		case strings.HasSuffix(r.URL.Path, "/agents/pause-all"), strings.HasSuffix(r.URL.Path, "/agents/resume-all"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"all_paused": strings.HasSuffix(r.URL.Path, "pause-all")})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/card/replace"): // B28.47: Lens B28.321's new card
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "ic_2", "agent_id": "agt_1", "last4": "5555"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/card/cancel"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "ic_2", "agent_id": "agt_1", "last4": "5555", "cancelled_at": "2026-11-25T08:00:00Z"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/card/freeze"), strings.HasSuffix(r.URL.Path, "/agents/agt_1/card/unfreeze"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "ic_1", "agent_id": "agt_1", "last4": "4242", "frozen": strings.HasSuffix(r.URL.Path, "/freeze")})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/card") && r.Method == http.MethodGet:
@@ -1038,6 +1043,31 @@ func TestAgentCardFreezeReachesLensAsTheCardsOwnAction(t *testing.T) {
 	want := []string{
 		"POST /v1/workspaces/" + ws + "/agents/agt_1/card/freeze ",
 		"POST /v1/workspaces/" + ws + "/agents/agt_1/card/unfreeze ",
+	}
+	if ws == "" || ws == "ws_other" || strings.Join(f.got, "|") != strings.Join(want, "|") {
+		t.Fatalf("Lens received %q, want %q", f.got, want)
+	}
+}
+
+// B28.47 — replacing and cancelling an agent's card reach Lens on the session's workspace as the card's own replace and
+// cancel, carrying nothing a browser sends; Lens's new card comes back 201 and the cancelled one 200, as Lens answered.
+func TestAgentCardReplaceAndCancelReachLensAsTheCardsOwnAction(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	if rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/card/replace", `{"workspace_id":"ws_other"}`); rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"last4":"5555"`) {
+		t.Fatalf("replace = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/card/cancel", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"cancelled_at"`) {
+		t.Fatalf("cancel = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/card/cancel", ""); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET cancel = %d, want 405", rec.Code)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ws := strings.Split(strings.TrimPrefix(strings.Fields(f.got[0])[1], "/v1/workspaces/"), "/")[0]
+	want := []string{
+		"POST /v1/workspaces/" + ws + "/agents/agt_1/card/replace ",
+		"POST /v1/workspaces/" + ws + "/agents/agt_1/card/cancel ",
 	}
 	if ws == "" || ws == "ws_other" || strings.Join(f.got, "|") != strings.Join(want, "|") {
 		t.Fatalf("Lens received %q, want %q", f.got, want)

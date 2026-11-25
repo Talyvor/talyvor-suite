@@ -588,6 +588,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/card", a.requireTenant(a.handleAgentCard))                       // B19.24
 	a.mux.HandleFunc("/api/agents/{id}/card/freeze", a.requireTenant(a.handleAgentCardFreeze(true)))    // B28.360
 	a.mux.HandleFunc("/api/agents/{id}/card/unfreeze", a.requireTenant(a.handleAgentCardFreeze(false))) // B28.360
+	a.mux.HandleFunc("/api/agents/{id}/card/replace", a.requireTenant(a.handleAgentCardEnd("replace"))) // B28.47
+	a.mux.HandleFunc("/api/agents/{id}/card/cancel", a.requireTenant(a.handleAgentCardEnd("cancel")))   // B28.47
 	// B28.21 — rename and describe an agent, and archive it. See agent_bank.go.
 	a.mux.HandleFunc("/api/agents/{id}", a.requireTenant(a.handleAgent))
 	a.mux.HandleFunc("/api/agents/{id}/archive", a.requireTenant(a.handleAgentArchive))

@@ -12,6 +12,8 @@ function mockBff({ passkeys = [] as string[] } = {}) {
   const researcher = { id: 'agt_1', name: 'Researcher', description: 'Research', colour: 'cobalt', balance_ulxc: 50_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true }
   const writer = { ...researcher, id: 'agt_2', name: 'Writer', description: 'Words', colour: 'violet' }
   let frozen = false
+  // B28.47 — the card Lens holds for the agent now: replaced, it is the new one; cancelled, there is none.
+  let held: typeof CARD | null = CARD
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -23,9 +25,16 @@ function mockBff({ passkeys = [] as string[] } = {}) {
       return json({ workspace_balance_ulxc: 100_000_000, allocated_ulxc: 50_000_000, unallocated_ulxc: 50_000_000, spent_ulxc: 0, agents: [researcher, writer] })
     if (url === '/api/agents/agt_1/card/freeze' && method === 'POST') return (frozen = true), json({ ...CARD, frozen: true })
     if (url === '/api/agents/agt_1/card/unfreeze' && method === 'POST') return (frozen = false), json({ ...CARD, frozen: false })
+    if (url === '/api/agents/agt_1/card/replace' && method === 'POST') return (held = { ...CARD, id: 'ic_2', last4: '5555' }), json(held, 201)
+    if (url === '/api/agents/agt_1/card/cancel' && method === 'POST') {
+      const gone = { ...held, cancelled_at: '2026-11-25T08:00:00Z' }
+      held = null
+      return json(gone)
+    }
+    if (url === '/api/agents/agt_1/card' && held === null) return json({ error: 'economy: this agent has no card' }, 404)
     if (url === '/api/agents/agt_1/card')
       return json({
-        card: { ...CARD, frozen },
+        card: { ...held, frozen },
         authorizations: [
           {
             id: 'a',
@@ -111,6 +120,37 @@ describe('Cards on the web', () => {
     expect(sent).toEqual([
       { method: 'POST', url: '/api/agents/agt_1/card/freeze' },
       { method: 'POST', url: '/api/agents/agt_1/card/unfreeze' },
+    ])
+  })
+
+  it('replaces a card for a new one, then cancels it for good, each asked once', async () => {
+    const sent = mockBff()
+    window.history.pushState({}, '', '/cards')
+    render(<App />)
+
+    const researcher = await screen.findByTestId('card-agt_1')
+    fireEvent.click(await within(researcher).findByRole('button', { name: 'Replace card' }))
+    const ask = await screen.findByRole('dialog', { name: 'Replace Researcher’s card?' })
+    expect(ask.textContent).toContain('The card ending 4242 is cancelled at once')
+    // Keep it sends nothing.
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(sent).toEqual([])
+
+    fireEvent.click(within(researcher).getByRole('button', { name: 'Replace card' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace card' }))
+    expect(await within(researcher).findByText('Replaced. Researcher’s new card ends 5555. Every purchase on the old one is refused, and nothing leaves its wallet.')).toBeTruthy()
+
+    fireEvent.click(within(researcher).getByRole('button', { name: 'Cancel card' }))
+    const cancel = await screen.findByRole('dialog', { name: 'Cancel Researcher’s card?' })
+    expect(cancel.textContent).toContain('The card ending 5555 is cancelled for good')
+    fireEvent.click(within(cancel).getByRole('button', { name: 'Cancel card' }))
+    expect(await within(researcher).findByText('Cancelled. Every purchase on Researcher’s card is refused, and nothing leaves its wallet. Issue it a new card on Agents.')).toBeTruthy()
+    expect(await within(researcher).findByText('No card for Researcher yet.')).toBeTruthy()
+    expect(within(researcher).queryByRole('button', { name: 'Cancel card' })).toBeNull()
+    expect(sent).toEqual([
+      { method: 'POST', url: '/api/agents/agt_1/card/replace' },
+      { method: 'POST', url: '/api/agents/agt_1/card/cancel' },
     ])
   })
 
