@@ -557,6 +557,15 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/quote", a.requireTenant(a.handleCryptoSendQuote))
 	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/{sid}/approve", a.requireTenant(a.handleCryptoSendApprove))
 	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/{sid}/decline", a.requireTenant(a.handleCryptoSendDecline))
+	// B48.47 — top up, cash out, activity, statements and requests to be paid, on the agent's crypto wallet (Lens B48.8,
+	// B48.14, B48.10). See agent_wallet_moves.go.
+	a.mux.HandleFunc("/api/agents/{id}/wallet-moves", a.requireTenant(a.handleWalletMoves))
+	a.mux.HandleFunc("/api/agents/{id}/wallet-moves/quote", a.requireTenant(a.handleWalletMoveQuote))
+	a.mux.HandleFunc("/api/agents/{id}/wallet-moves/{mid}/challenge", a.requireTenant(a.handleWalletMoveChallenge))
+	a.mux.HandleFunc("/api/agents/{id}/wallet-moves/{mid}/confirm", a.requireTenant(a.handleWalletMoveConfirm))
+	a.mux.HandleFunc("/api/agents/{id}/wallet/activity", a.requireTenant(a.handleAgentWalletActivity))
+	a.mux.HandleFunc("/api/agents/{id}/wallet/statement", a.requireTenant(a.handleAgentWalletStatement))
+	a.mux.HandleFunc("/api/agents/{id}/crypto-requests", a.requireTenant(a.handleAgentCryptoRequests))
 	a.mux.HandleFunc("/api/agents/{id}/summary", a.requireTenant(a.handleAgentSummary)) // B57.20
 	a.mux.HandleFunc("/api/agents/{id}/statement", a.requireTenant(a.handleAgentStatement))
 	a.mux.HandleFunc("/api/agents/statement", a.requireTenant(a.handleBankStatement))       // B19.22

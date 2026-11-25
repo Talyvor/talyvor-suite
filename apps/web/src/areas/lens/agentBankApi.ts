@@ -3179,3 +3179,130 @@ export function usdcMinorOf(text: string): number | null {
   const minor = Number(m[1]) * 1e6 + Number((m[2] ?? '').padEnd(6, '0'))
   return Number.isSafeInteger(minor) && minor > 0 ? minor : null
 }
+
+// B48.47 — the rest of an agent's crypto wallet (the BFF's agent_wallet_moves.go): top up and cash out (Lens B48.8),
+// requests to be paid (Lens B48.10), and its activity and statements (Lens B48.14).
+
+/** How money comes into the agent's crypto wallet, or (cash_out) leaves it for the owner's own bank account. */
+export type WalletMoveRoute = 'wallet' | 'card' | 'bank_transfer' | 'convert' | 'cash_out'
+
+/** What a quote asks: amount_minor of currency is what is sold. */
+export interface WalletMoveRequest {
+  route: WalletMoveRoute
+  amount_minor: number
+  currency: string
+  from_agent_id?: string
+  payee_id?: string
+  to_currency?: string
+}
+
+/** Lens economy.WalletMove: one top-up or cash-out, quoted, then confirmed once. */
+export interface WalletMove {
+  id: string
+  agent_id: string
+  route: WalletMoveRoute
+  sell_minor: number
+  sell_currency: string
+  /** the partner's, in sell_currency, taken from what is sold */
+  fee_minor: number
+  buy_minor: number
+  buy_currency: string
+  /** buy_currency per sell_currency, in whole units */
+  rate: string
+  status: 'quoted' | 'posted' | 'failed' | 'held' | 'returned'
+  detail?: string
+  expires_at?: string
+  created_at: string
+  posted_at?: string
+}
+
+/** Lens economy.CryptoRequest: a request to be paid into the agent's crypto wallet, and where it stands. */
+export interface CryptoPayRequest {
+  id: string
+  token: string
+  network: string
+  pay_to: string
+  amount_minor: number
+  memo: string
+  expires_at: string
+  status: 'open' | 'partial' | 'paid' | 'overpaid' | 'expired'
+  received_minor: number
+  remaining_minor: number
+  created_at: string
+  /** the page the payer opens */
+  link: string
+  /** EIP-681: what the QR code encodes */
+  uri: string
+}
+
+/** Lens economy.WalletLine: one posting on one of the agent's wallets. */
+export interface WalletLine {
+  entry_id: string
+  line: number
+  at: string
+  account_id: string
+  /** chain:<network> for a wallet on a chain */
+  account_name: string
+  currency: string
+  kind: string
+  amount_minor: number
+  counterparty?: string
+  /** the partner's reference; on a chain, <transaction>:<log> */
+  ref?: string
+  memo?: string
+  balance_after_minor: number
+}
+
+/** Lens economy.WalletAccount: one wallet over a statement's month. */
+export interface WalletStatementAccount {
+  account_id: string
+  account_name: string
+  currency: string
+  opening_minor: number
+  in_minor: number
+  out_minor: number
+  closing_minor: number
+}
+
+/** Lens economy.WalletStatement: one month of the agent's wallets. */
+export interface WalletStatement {
+  from: string
+  to: string
+  accounts: WalletStatementAccount[] | null
+  lines: WalletLine[] | null
+}
+
+/** A month's statement as the CSV or PDF Lens writes. A refusal carries Lens's sentence. */
+async function walletStatementFile(id: string, month: string, format: 'csv' | 'pdf'): Promise<Blob> {
+  const path = `/api/agents/${e(id)}/wallet/statement?${new URLSearchParams({ month, format })}`
+  const res = await fetch(path, { headers: { Accept: format === 'pdf' ? 'application/pdf' : 'text/csv' } })
+  if (!res.ok) {
+    let sentence = ''
+    try {
+      sentence = ((await res.json()) as { error?: string }).error ?? ''
+    } catch {
+      // a body that is not JSON carries no sentence
+    }
+    throw new AgentBankError(res.status, path, sentence)
+  }
+  return res.blob()
+}
+
+export const agentWalletApi = {
+  /** Nothing moves: what it sells, the fee, the rate, what it buys, and until when. */
+  quote: (id: string, body: WalletMoveRequest) => send<WalletMove>('POST', `/api/agents/${e(id)}/wallet-moves/quote`, body),
+  /** What a cash-out's or convert's confirm is signed over; no credentials while the workspace signs nothing yet. */
+  challenge: (id: string, moveID: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/wallet-moves/${e(moveID)}/challenge`),
+  /** Made once however many times it is confirmed. */
+  confirm: (id: string, moveID: string, assertion?: PasskeyAssertion) =>
+    send<WalletMove>('POST', `/api/agents/${e(id)}/wallet-moves/${e(moveID)}/confirm`, assertion ? { assertion } : {}),
+  moves: (id: string) => getSaid<WalletMove[] | null>(`/api/agents/${e(id)}/wallet-moves`),
+  activity: (id: string) => getSaid<{ lines: WalletLine[] | null }>(`/api/agents/${e(id)}/wallet/activity?limit=100`),
+  statement: (id: string, month: string) => getSaid<WalletStatement>(`/api/agents/${e(id)}/wallet/statement?${new URLSearchParams({ month, format: 'json' })}`),
+  statementFile: walletStatementFile,
+  requests: (id: string) => getSaid<{ requests: CryptoPayRequest[] | null }>(`/api/agents/${e(id)}/crypto-requests`),
+  /** Asked once however many times `key` arrives. */
+  request: (id: string, body: { token: 'USDC'; network: string; amount_minor: number; memo: string; expires_at: string }, key: string) =>
+    send<CryptoPayRequest>('POST', `/api/agents/${e(id)}/crypto-requests`, body, { 'Idempotency-Key': key }),
+}

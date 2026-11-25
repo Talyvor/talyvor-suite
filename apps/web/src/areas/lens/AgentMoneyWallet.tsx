@@ -9,6 +9,7 @@ import { PreparedPayment } from '../chat/PaymentCards'
 import { type Agent, type AgentMoneyWallet, type AgentWallets, type OutsidePayee, type Shows, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText, useAccount } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { MONEY_WALLET } from '../../labels/capabilities'
+import { WalletActivity, WalletCashOut, WalletRequest, WalletStatements, WalletTopUp } from './AgentWalletActions'
 
 // AgentMoneyWallet.tsx — B46.9: the agent's wallet on the money layer (Lens B46.4). What it holds, how to add money to
 // it — a USDC address on Base with its QR code, or an IBAN in the account holder's name, whichever its partner gives —
@@ -21,6 +22,8 @@ import { MONEY_WALLET } from '../../labels/capabilities'
 // its icon, as the Instant transfer receipt copies its reference.
 // B48.18 — every wallet the agent owns, one of each kind it is (Lens B48.1): a "both" agent's fiat wallet and its USDC
 // wallet, each with its balance and how to add money to it.
+// B48.47 — and under each wallet what the owner does with it (AgentWalletActions.tsx): Top up, and for the USDC wallet
+// Cash out and Request; then its Activity and Statements.
 
 export const walletKey = (id: string) => ['agent-money-wallet', id]
 export const walletsKey = (id: string) => ['agent-money-wallets', id]
@@ -195,8 +198,41 @@ function Send({ agent }: { agent: Agent }) {
   )
 }
 
+type WalletAction = 'top-up' | 'cash-out' | 'request' | 'activity' | 'statements'
+
+const ACTION_WORDS: Record<WalletAction, string> = {
+  'top-up': 'Top up',
+  'cash-out': 'Cash out',
+  request: 'Request',
+  activity: 'Activity',
+  statements: 'Statements',
+}
+
+/** One wallet's actions: a button each, the one pressed open under them. */
+function WalletActions({ agent, wallet, agents }: { agent: Agent; wallet: AgentMoneyWallet; agents: Agent[] }) {
+  const [open, setOpen] = useState<WalletAction | null>(null)
+  const usdc = wallet.asset === 'USDC'
+  const actions: WalletAction[] = usdc ? ['top-up', 'cash-out', 'request', 'activity', 'statements'] : ['top-up', 'activity', 'statements']
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={`What to do with the ${wallet.asset} wallet`}>
+        {actions.map((a) => (
+          <Button key={a} variant={open === a ? 'primary' : 'secondary'} size="sm" aria-expanded={open === a} onClick={() => setOpen(open === a ? null : a)}>
+            {ACTION_WORDS[a]}
+          </Button>
+        ))}
+      </div>
+      {open === 'top-up' ? <WalletTopUp agent={agent} wallet={wallet} agents={agents} /> : null}
+      {open === 'cash-out' ? <WalletCashOut agent={agent} /> : null}
+      {open === 'request' ? <WalletRequest agent={agent} /> : null}
+      {open === 'activity' ? <WalletActivity agent={agent} asset={wallet.asset} /> : null}
+      {open === 'statements' ? <WalletStatements agent={agent} asset={wallet.asset} /> : null}
+    </div>
+  )
+}
+
 /** The agent's wallets: each one's balance and how to add money to it, then Send. */
-export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
+export function AgentMoneyWalletCard({ agent, agents = [agent] }: { agent: Agent; agents?: Agent[] }) {
   const wallets = useQuery({ queryKey: walletsKey(agent.id), queryFn: () => agentBankApi.wallets(agent.id) })
   const { shows } = useAccount()
   const all = wallets.data?.wallets ?? []
@@ -224,6 +260,7 @@ export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
               ) : null}
               <Eyebrow>Add money</Eyebrow>
               {shows ? <AddMoney agent={agent} wallet={w} shows={shows} /> : null}
+              <WalletActions agent={agent} wallet={w} agents={agents} />
             </section>
           ))}
         </>

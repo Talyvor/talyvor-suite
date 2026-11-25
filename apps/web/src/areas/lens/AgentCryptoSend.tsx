@@ -16,6 +16,7 @@ import { AgentBankError, type Agent, type CryptoSend, type CryptoSendQuote, type
 // Idempotency-Key — kept until Lens answers, so a retry after no answer sends that same send once — then the receipt
 // with its explorer link. A first send the agent asked for to a new address waits for the owner, who approves it,
 // sends a test amount there first, or declines it, here and on Approvals. History lists what was sent and received.
+// B48.47 — or to a person on Talyvor by their @name, email or phone number, which Lens resolves to the wallet they chose.
 // B57.202 — in Pocket: the quote is W3's quote card (its facts with the amount as the strong row, the ink Arrives chip,
 // the note) and a send waiting for the owner is a w-approvals waiting row, with Review, inside Approvals' Waiting for you.
 
@@ -29,6 +30,8 @@ const NETWORKS: { value: string; name: string }[] = [
 const networkName = (n: string) => NETWORKS.find((x) => x.value === n)?.name ?? n
 
 const isAddress = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s.trim())
+/** B48.47 — a person on Talyvor, by @name, email or phone number; Lens answers the wallet they chose, or nobody found. */
+const isHandle = (s: string) => /^@[A-Za-z0-9][A-Za-z0-9_.-]{1,62}$/.test(s.trim()) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim()) || /^\+?[0-9][0-9 ]{6,18}$/.test(s.trim())
 const shortAddress = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a)
 
 /** Wei as the network's coin, to at most six decimals: "0.000042 ETH". */
@@ -311,7 +314,7 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
     setQuote(null)
     ask.reset()
   }
-  const ready = isAddress(address) && minor !== null
+  const ready = (isAddress(address) || (!toAgent && isHandle(address))) && minor !== null
   return (
     <div className="grid gap-4" data-testid="agent-crypto-send">
       {quote ? (
@@ -337,7 +340,7 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
           {others.length > 0 ? (
             <Field label="Send to">
               <Select value={toAgent} onChange={(e) => setToAgent(e.target.value)}>
-                <option value="">A wallet address</option>
+                <option value="">A wallet address or a person</option>
                 {others.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -351,8 +354,8 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
               <Note ok={false}>{others.find((a) => a.id === toAgent)?.name ?? 'That agent'} has no crypto wallet yet.</Note>
             ) : null
           ) : (
-            <Field label="Wallet address">
-              <Input placeholder="0x…" spellCheck={false} autoComplete="off" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Field label="Wallet address, @name, email or phone">
+              <Input placeholder="0x… or @name" spellCheck={false} autoComplete="off" value={to} onChange={(e) => setTo(e.target.value)} />
             </Field>
           )}
           <div className="grid gap-3 wide:grid-cols-2">
@@ -370,7 +373,7 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
             </Field>
           </div>
           <div>
-            <Button type="submit" disabled={ask.isPending} disabledReason={ready ? undefined : 'Type a 0x address and an amount first'}>
+            <Button type="submit" disabled={ask.isPending} disabledReason={ready ? undefined : 'Type a 0x address or @name and an amount first'}>
               {ask.isPending ? 'Reading the quote…' : 'Review'}
             </Button>
           </div>
