@@ -550,6 +550,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts", a.requireTenant(a.handleAgentRuleBoosts))          // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts/{rule}", a.requireTenant(a.handleAgentRuleBoostEnd)) // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/wallet", a.requireTenant(a.handleAgentWallet))                    // B46.9
+	a.mux.HandleFunc("/api/agents/{id}/wallets", a.requireTenant(a.handleAgentWallets))                  // B48.18
 	// B48.36 — Send USDC from the agent's crypto wallet (Lens B48.9). See crypto_sends.go.
 	a.mux.HandleFunc("/api/agents/{id}/smart-account", a.requireTenant(a.handleAgentSmartAccount))
 	a.mux.HandleFunc("/api/agents/{id}/crypto-sends", a.requireTenant(a.handleCryptoSends))

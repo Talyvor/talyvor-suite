@@ -30,6 +30,7 @@ async function at(address: string, account: { account_type: string; money_kind: 
   populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl as never), {
     '/api/workspace/account': account,
     '/api/agents/agt_research/wallet': WALLET,
+    '/api/agents/agt_research/wallets': { agent_id: 'agt_research', wallet_kind: 'crypto', wallets: [WALLET] }, // B48.18
   })
   window.history.pushState({}, '', address)
   render(<App />)

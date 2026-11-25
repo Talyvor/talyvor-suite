@@ -75,6 +75,10 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_gone/summary"):
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "economy: agent not found"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/wallets"): // B48.18: Lens B48.1's wallets of a "both" agent
+			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "wallet_kind": "both", "fiat_currency": "EUR", "wallets": []map[string]any{
+				{"agent_id": "agt_1", "asset": "EUR", "balance_minor": 1_000, "mode": "TEST", "receive": map[string]any{"asset": "EUR"}},
+				{"agent_id": "agt_1", "asset": "USDC", "balance_minor": 2_500_000, "mode": "TEST", "receive": map[string]any{"asset": "USDC"}}}})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/wallet"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "asset": "USDC", "balance_minor": 2_500_000, "mode": "LIVE",
 				"receive": map[string]any{"asset": "USDC", "network": "base", "address": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"}})
@@ -202,7 +206,7 @@ func TestAgentCreateNamesTheAccountsCurrency(t *testing.T) {
 	doJSON(a, http.MethodPost, "/api/agents", `{"name":"Atlas","fiat_currency":"GBP"}`)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.got) != 1 || !strings.HasSuffix(f.got[0], `/agents {"colour":"","fiat_currency":"GBP","name":"Atlas","picture":""}`) {
+	if len(f.got) != 1 || !strings.HasSuffix(f.got[0], `/agents {"colour":"","fiat_currency":"GBP","name":"Atlas","picture":"","wallet_kind":""}`) {
 		t.Fatalf("Lens got %q; want the agent created in pounds", f.got)
 	}
 }
@@ -726,7 +730,7 @@ func TestAgentHelperColourReachesLens(t *testing.T) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// B61.87: a create that names no currency sends it empty, which Lens reads as it reads none.
-	want := []string{`/agents {"colour":"cobalt","fiat_currency":"","name":"Atlas","picture":""}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
+	want := []string{`/agents {"colour":"cobalt","fiat_currency":"","name":"Atlas","picture":"","wallet_kind":""}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
 	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
 		t.Fatalf("Lens got %q; want …%q", f.got, want)
 	}
@@ -741,7 +745,7 @@ func TestAgentPictureReachesLens(t *testing.T) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	want := []string{`/agents {"colour":"","fiat_currency":"","name":"Atlas","picture":"chef"}`, `/agents/agt_1 {"name":null,"description":null,"picture":"gardener"}`}
+	want := []string{`/agents {"colour":"","fiat_currency":"","name":"Atlas","picture":"chef","wallet_kind":""}`, `/agents/agt_1 {"name":null,"description":null,"picture":"gardener"}`}
 	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
 		t.Fatalf("Lens got %q; want …%q", f.got, want)
 	}
@@ -817,6 +821,25 @@ func TestAgentWalletReachesLens(t *testing.T) {
 	defer f.mu.Unlock()
 	if len(f.got) != 1 || !strings.HasPrefix(f.got[0], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[0], "/agents/agt_1/wallet ") {
 		t.Fatalf("Lens got %q; want GET …/agents/agt_1/wallet", f.got)
+	}
+}
+
+// B48.18 — New agent's "Fiat, crypto or both?" reaches Lens, and the agent's wallets are Lens's, one of each kind.
+func TestAgentCreateOfAKindAndItsWallets(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPost, "/api/agents", `{"name":"Atlas","wallet_kind":"both"}`)
+	rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/wallets", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"asset":"EUR"`) || !strings.Contains(rec.Body.String(), `"asset":"USDC"`) {
+		t.Fatalf("wallets = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/wallets", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST wallets = %d; want 405", rec.Code)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], `/agents {"colour":"","fiat_currency":"","name":"Atlas","picture":"","wallet_kind":"both"}`) ||
+		!strings.HasPrefix(f.got[1], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[1], "/agents/agt_1/wallets ") {
+		t.Fatalf("Lens got %q; want the agent created as both, then GET …/agents/agt_1/wallets", f.got)
 	}
 }
 

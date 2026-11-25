@@ -18,6 +18,7 @@ import (
 //
 //	GET  /api/agents                                   the agents and their balances, reconciled with the workspace
 //	POST /api/agents                    {"name", "colour"?, "picture"?}   create an agent; B57.124: its helper's colour; B61.102: or its picture
+//	                                    B48.18: {"wallet_kind"?: "fiat"|"crypto"|"both"} the wallets it opens with
 //	POST /api/agents/{id}/fund          {"amount_ulxc"}   move the workspace's LXC to the agent
 //	POST /api/agents/{id}/withdraw      {"amount_ulxc"}   take it back
 //	POST /api/agents/{id}/keys          {"name"}       issue the agent a proxy key of its own, shown once
@@ -31,6 +32,7 @@ import (
 //	POST /api/agents/{id}/rules/boosts {"rule", "value", "until", "assertion"?}   B28.32: raise a limit until a time; it reverts by itself
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
+//	GET  /api/agents/{id}/wallets                      B48.18: every wallet it owns, one of each kind it is (Lens B48.1)
 //	GET  /api/agents/{id}/summary                      B57.20: its page in one read (Lens B57.12), every figure from one moment
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
 //	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks)
@@ -174,6 +176,9 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 			Picture string `json:"picture"`
 			// B61.87: the currency its own account opens in, the account's, which its rules are typed in; Lens picks one when "".
 			FiatCurrency string `json:"fiat_currency"`
+			// B48.18: fiat, crypto or both, the wallets it opens with; Lens opens the workspace's kind when "" and
+			// refuses one outside it.
+			WalletKind string `json:"wallet_kind"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -183,8 +188,8 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an agent needs a name"})
 			return
 		}
-		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: face, owner_user_id, role, role_word, template, wallet_kind
-		body, _ := json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "picture": in.Picture, "fiat_currency": in.FiatCurrency})
+		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: face, owner_user_id, role, role_word, template
+		body, _ := json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "picture": in.Picture, "fiat_currency": in.FiatCurrency, "wallet_kind": in.WalletKind})
 		a.agentBankRelay(w, r, t, http.MethodPost, "/agents", body)
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
@@ -462,6 +467,20 @@ func (a *app) handleAgentWallet(w http.ResponseWriter, r *http.Request, t tenant
 		return
 	}
 	suffix, ok := agentSuffix(w, r, "wallet")
+	if !ok {
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
+}
+
+// handleAgentWallets — GET /api/agents/{id}/wallets (B48.18): its wallets, one of each kind it is, each with its balance
+// and how to pay into it, as Lens B48.1 reads them. Lens refuses another workspace's agent (404).
+func (a *app) handleAgentWallets(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "wallets")
 	if !ok {
 		return
 	}
