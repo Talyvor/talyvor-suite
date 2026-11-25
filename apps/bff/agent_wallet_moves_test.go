@@ -114,6 +114,52 @@ func TestAgentWalletMovesReachLensAsNamed(t *testing.T) {
 	}
 }
 
+// B48.44 — the top-up an agent asked for (wallet_topup_link) reads back by its id from Lens's B48.43 route under the
+// session's token, query left behind, and Lens's 404 for a move that is not the owner's comes down as it is.
+func TestAgentWalletMoveReadsFromLensByID(t *testing.T) {
+	var mu sync.Mutex
+	got := []string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		mu.Lock()
+		got = append(got, r.Method+" "+r.URL.RequestURI()+" auth="+r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/wallet-moves/wm_other") {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"no such move"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"wm_1","route":"card","status":"quoted"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	if rec := doJSON(a, http.MethodGet, "/api/agents/agt_remy/wallet-moves/wm_1?agent=other", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"wm_1"`) {
+		t.Fatalf("GET one move = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodGet, "/api/agents/agt_remy/wallet-moves/wm_other", ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("a move Lens refuses = %d %s, want 404", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/agents/agt_remy/wallet-moves/wm_1", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST one move = %d, want 405", rec.Code)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 {
+		t.Fatalf("Lens saw %d calls, want 2:\n  %s", len(got), strings.Join(got, "\n  "))
+	}
+	if !strings.HasPrefix(got[0], "GET /v1/workspaces/") || !strings.HasSuffix(strings.Fields(got[0])[1], "/agents/agt_remy/wallet-moves/wm_1") {
+		t.Errorf("the read went up as %s", got[0])
+	}
+	if !strings.Contains(got[0], " auth=Bearer ") || strings.HasSuffix(got[0], "auth=Bearer ") {
+		t.Errorf("the read did not go up under the session's token: %s", got[0])
+	}
+}
+
 // B48.19 — every wallet's month in one download: the owner's statement reaches Lens's workspace route under the session's
 // token with only month and format, and its CSV and PDF come down as the file.
 func TestOwnerWalletStatementReachesLensAsNamed(t *testing.T) {

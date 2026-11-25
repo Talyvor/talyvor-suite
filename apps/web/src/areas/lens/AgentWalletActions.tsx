@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink } from '@talyvor/ui'
-import { Button, Chip, Facts, Field, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Facts, Field, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
 import { kindWords } from './AccountStatement'
 import { QrCode as QrOf } from './AgentMoneyWallet'
 import { saveFile } from './AgentBank'
@@ -34,6 +35,7 @@ import {
 // rate, what arrives, until when — then confirmed once, a cash-out or convert signed with the owner's passkey (B48.42).
 // Request a payment as a link and a QR code (Lens B48.10). Activity: every posting on each wallet, a payment on the
 // chain with its explorer link; Statements: a month of each wallet, and its CSV or PDF (Lens B48.14).
+// B48.44: on the agent's page, the top-up its wallet_topup_link asked the owner for (?top_up=<move>), quoted then confirmed.
 
 export const walletMovesKey = (id: string) => ['agent-wallet-moves', id]
 export const walletActivityKey = (id: string) => ['agent-wallet-activity', id]
@@ -71,9 +73,25 @@ function confirmFailure(err: unknown): string {
 }
 
 /** What a quoted move costs and brings, then Confirm; a cash-out or convert is signed with the owner's passkey first. */
-function MoveQuote({ agent, m, gets, onChange, onDone }: { agent: Agent; m: WalletMove; gets: string; onChange: () => void; onDone: (m: WalletMove) => void }) {
+function MoveQuote({
+  agent,
+  m,
+  gets,
+  change = 'Change',
+  onChange,
+  onDone,
+}: {
+  agent: Agent
+  m: WalletMove
+  gets: string
+  change?: string
+  onChange: () => void
+  onDone: (m: WalletMove) => void
+}) {
   const qc = useQueryClient()
   const signs = m.route === 'cash_out' || m.route === 'convert'
+  // A second press before the first has re-rendered the button disabled is not a second confirm.
+  const sent = useRef(false)
   const confirm = useMutation({
     mutationFn: async () => {
       if (!signs) return agentWalletApi.confirm(agent.id, m.id)
@@ -82,13 +100,20 @@ function MoveQuote({ agent, m, gets, onChange, onDone }: { agent: Agent; m: Wall
       return agentWalletApi.confirm(agent.id, m.id, assertion)
     },
     onSuccess: onDone,
-    onSettled: () =>
-      Promise.all([
+    onSettled: () => {
+      sent.current = false
+      return Promise.all([
         qc.invalidateQueries({ queryKey: walletMovesKey(agent.id) }),
         qc.invalidateQueries({ queryKey: ['agent-money-wallets', agent.id] }),
         qc.invalidateQueries({ queryKey: walletActivityKey(agent.id) }),
-      ]),
+      ])
+    },
   })
+  const press = () => {
+    if (sent.current) return
+    sent.current = true
+    confirm.mutate()
+  }
   return (
     <div className="grid gap-3" data-testid="wallet-move-quote">
       <Facts
@@ -108,11 +133,11 @@ function MoveQuote({ agent, m, gets, onChange, onDone }: { agent: Agent; m: Wall
         ]}
       />
       {signs ? <p className="text-body text-ink-3">Your passkey asks before anything moves.</p> : null}
-      <Button size="lg" className="w-full" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
+      <Button size="lg" className="w-full" disabled={confirm.isPending} onClick={press}>
         {confirm.isPending ? 'Confirming…' : 'Confirm'}
       </Button>
       <Button variant="secondary" className="w-full" disabled={confirm.isPending} onClick={onChange}>
-        Change
+        {change}
       </Button>
       {confirm.isError ? <Note ok={false}>{confirmFailure(confirm.error)}</Note> : null}
     </div>
@@ -137,6 +162,102 @@ function MoveDone({ agent, m }: { agent: Agent; m: WalletMove }) {
         m.detail || 'This is held while the partner finishes it. It shows here until it ends.'
       )}
     </Note>
+  )
+}
+
+/** A quote whose price is no longer held: confirming it would be refused. */
+const expired = (m: WalletMove) => m.status === 'quoted' && !!m.expires_at && Date.parse(m.expires_at) <= Date.now()
+
+/** B48.44 — the top-up an agent asked its owner for (Lens B48.39's wallet_topup_link), opened from its link
+ *  /agents/<id>?top_up=<move>: the quote as Lens B48.43 reads it back by id, then Confirm, made once (Lens B48.8). An
+ *  expired quote says so, and Add money quotes the same top-up again. Not now closes it; nothing moves until Confirm. */
+export function TopUpLink({ agent }: { agent: Agent }) {
+  const [params, setParams] = useSearchParams()
+  const moveID = params.get('top_up') ?? ''
+  const read = useQuery({
+    queryKey: [...walletMovesKey(agent.id), moveID],
+    queryFn: () => agentWalletApi.move(agent.id, moveID),
+    enabled: moveID !== '',
+    retry: false,
+  })
+  const [fresh, setFresh] = useState<WalletMove | null>(null)
+  const [done, setDone] = useState<WalletMove | null>(null)
+  const again = useMutation({
+    mutationFn: (m: WalletMove) => agentWalletApi.quote(agent.id, { route: m.route, amount_minor: m.sell_minor, currency: m.sell_currency }),
+    onSuccess: setFresh,
+  })
+  if (moveID === '') return null
+  const close = () =>
+    setParams(
+      (p) => {
+        p.delete('top_up')
+        return p
+      },
+      { replace: true },
+    )
+  const m = fresh ?? read.data
+  const notNow = (
+    <Button variant="secondary" className="w-full" onClick={close}>
+      Not now
+    </Button>
+  )
+  let body: React.ReactNode
+  if (done) {
+    body = (
+      <>
+        <MoveDone agent={agent} m={done} />
+        <Button variant="secondary" className="w-full" onClick={close}>
+          Close
+        </Button>
+      </>
+    )
+  } else if (read.isError) {
+    body = (
+      <>
+        <Note ok={false}>
+          {read.error instanceof AgentBankError && read.error.status === 404
+            ? `This top-up link is not one ${agent.name} asked you for, or it has gone. Nothing moved.`
+            : readFailure(read.error, 'This top-up')}
+        </Note>
+        {notNow}
+      </>
+    )
+  } else if (!m) {
+    body = <p className="text-body text-ink-3">Reading the quote…</p>
+  } else if (m.route === 'cash_out') {
+    body = (
+      <>
+        <Note ok={false}>{`This top-up link is not one ${agent.name} asked you for, or it has gone. Nothing moved.`}</Note>
+        {notNow}
+      </>
+    )
+  } else if (m.status !== 'quoted') {
+    body = (
+      <>
+        <MoveDone agent={agent} m={m} />
+        {notNow}
+      </>
+    )
+  } else if (expired(m)) {
+    body = (
+      <>
+        <Note ok={false}>This quote has expired. Nothing moved.</Note>
+        <Button size="lg" className="w-full" disabled={again.isPending} onClick={() => again.mutate(m)}>
+          {again.isPending ? 'Reading the quote…' : 'Add money'}
+        </Button>
+        {notNow}
+        {again.isError ? <Note ok={false}>{refusalText(again.error)}</Note> : null}
+      </>
+    )
+  } else {
+    body = <MoveQuote key={m.id} agent={agent} m={m} gets={`${agent.name} gets`} change="Not now" onChange={close} onDone={setDone} />
+  }
+  return (
+    <Card className="grid gap-3" data-testid="agent-top-up-link">
+      <h2 className="font-display text-reading font-bold text-ink">Add money to {agent.name}</h2>
+      {done ? null : <p className="text-body text-ink-2">{agent.name} asked for this top-up. Nothing moves until you confirm.</p>}
+      {body}
+    </Card>
   )
 }
 

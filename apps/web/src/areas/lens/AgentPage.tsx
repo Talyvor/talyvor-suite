@@ -14,6 +14,7 @@ import { IssueCard, cardKey } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { AgentFundingButtons } from './AgentFunding'
 import { AgentMoneySection } from './AgentMoney'
+import { TopUpLink } from './AgentWalletActions'
 import { LowBalanceCard } from './LowBalanceCard'
 import { DownloadFailed, dayIn, lineWhat, lineWhen, useMonthFile } from './AgentStatement'
 import { approvalSheetTo } from './ApprovalSheet'
@@ -29,6 +30,7 @@ import { useMoney } from './money'
 // B57.111: its spend by day, model and destination, across the page under the statement and the rules.
 // B61.84: its Balance card's Add money and Take back move money between the company's account and the agent's.
 // B28.61: under the Balance card, the agent's low-balance alert for each of its accounts.
+// B48.44: opened from its wallet_topup_link (?top_up=<move>), above the Balance card, the top-up it asked for.
 
 /** Under BOOK_KEY, so every pause, resume, move and archive that refreshes the book refreshes the page too. */
 export const summaryKey = (id: string) => [...BOOK_KEY, 'summary', id]
@@ -460,6 +462,7 @@ export function AgentSummaryView({ id }: { id: string }) {
           <Header s={s} />
           <div className="grid items-start gap-4 wide:grid-cols-12">
             <div className="grid gap-4 wide:col-span-5">
+              <TopUpLink agent={s.agent} />
               <BalanceCard s={s} />
               {s.agent.archived_at ? null : <LowBalanceCard agent={s.agent} accounts={s.currency_accounts ?? []} />}
               {(s.approvals ?? [])

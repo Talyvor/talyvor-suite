@@ -3336,6 +3336,8 @@ export const agentWalletApi = {
   confirm: (id: string, moveID: string, assertion?: PasskeyAssertion) =>
     send<WalletMove>('POST', `/api/agents/${e(id)}/wallet-moves/${e(moveID)}/confirm`, assertion ? { assertion } : {}),
   moves: (id: string) => getSaid<WalletMove[] | null>(`/api/agents/${e(id)}/wallet-moves`),
+  /** B48.44 — one move by id, a quote the agent asked for with wallet_topup_link included (Lens B48.43). */
+  move: (id: string, moveID: string) => getSaid<WalletMove>(`/api/agents/${e(id)}/wallet-moves/${e(moveID)}`),
   activity: (id: string) => getSaid<{ lines: WalletLine[] | null }>(`/api/agents/${e(id)}/wallet/activity?limit=100`),
   statement: (id: string, month: string) => getSaid<WalletStatement>(`/api/agents/${e(id)}/wallet/statement?${new URLSearchParams({ month, format: 'json' })}`),
   statementFile: walletStatementFile,
