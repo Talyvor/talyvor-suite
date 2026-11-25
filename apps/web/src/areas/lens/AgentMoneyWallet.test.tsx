@@ -100,6 +100,34 @@ describe('the agent’s money-layer wallet', () => {
     expect(within(usdc).getByText(/Send USDC on Base to this address/)).toBeTruthy()
   })
 
+  // B57.215 — in Pocket: each wallet is named with its balance, and how to pay into it is Pocket's facts (a term and its
+  // value), each value with an icon to copy it, as the Instant transfer receipt draws its reference.
+  it('in Pocket draws each wallet’s details as facts, each copied by its icon', async () => {
+    const fiat = { ...LIVE_IBAN, asset: 'EUR', balance_minor: 1_000, payment_reference: 'TLV-RESEARCHER' }
+    const { writeText } = mockBff([fiat, LIVE_ADDRESS])
+    const card = await screen.findByTestId('agent-money-wallet')
+    const eur = await within(card).findByRole('region', { name: 'Its EUR wallet' })
+    expect(within(eur).getByRole('heading', { name: /^Its EUR wallet/ }).textContent).toMatch(/^Its EUR wallet€10\.00$/)
+    for (const [term, value, button] of [
+      ['Account holder', 'Acme Robotics SAS', 'Copy account holder'],
+      ['IBAN', 'FR7630006000011234567890189', 'Copy IBAN'],
+      ['BIC', 'AGRIFRPP', 'Copy BIC'],
+      ['Reference', 'TLV-RESEARCHER', 'Copy reference'],
+    ]) {
+      expect(within(eur).getByText(term).tagName).toBe('DT')
+      expect(within(eur).getByText(value).closest('dd')).not.toBeNull()
+      const copy = within(eur).getByRole('button', { name: button })
+      expect(copy.textContent).toBe('')
+      fireEvent.click(copy)
+      expect(writeText).toHaveBeenLastCalledWith(value)
+    }
+    const usdc = within(card).getByRole('region', { name: 'Its USDC wallet' })
+    expect(within(usdc).getByText('Address').tagName).toBe('DT')
+    expect(within(usdc).getByText(ADDRESS).closest('dd')).not.toBeNull()
+    expect(within(usdc).getByText('Network').tagName).toBe('DT')
+    expect(within(usdc).getByText('Base').closest('dd')).not.toBeNull()
+  })
+
   it('from a live e-money partner shows the IBAN in the holder’s name and copies it', async () => {
     const { writeText } = mockBff(LIVE_IBAN)
     const card = await screen.findByTestId('wallet-iban')
