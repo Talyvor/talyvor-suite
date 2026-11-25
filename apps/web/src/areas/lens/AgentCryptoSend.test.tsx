@@ -85,7 +85,7 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
       }
     })
     await mount()
-    fireEvent.change(screen.getByLabelText('Wallet address'), { target: { value: TO } })
+    fireEvent.change(screen.getByLabelText('Wallet address, @name, email or phone'), { target: { value: TO } })
     fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Review' }))
 
@@ -138,6 +138,16 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
       [`/api/agents/${AGENT.id}/crypto-sends/cs_wait/approve`, {}],
       [`/api/agents/${AGENT.id}/crypto-sends/cs_wait/decline`, {}],
     ])
+  })
+
+  it('B48.47 — sends to a person on Talyvor by their @name, which Lens resolves', async () => {
+    const calls = fakeBff((c) => (c.url.endsWith('/crypto-sends/quote') ? Response.json({ ...QUOTE, to: '@nick', to_kind: 'address', to_label: undefined }) : undefined))
+    await mount()
+    fireEvent.change(screen.getByLabelText('Wallet address, @name, email or phone'), { target: { value: '@nick' } })
+    fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    await screen.findByTestId('crypto-send-quote')
+    expect(calls.find((c) => c.url.endsWith('/crypto-sends/quote'))?.body).toEqual({ to: '@nick', network: 'base', token: 'USDC', amount_minor: 2_500_000 })
   })
 
   it('rounds the most the network fee can be up, never down', () => {
