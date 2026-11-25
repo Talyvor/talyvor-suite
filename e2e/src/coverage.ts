@@ -49,6 +49,8 @@ export interface Entry {
   component?: string
   /** Screens only: outside the sign-in gate, so the console's heading does not name it. */
   public?: boolean
+  /** Screens only: B61.121 — the page it opens in the right panel over, when it opens in one. */
+  panel?: string
   /** BFF only: the paths its registration names, which link it to Lens routes. */
   names?: string[]
   /** BFF only: what it sends to Track and Docs, which links it to their routes. */
@@ -92,10 +94,11 @@ export async function screensFrom(webSrc: string): Promise<Entry[]> {
   for (const m of app.matchAll(/^import \{([^}]+)\} from '\.\/(areas\/[^']+|routes\/[^']+)'/gm)) {
     for (const name of m[1].split(',').map((s) => s.trim()).filter((s) => s !== '')) files.set(name, m[2])
   }
-  const mounted: { path: string; feature: string; component: string; public?: boolean }[] = []
+  const mounted: { path: string; feature: string; component: string; public?: boolean; panel?: string }[] = []
   const table = /export const CONSOLE_ROUTES[\s\S]*?\n\]/.exec(app)?.[0] ?? ''
-  for (const m of table.matchAll(/\{ path: '([^']+)', title: '([^']+)', element: <(\w+)/g)) {
-    mounted.push({ path: m[1], feature: m[2], component: m[3] })
+  for (const m of table.matchAll(/\{ path: '([^']+)', title: '([^']+)', element: <(\w+)[^\n]*/g)) {
+    const panel = /panel: '([^']+)'/.exec(m[0])?.[1]
+    mounted.push({ path: m[1], feature: m[2], component: m[3], ...(panel === undefined ? {} : { panel }) })
   }
   const outer = /export function App\(\)[\s\S]*$/.exec(app)?.[0] ?? ''
   for (const m of outer.matchAll(/<Route path="([^"]+)" element=\{<(\w+)/g)) {
@@ -106,7 +109,7 @@ export async function screensFrom(webSrc: string): Promise<Entry[]> {
   const out: Entry[] = []
   for (const r of mounted) {
     if (!r.path.endsWith('/*')) {
-      out.push({ kind: 'screen', path: r.path, method: 'GET', feature: r.feature, component: r.component, public: r.public })
+      out.push({ kind: 'screen', path: r.path, method: 'GET', feature: r.feature, component: r.component, public: r.public, ...(r.panel === undefined ? {} : { panel: r.panel }) })
       continue
     }
     const base = r.path.slice(0, -2)
