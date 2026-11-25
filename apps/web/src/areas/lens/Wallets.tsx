@@ -36,6 +36,7 @@ import {
 } from './agentBankApi'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { AgentFundingButtons } from './AgentFunding'
+import { AllStatements, ApprovalsWaiting, DRAG_TYPE, MoveBetweenAgents, movePairs } from './WalletsTogether'
 
 // Wallets.tsx — B59.53: Wallets on the web, the twin of the phone's (B59.33). Each side the account's kind shows (SPEC
 // 3.3): Fiat only the fiat side, Stablecoin and crypto only the stablecoin side, Hybrid both, fiat first. Each side has a
@@ -49,6 +50,8 @@ import { AgentFundingButtons } from './AgentFunding'
 // B57.168 — drawn as Pocket Live's Balances (design/pocket-live, the phone's view wallets): each side a card with a row per
 // currency, what the agents hold of it or "All yours"; the actions under it (Home's, with Withdraw and Convert opening
 // here); the agents beside it, each account with Add money and Take back; then which kind of account this is.
+// B48.19 — the owner's money in one place (WalletsTogether.tsx): an agent's wallet dragged onto another's, or Move between
+// agents, moves money between them; the approvals waiting, with the way to them; every wallet's month in one download.
 
 export type Side = 'fiat' | 'stablecoin'
 export type WalletAction = 'top-up' | 'withdraw' | 'convert'
@@ -109,6 +112,10 @@ export function WalletsScreen() {
     asked === 'top-up' || (asked === 'withdraw' && shows?.bankTransfers) || (asked === 'convert' && shows?.convert) ? (asked as WalletAction) : null
   const sides = shows ? walletSides(all, shows) : []
   const agentAccounts = sides.flatMap((s) => s.agentAccounts)
+  const movable = movePairs(agentAccounts)
+  const [moving, setMoving] = useState<{ from?: string; to?: string } | null>(null)
+  const [dragged, setDragged] = useState<CurrencyAccount | null>(null)
+  const takes = (a: CurrencyAccount) => dragged !== null && dragged.currency === a.currency && dragged.agent_id !== a.agent_id
 
   return (
     <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-5 pb-10">
@@ -170,9 +177,17 @@ export function WalletsScreen() {
           </div>
           {agentAccounts.length > 0 ? (
             <PocketCard tone="white" aria-labelledby="wallets-agents" className="min-w-0 wide:col-span-5" data-testid="wallets-agents">
-              <h3 id="wallets-agents" className="font-display text-head font-bold text-ink">
-                {shows.agents}
-              </h3>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 id="wallets-agents" className="font-display text-head font-bold text-ink">
+                  {shows.agents}
+                </h3>
+                {movable.length > 0 ? (
+                  <PocketButton type="button" variant="outline" size="sm" icon={<Icon name="arrow" size={16} />} onClick={() => setMoving({})}>
+                    Move between agents
+                  </PocketButton>
+                ) : null}
+              </div>
+              {movable.length > 0 ? <p className="mt-1 text-body text-ink-3">Drag an agent onto another to move money between them.</p> : null}
               <div className="mt-1 grid">
                 {agentAccounts.map((a) => {
                   const agent = agents.find((x) => x.id === a.agent_id)
@@ -180,7 +195,28 @@ export function WalletsScreen() {
                   const job = (agent?.description ?? '').split(' · ')[0].trim()
                   // B57.179 — pocket.css .agmove: the agent's row, then Add money and Take back side by side under it.
                   return (
-                    <div key={a.id} className="border-t border-line pb-3.5 first:border-t-0" data-testid={`wallets-agent-${a.id}`}>
+                    <div
+                      key={a.id}
+                      className={cn('border-t border-line pb-3.5 first:border-t-0', takes(a) && 'rounded-card-tight bg-cloud')}
+                      data-testid={`wallets-agent-${a.id}`}
+                      draggable={movable.includes(a)}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(DRAG_TYPE, a.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                        setDragged(a)
+                      }}
+                      onDragEnd={() => setDragged(null)}
+                      onDragOver={(e) => {
+                        if (takes(a)) e.preventDefault()
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        const id = e.dataTransfer.getData(DRAG_TYPE) || dragged?.id
+                        const from = movable.find((x) => x.id === id)
+                        setDragged(null)
+                        if (from && from.currency === a.currency && from.agent_id !== a.agent_id) setMoving({ from: from.id, to: a.id })
+                      }}
+                    >
                       <Row
                         className="border-t-0"
                         leading={agent ? <Face agent={agent} size={40} state={paused ? 'asleep' : 'happy'} /> : undefined}
@@ -197,6 +233,13 @@ export function WalletsScreen() {
           ) : null}
         </div>
       )}
+      {shows && !accounts.isPending && !accounts.isError ? (
+        <>
+          <ApprovalsWaiting />
+          <AllStatements />
+        </>
+      ) : null}
+      {moving ? <MoveBetweenAgents accounts={agentAccounts} agents={agents} from={moving.from} to={moving.to} onClose={() => setMoving(null)} /> : null}
       {account ? (
         <p className="flex items-start gap-2 text-body text-ink-3" data-testid="wallets-kind">
           <Icon name="lock" size={16} />

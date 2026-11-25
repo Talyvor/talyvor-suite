@@ -113,3 +113,62 @@ func TestAgentWalletMovesReachLensAsNamed(t *testing.T) {
 		}
 	}
 }
+
+// B48.19 — every wallet's month in one download: the owner's statement reaches Lens's workspace route under the session's
+// token with only month and format, and its CSV and PDF come down as the file.
+func TestOwnerWalletStatementReachesLensAsNamed(t *testing.T) {
+	var mu sync.Mutex
+	got := []string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		mu.Lock()
+		got = append(got, r.Method+" "+r.URL.RequestURI()+" auth="+r.Header.Get("Authorization"))
+		mu.Unlock()
+		switch r.URL.Query().Get("format") {
+		case "pdf":
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write([]byte("%PDF-1.4 statement"))
+		case "csv":
+			w.Header().Set("Content-Type", "text/csv")
+			_, _ = w.Write([]byte("date,wallet,amount\n"))
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"accounts":[],"lines":[]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, c := range []struct{ query, contentType, prefix string }{
+		{"month=2026-11&format=csv&agent=agt_other", "text/csv; charset=utf-8", "date,wallet"},
+		{"month=2026-10&format=pdf", "application/pdf", "%PDF"},
+	} {
+		rec := httptest.NewRecorder()
+		a.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/wallet/statement?"+c.query, nil))
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != c.contentType || !strings.HasPrefix(rec.Body.String(), c.prefix) {
+			t.Fatalf("GET /api/wallet/statement?%s = %d %q %q", c.query, rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
+		}
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/wallet/statement", `{}`); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /api/wallet/statement = %d, want 405", rec.Code)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"/wallet/statement?format=csv&month=2026-11", "/wallet/statement?format=pdf&month=2026-10"}
+	if len(got) != len(want) {
+		t.Fatalf("Lens saw %d calls, want %d:\n  %s", len(got), len(want), strings.Join(got, "\n  "))
+	}
+	for i, call := range got {
+		ws, rest, _ := strings.Cut(strings.TrimPrefix(call, "GET /v1/workspaces/"), "/")
+		if !strings.HasPrefix(call, "GET /v1/workspaces/") || ws == "" || !strings.HasPrefix("/"+rest, want[i]+" ") {
+			t.Errorf("call %d = %s, want GET /v1/workspaces/<ws>%s", i, call, want[i])
+		}
+		if !strings.Contains(call, " auth=Bearer ") || strings.HasSuffix(call, "auth=Bearer ") {
+			t.Errorf("call %d did not go up under the session's token: %s", i, call)
+		}
+	}
+}

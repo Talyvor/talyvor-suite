@@ -20,6 +20,8 @@ import (
 //	GET  /api/agents/{id}/wallet/activity?limit=         its wallets' postings, newest first
 //	GET  /api/agents/{id}/wallet/statement?month=&format=   a month's statement as JSON, CSV or PDF
 //	GET  /api/agents/{id}/crypto-requests                its requests to be paid, each with where it stands
+//	GET  /api/wallet/statement?month=&format=           B48.19: every wallet the owner has, the owner's own and each
+//	                                              agent's, in one month's statement as JSON, CSV or PDF
 //	POST /api/agents/{id}/crypto-requests  {token, network, amount_minor, memo, expires_at}   under the browser's
 //	                                              Idempotency-Key: a request with its link and its QR code's URI
 //
@@ -141,6 +143,15 @@ func (a *app) handleAgentWalletStatement(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	a.statementRelay(w, r, t, lensWorkspacePath(t, suffix), "month", "format")
+}
+
+// handleOwnerWalletStatement — GET /api/wallet/statement?month=&format= (B48.19): every wallet's month in one file.
+func (a *app) handleOwnerWalletStatement(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.statementRelay(w, r, t, lensWorkspacePath(t, "/wallet/statement"), "month", "format")
 }
 
 // handleAgentCryptoRequests — GET lists the agent's requests to be paid; POST asks for one, once per Idempotency-Key.

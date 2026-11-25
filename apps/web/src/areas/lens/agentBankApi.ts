@@ -3273,8 +3273,10 @@ export interface WalletStatement {
 }
 
 /** A month's statement as the CSV or PDF Lens writes. A refusal carries Lens's sentence. */
-async function walletStatementFile(id: string, month: string, format: 'csv' | 'pdf'): Promise<Blob> {
-  const path = `/api/agents/${e(id)}/wallet/statement?${new URLSearchParams({ month, format })}`
+async function walletStatementFile(id: string | null, month: string, format: 'csv' | 'pdf'): Promise<Blob> {
+  // B48.19 — with no agent, every wallet the owner has, theirs and each agent's, in one file.
+  const query = new URLSearchParams({ month, format })
+  const path = id === null ? `/api/wallet/statement?${query}` : `/api/agents/${e(id)}/wallet/statement?${query}`
   const res = await fetch(path, { headers: { Accept: format === 'pdf' ? 'application/pdf' : 'text/csv' } })
   if (!res.ok) {
     let sentence = ''
@@ -3301,6 +3303,8 @@ export const agentWalletApi = {
   activity: (id: string) => getSaid<{ lines: WalletLine[] | null }>(`/api/agents/${e(id)}/wallet/activity?limit=100`),
   statement: (id: string, month: string) => getSaid<WalletStatement>(`/api/agents/${e(id)}/wallet/statement?${new URLSearchParams({ month, format: 'json' })}`),
   statementFile: walletStatementFile,
+  /** B48.19 — every wallet's month, the owner's and each agent's, as one CSV or PDF. */
+  ownerStatementFile: (month: string, format: 'csv' | 'pdf') => walletStatementFile(null, month, format),
   requests: (id: string) => getSaid<{ requests: CryptoPayRequest[] | null }>(`/api/agents/${e(id)}/crypto-requests`),
   /** Asked once however many times `key` arrives. */
   request: (id: string, body: { token: 'USDC'; network: string; amount_minor: number; memo: string; expires_at: string }, key: string) =>
