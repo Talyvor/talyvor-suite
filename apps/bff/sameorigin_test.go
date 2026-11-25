@@ -311,6 +311,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends", body: `{"to":"0x1","network":"base","token":"USDC","amount_minor":100}`},                                                 // B48.36
 		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends/s1/approve", body: `{"test_amount_minor":1}`},                                                                              // B48.36
 		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends/s1/decline", body: `{}`},                                                                                                   // B48.36
+		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends/challenge", body: `{"to":"0x1","network":"base","token":"USDC","amount_minor":100}`},                                       // B48.50
+		{method: http.MethodPost, path: "/api/agents/x1/crypto-sends/s1/approve/challenge", body: `{}`},                                                                                         // B48.50
+		{method: http.MethodPost, path: "/api/crypto-addresses", body: `{"name":"Treasury","address":"0x1"}`},                                                                                   // B48.50
+		{method: http.MethodDelete, path: "/api/crypto-addresses/x1"},                                                                                                                           // B48.50
 		{method: http.MethodPost, path: "/api/agents/x1/wallet-moves/quote", body: `{"route":"card","amount_minor":100,"currency":"GBP"}`},                                                      // B48.47
 		{method: http.MethodPost, path: "/api/agents/x1/wallet-moves/s1/challenge", body: `{}`},                                                                                                 // B48.47
 		{method: http.MethodPost, path: "/api/agents/x1/wallet-moves/s1/confirm", body: `{}`},                                                                                                   // B48.47

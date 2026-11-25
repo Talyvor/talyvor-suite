@@ -557,6 +557,14 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/quote", a.requireTenant(a.handleCryptoSendQuote))
 	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/{sid}/approve", a.requireTenant(a.handleCryptoSendApprove))
 	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/{sid}/decline", a.requireTenant(a.handleCryptoSendDecline))
+	// B48.50 — ENS names, the saved address book, and the owner's passkey on their send and their yes (Lens B48.49).
+	// …/crypto-sends/challenge, as the phone calls it, overlaps /api/agents/approvals/{id}/challenge, and the mux refuses
+	// both. Every other five-segment /api/agents route is more specific than this one, which answers only that path and
+	// is the same 404 as before for anything else (crypto_sends.go).
+	a.mux.HandleFunc("/api/agents/{id}/{kind}/{action}", a.cryptoSendChallengeOrNotFound)
+	a.mux.HandleFunc("/api/agents/{id}/crypto-sends/{sid}/approve/challenge", a.requireTenant(a.handleCryptoSendApproveChallenge))
+	a.mux.HandleFunc("/api/crypto-addresses", a.requireTenant(a.handleCryptoAddresses))
+	a.mux.HandleFunc("/api/crypto-addresses/{id}", a.requireTenant(a.handleCryptoAddress))
 	// B48.47 — top up, cash out, activity, statements and requests to be paid, on the agent's crypto wallet (Lens B48.8,
 	// B48.14, B48.10). See agent_wallet_moves.go.
 	a.mux.HandleFunc("/api/agents/{id}/wallet-moves", a.requireTenant(a.handleWalletMoves))

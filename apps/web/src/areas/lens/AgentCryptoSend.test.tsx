@@ -8,10 +8,14 @@ import { AppMoney } from './money'
 
 // B48.36 — Send USDC from an agent's crypto wallet (Lens B48.9): the quote first, then Send under one Idempotency-Key
 // that a retry keeps, the receipt with its explorer link, and the owner's Approve, Send a test amount first and Decline
-// on a send waiting for them.
+// on a send waiting for them. B48.50 — to a name.eth or a saved name, the quote showing the address it resolved to; the
+// owner's saved addresses; and the owner's send and yes signed with their passkey over Lens's challenge.
 
 const AGENT = { id: 'agt_research', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-11-01T09:00:00Z' } as unknown as Agent
 const TO = '0x1111111111111111111111111111111111111111'
+const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
+const SIGNED = { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }
+const LABEL = 'Wallet address, name.eth, saved name, @name, email or phone'
 
 const QUOTE = {
   network: 'base',
@@ -47,6 +51,9 @@ function fakeBff(answer: (c: Call) => Response | undefined, sends: CryptoSend[] 
     const r = answer(c)
     if (r) return r
     if (url === `/api/agents/${AGENT.id}/crypto-sends` && c.method === 'GET') return Response.json({ sends })
+    // A workspace that signs nothing yet: its challenges name no credentials.
+    if (url.endsWith('/challenge') && c.method === 'POST') return Response.json({ challenge: 'Y2g', allow_credentials: null })
+    if (url === '/api/crypto-addresses' && c.method === 'GET') return Response.json({ addresses: [] })
     return new Response('null', { status: 404 })
   })
   return calls
@@ -54,6 +61,7 @@ function fakeBff(answer: (c: Call) => Response | undefined, sends: CryptoSend[] 
 
 async function mount() {
   queryClient.clear()
+  Object.defineProperty(navigator, 'credentials', { value: { get: vi.fn(async () => ASSERTION), create: vi.fn() }, configurable: true })
   render(
     <QueryClientProvider client={queryClient}>
       <AppMoney>
@@ -85,7 +93,7 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
       }
     })
     await mount()
-    fireEvent.change(screen.getByLabelText('Wallet address, @name, email or phone'), { target: { value: TO } })
+    fireEvent.change(screen.getByLabelText(LABEL), { target: { value: TO } })
     fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Review' }))
 
@@ -114,7 +122,7 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
 
   it('lets the owner approve, send a test amount first, or decline a send to a new address', async () => {
     const waiting = send({ id: 'cs_wait', status: 'awaiting_owner' })
-    const calls = fakeBff((c) => (c.method === 'POST' ? Response.json(send({ id: 'cs_wait', status: 'sending' }), { status: 202 }) : undefined), [
+    const calls = fakeBff((c) => (c.method === 'POST' && !c.url.endsWith('/challenge') ? Response.json(send({ id: 'cs_wait', status: 'sending' }), { status: 202 }) : undefined), [
       waiting,
       send({ id: 'cs_in', direction: 'in', to: '0x2222222222222222222222222222222222222222', explorer_url: 'https://basescan.org/tx/0xdef' }),
     ])
@@ -127,14 +135,17 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
     fireEvent.click(within(box).getByRole('button', { name: 'Send a test amount first' }))
     fireEvent.change(within(box).getByLabelText('Test amount in USDC'), { target: { value: '0.1' } })
     fireEvent.click(within(box).getByRole('button', { name: 'Send the test amount' }))
-    await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1))
-    fireEvent.click(within(box).getByRole('button', { name: 'Approve' }))
     await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(2))
+    fireEvent.click(within(box).getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(4))
     fireEvent.click(within(box).getByRole('button', { name: 'Decline' }))
-    await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(3))
+    await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(5))
 
+    // Unsigned while the workspace has no passkey; a decline moves nothing and asks for no challenge.
     expect(calls.filter((c) => c.method === 'POST').map((c) => [c.url, c.body])).toEqual([
+      [`/api/agents/${AGENT.id}/crypto-sends/cs_wait/approve/challenge`, { test_amount_minor: 100_000 }],
       [`/api/agents/${AGENT.id}/crypto-sends/cs_wait/approve`, { test_amount_minor: 100_000 }],
+      [`/api/agents/${AGENT.id}/crypto-sends/cs_wait/approve/challenge`, {}],
       [`/api/agents/${AGENT.id}/crypto-sends/cs_wait/approve`, {}],
       [`/api/agents/${AGENT.id}/crypto-sends/cs_wait/decline`, {}],
     ])
@@ -143,11 +154,114 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
   it('B48.47 — sends to a person on Talyvor by their @name, which Lens resolves', async () => {
     const calls = fakeBff((c) => (c.url.endsWith('/crypto-sends/quote') ? Response.json({ ...QUOTE, to: '@nick', to_kind: 'address', to_label: undefined }) : undefined))
     await mount()
-    fireEvent.change(screen.getByLabelText('Wallet address, @name, email or phone'), { target: { value: '@nick' } })
+    fireEvent.change(screen.getByLabelText(LABEL), { target: { value: '@nick' } })
     fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Review' }))
     await screen.findByTestId('crypto-send-quote')
     expect(calls.find((c) => c.url.endsWith('/crypto-sends/quote'))?.body).toEqual({ to: '@nick', network: 'base', token: 'USDC', amount_minor: 2_500_000 })
+  })
+
+  it('B48.50 — sends to a name.eth, shows the address it resolved to, and signs the send with the passkey', async () => {
+    const resolved = { ...QUOTE, to: TO, to_kind: 'address', to_label: 'northwind.eth', ens_name: 'northwind.eth', new_address: false }
+    const calls = fakeBff((c) => {
+      if (c.url.endsWith('/crypto-sends/quote')) return Response.json(resolved)
+      if (c.url.endsWith('/crypto-sends/challenge')) return Response.json({ challenge: 'Y2g', allow_credentials: ['AQ'], quote: resolved })
+      if (c.url.endsWith('/crypto-sends') && c.method === 'POST') return Response.json(send({ status: 'sending' }))
+    })
+    await mount()
+    fireEvent.change(screen.getByLabelText(LABEL), { target: { value: 'northwind.eth' } })
+    fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+
+    const quote = await screen.findByTestId('crypto-send-quote')
+    expect(within(quote).getByTestId('crypto-send-name')).toHaveTextContent('northwind.eth')
+    expect(within(quote).getByTestId('crypto-send-resolved')).toHaveTextContent(TO)
+    fireEvent.click(within(quote).getByRole('button', { name: 'Send' }))
+    await screen.findByTestId('crypto-send-receipt')
+
+    const body = { to: 'northwind.eth', network: 'base', token: 'USDC', amount_minor: 2_500_000 }
+    const challenge = calls.find((c) => c.url === `/api/agents/${AGENT.id}/crypto-sends/challenge`)
+    const sent = calls.find((c) => c.method === 'POST' && c.url === `/api/agents/${AGENT.id}/crypto-sends`)
+    expect(challenge?.body).toEqual(body)
+    expect(sent?.body).toEqual({ ...body, assertion: SIGNED })
+    expect(sent?.key).toBeTruthy()
+    expect(challenge?.key).toBe(sent?.key)
+  })
+
+  it('B48.50 — signs and sends nothing when the name now points at another address than the one reviewed', async () => {
+    const reviewed = { ...QUOTE, to: TO, ens_name: 'northwind.eth' }
+    const calls = fakeBff((c) => {
+      if (c.url.endsWith('/crypto-sends/quote')) return Response.json(reviewed)
+      if (c.url.endsWith('/crypto-sends/challenge'))
+        return Response.json({ challenge: 'Y2g', allow_credentials: ['AQ'], quote: { ...reviewed, to: '0x9999999999999999999999999999999999999999' } })
+    })
+    await mount()
+    fireEvent.change(screen.getByLabelText(LABEL), { target: { value: 'northwind.eth' } })
+    fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    fireEvent.click(within(await screen.findByTestId('crypto-send-quote')).getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The address changed: northwind.eth now goes to 0x9999999999999999999999999999999999999999, not the address you reviewed. Nothing was sent: review it again.')
+    expect(navigator.credentials.get).not.toHaveBeenCalled()
+    expect(calls.filter((c) => c.method === 'POST' && c.url === `/api/agents/${AGENT.id}/crypto-sends`)).toEqual([])
+  })
+
+  it('B48.50 — keeps saved addresses: pressing one sends to it by its name; save and remove', async () => {
+    const TREASURY = { id: 'caddr_1', name: 'Treasury', address: TO, saved_by: 'user:u1', created_at: '2026-11-20T09:00:00Z', updated_at: '2026-11-20T09:00:00Z' }
+    const calls = fakeBff((c) => {
+      if (c.url === '/api/crypto-addresses' && c.method === 'GET') return Response.json({ addresses: [TREASURY] })
+      if (c.url === '/api/crypto-addresses' && c.method === 'POST') return Response.json({ ...TREASURY, id: 'caddr_2', name: 'Payroll' })
+      if (c.url === '/api/crypto-addresses/caddr_1') return new Response(null, { status: 204 })
+      if (c.url.endsWith('/crypto-sends/quote')) return Response.json({ ...QUOTE, to: TO, saved_name: 'Treasury', to_label: 'Treasury' })
+      if (c.url.endsWith('/crypto-sends') && c.method === 'POST') return Response.json(send({ status: 'sending' }))
+    })
+    await mount()
+    const book = await screen.findByTestId('crypto-saved-addresses')
+    fireEvent.click(await within(book).findByRole('button', { name: 'Treasury' }))
+    expect(screen.getByLabelText(LABEL)).toHaveValue('Treasury')
+    fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    const quote = await screen.findByTestId('crypto-send-quote')
+    expect(within(quote).getByTestId('crypto-send-name')).toHaveTextContent('Treasury')
+    expect(within(quote).getByTestId('crypto-send-resolved')).toHaveTextContent(TO)
+    fireEvent.click(within(quote).getByRole('button', { name: 'Send' }))
+    await screen.findByTestId('crypto-send-receipt')
+    expect(calls.filter((c) => c.method === 'POST' && c.url === `/api/agents/${AGENT.id}/crypto-sends`).map((c) => (c.body as { to: string }).to)).toEqual(['Treasury'])
+
+    const again = await screen.findByTestId('crypto-saved-addresses')
+    fireEvent.change(within(again).getByLabelText('Name'), { target: { value: 'Payroll' } })
+    fireEvent.change(within(again).getByLabelText('Address'), { target: { value: '0x2222222222222222222222222222222222222222' } })
+    fireEvent.click(within(again).getByRole('button', { name: 'Save address' }))
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/crypto-addresses' && c.method === 'POST')).toBe(true))
+    fireEvent.click(within(again).getByRole('button', { name: 'Remove Treasury' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true))
+    expect(calls.filter((c) => c.url.startsWith('/api/crypto-addresses') && c.method !== 'GET').map((c) => [c.method, c.url, c.method === 'POST' ? c.body : null])).toEqual([
+      ['POST', '/api/crypto-addresses', { name: 'Payroll', address: '0x2222222222222222222222222222222222222222' }],
+      ['DELETE', '/api/crypto-addresses/caddr_1', null],
+    ])
+  })
+
+  it('B48.50 — the owner’s yes and their test amount are signed with the passkey', async () => {
+    const calls = fakeBff((c) => {
+      if (c.url.endsWith('/approve/challenge')) return Response.json({ challenge: 'Y2g', allow_credentials: ['AQ'] })
+      if (c.url.endsWith('/approve')) return Response.json(send({ id: 'cs_wait', status: 'sending' }), { status: 202 })
+    }, [send({ id: 'cs_wait', status: 'awaiting_owner' })])
+    await mount()
+    const box = (await screen.findByText('Researcher wants to send to a new address')).closest('[data-crypto-send]') as HTMLElement
+    fireEvent.click(within(box).getByRole('button', { name: 'Review' }))
+    fireEvent.click(within(box).getByRole('button', { name: 'Send a test amount first' }))
+    fireEvent.change(within(box).getByLabelText('Test amount in USDC'), { target: { value: '0.1' } })
+    fireEvent.click(within(box).getByRole('button', { name: 'Send the test amount' }))
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/approve'))).toHaveLength(1))
+    fireEvent.click(within(box).getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/approve'))).toHaveLength(2))
+
+    expect(calls.filter((c) => c.method === 'POST').map((c) => [c.url.replace(`/api/agents/${AGENT.id}/crypto-sends/cs_wait/`, ''), c.body])).toEqual([
+      ['approve/challenge', { test_amount_minor: 100_000 }],
+      ['approve', { test_amount_minor: 100_000, assertion: SIGNED }],
+      ['approve/challenge', {}],
+      ['approve', { assertion: SIGNED }],
+    ])
   })
 
   it('rounds the most the network fee can be up, never down', () => {
