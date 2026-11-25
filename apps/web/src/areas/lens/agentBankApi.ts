@@ -3306,3 +3306,57 @@ export const agentWalletApi = {
   request: (id: string, body: { token: 'USDC'; network: string; amount_minor: number; memo: string; expires_at: string }, key: string) =>
     send<CryptoPayRequest>('POST', `/api/agents/${e(id)}/crypto-requests`, body, { 'Idempotency-Key': key }),
 }
+
+// B48.48 — an agent's Limits and permissions on its crypto wallet (the BFF's agent_spend_permission.go, Lens B48.3).
+
+/** USDC's contract on Base, as Circle publishes it: the token the web's agent wallets hold. */
+export const USDC_ON_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+
+/** Lens smartaccount.TokenLimit: what the agent may pay in one token, in its base units (USDC: six decimals). */
+export interface TokenLimit {
+  token: string
+  allowance: number
+  period: 'day' | 'week' | 'month'
+  per_payment: number
+}
+
+/** Lens smartaccount.Permission: no tokens allows nothing, which is how an agent is frozen. */
+export interface Permission {
+  tokens: TokenLimit[] | null
+  /** the only counterparties it may pay; none: any that is not blocked */
+  allowed: string[] | null
+  blocked: string[] | null
+  expires: string
+}
+
+/** Lens economy.SpendPermission: the permission in force, signed, and whether the agent is frozen. */
+export interface SpendPermission {
+  number: number
+  account: string
+  permission: Permission
+  canonical: string
+  credential_id?: string
+  device_id?: string
+  signed_by: string
+  signed_at: string
+  frozen_at?: string
+}
+
+/** Lens economy.SmartAccountOwner: one of the agent's account's owners; the person's is the passkey that signs. */
+export interface SmartAccountOwner {
+  role: 'person' | 'agent' | 'recovery'
+  credential_id?: string
+  device_id?: string
+}
+
+export const spendPermissionApi = {
+  /** 404 while the agent has none signed. */
+  read: (id: string) => getSaid<SpendPermission>(`/api/agents/${e(id)}/spend-permission`),
+  /** Nothing is kept: the permission as the owner's passkey signs it, numbered after the one it replaces. */
+  prepare: (id: string, p: Permission) => send<{ canonical: string; challenge: string }>('POST', `/api/agents/${e(id)}/spend-permission/prepare`, p),
+  /** Kept only when the passkey that owns the agent's account signed exactly canonical. */
+  set: (id: string, canonical: string, assertion: PasskeyAssertion) =>
+    send<SpendPermission>('PUT', `/api/agents/${e(id)}/spend-permission`, { canonical, assertion }),
+  /** Who owns the agent's account: the person's passkey, or the phone's key. */
+  owners: (id: string) => getSaid<{ address: string; owners: SmartAccountOwner[] | null }>(`/api/agents/${e(id)}/smart-account`),
+}

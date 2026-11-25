@@ -63,6 +63,7 @@ var builtByThisService = map[string]string{
 	"connectorTool":        "one of a person's MCP connector's tools, rebuilt from its tools/list in handleConnectorTools (B28.122)",
 	"chatShareMessage":     "one turn of a shared chat, decoded from the screen's POST and re-encoded in chatShareRequest (B28.127)",
 	"homeAddress":          "the person's home address, decoded from the identity check's POST and re-encoded for Lens in handleVerificationIdentity (B61.46)",
+	"tokenLimit":           "one token's limit of an agent's spend permission, decoded from the Limits screen's POST and re-encoded for Lens in handleAgentSpendPermissionPrepare (B48.48)",
 	"binaryVersion":        "build identity of this binary; assembled by describeBinary",
 	"sealedSession":        "the session sealed into its own cookie id, filled from a session in sessionSealer.seal (B17.40)",
 	"sealedCheck":          "the phone check sealed into its own id, filled from a phoneCheck in checkSealer.seal (B61.115)",

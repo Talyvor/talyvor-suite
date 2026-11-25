@@ -566,6 +566,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/wallet/activity", a.requireTenant(a.handleAgentWalletActivity))
 	a.mux.HandleFunc("/api/agents/{id}/wallet/statement", a.requireTenant(a.handleAgentWalletStatement))
 	a.mux.HandleFunc("/api/agents/{id}/crypto-requests", a.requireTenant(a.handleAgentCryptoRequests))
+	// B48.48 — an agent's Limits and permissions, each change signed with the owner's passkey (Lens B48.3). See
+	// agent_spend_permission.go.
+	a.mux.HandleFunc("/api/agents/{id}/spend-permission", a.requireTenant(a.handleAgentSpendPermission))
+	a.mux.HandleFunc("/api/agents/{id}/spend-permission/prepare", a.requireTenant(a.handleAgentSpendPermissionPrepare))
 	a.mux.HandleFunc("/api/agents/{id}/summary", a.requireTenant(a.handleAgentSummary)) // B57.20
 	a.mux.HandleFunc("/api/agents/{id}/statement", a.requireTenant(a.handleAgentStatement))
 	a.mux.HandleFunc("/api/agents/statement", a.requireTenant(a.handleBankStatement))       // B19.22

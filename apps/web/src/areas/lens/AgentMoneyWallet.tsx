@@ -10,6 +10,7 @@ import { type Agent, type AgentMoneyWallet, type AgentWallets, type OutsidePayee
 import { WorkspaceLabel } from '../../labels/workspace'
 import { MONEY_WALLET } from '../../labels/capabilities'
 import { WalletActivity, WalletCashOut, WalletRequest, WalletStatements, WalletTopUp } from './AgentWalletActions'
+import { WalletLimits } from './AgentWalletLimits'
 
 // AgentMoneyWallet.tsx — B46.9: the agent's wallet on the money layer (Lens B46.4). What it holds, how to add money to
 // it — a USDC address on Base with its QR code, or an IBAN in the account holder's name, whichever its partner gives —
@@ -24,6 +25,8 @@ import { WalletActivity, WalletCashOut, WalletRequest, WalletStatements, WalletT
 // wallet, each with its balance and how to add money to it.
 // B48.47 — and under each wallet what the owner does with it (AgentWalletActions.tsx): Top up, and for the USDC wallet
 // Cash out and Request; then its Activity and Statements.
+// B48.48 — and for the USDC wallet its Limits and permissions, each change signed with the owner's passkey
+// (AgentWalletLimits.tsx).
 
 export const walletKey = (id: string) => ['agent-money-wallet', id]
 export const walletsKey = (id: string) => ['agent-money-wallets', id]
@@ -198,7 +201,7 @@ function Send({ agent }: { agent: Agent }) {
   )
 }
 
-type WalletAction = 'top-up' | 'cash-out' | 'request' | 'activity' | 'statements'
+type WalletAction = 'top-up' | 'cash-out' | 'request' | 'activity' | 'statements' | 'limits'
 
 const ACTION_WORDS: Record<WalletAction, string> = {
   'top-up': 'Top up',
@@ -206,13 +209,14 @@ const ACTION_WORDS: Record<WalletAction, string> = {
   request: 'Request',
   activity: 'Activity',
   statements: 'Statements',
+  limits: 'Limits and permissions',
 }
 
 /** One wallet's actions: a button each, the one pressed open under them. */
 function WalletActions({ agent, wallet, agents }: { agent: Agent; wallet: AgentMoneyWallet; agents: Agent[] }) {
   const [open, setOpen] = useState<WalletAction | null>(null)
   const usdc = wallet.asset === 'USDC'
-  const actions: WalletAction[] = usdc ? ['top-up', 'cash-out', 'request', 'activity', 'statements'] : ['top-up', 'activity', 'statements']
+  const actions: WalletAction[] = usdc ? ['top-up', 'cash-out', 'request', 'activity', 'statements', 'limits'] : ['top-up', 'activity', 'statements']
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap gap-2" role="group" aria-label={`What to do with the ${wallet.asset} wallet`}>
@@ -227,6 +231,7 @@ function WalletActions({ agent, wallet, agents }: { agent: Agent; wallet: AgentM
       {open === 'request' ? <WalletRequest agent={agent} /> : null}
       {open === 'activity' ? <WalletActivity agent={agent} asset={wallet.asset} /> : null}
       {open === 'statements' ? <WalletStatements agent={agent} asset={wallet.asset} /> : null}
+      {open === 'limits' ? <WalletLimits agent={agent} /> : null}
     </div>
   )
 }

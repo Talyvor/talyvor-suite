@@ -315,6 +315,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/x1/wallet-moves/s1/challenge", body: `{}`},                                                                                                 // B48.47
 		{method: http.MethodPost, path: "/api/agents/x1/wallet-moves/s1/confirm", body: `{}`},                                                                                                   // B48.47
 		{method: http.MethodPost, path: "/api/agents/x1/crypto-requests", body: `{"token":"USDC","network":"base","amount_minor":1}`},                                                           // B48.47
+		{method: http.MethodPost, path: "/api/agents/x1/spend-permission/prepare", body: `{"tokens":[],"expires":"2027-01-01T00:00:00Z"}`},                                                      // B48.48
+		{method: http.MethodPut, path: "/api/agents/x1/spend-permission", body: `{"canonical":"{}","assertion":{}}`},                                                                            // B48.48
 		{method: http.MethodPost, path: "/api/money/accounts/x1/top-up", body: `{"amount_minor":100}`},                                                                                          // B59.52
 		{method: http.MethodPost, path: "/api/money/accounts/x1/withdraw/challenge", body: `{"payee_id":"x1","amount_minor":100}`},                                                              // B59.52
 		{method: http.MethodPost, path: "/api/money/accounts/x1/withdraw", body: `{"payee_id":"x1","amount_minor":100}`},                                                                        // B59.52
