@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { tokens } from '@talyvor/ui'
-import { Button, Field, Input, Money, Select } from '@talyvor/ui/pocket'
+import { Button, Eyebrow, Facts, Field, Icon, Input, Money, Select, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
 import { encode } from 'uqr'
 import { Note, PanelForm, readFailure } from './WalletMoney'
 import { PAYEES_KEY } from './Pay'
-import { CopyButton } from '../chat/CopyButton'
 import { PreparedPayment } from '../chat/PaymentCards'
 import { type Agent, type AgentMoneyWallet, type AgentWallets, type OutsidePayee, type Shows, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText, useAccount } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
@@ -18,6 +17,8 @@ import { MONEY_WALLET } from '../../labels/capabilities'
 // B59.10 — by the workspace's kind (account.ts): a Fiat only account renders no address, a Stablecoin and crypto only
 // account no IBAN and no Send, which pays a saved bank payee.
 // B57.21 — a panel in Pocket's fields and <Money>, opened from Its wallet on the agent's page (AgentMoney.tsx).
+// B57.215 — in Pocket: each wallet named with its balance, and how to pay into it as Pocket's facts, each value copied by
+// its icon, as the Instant transfer receipt copies its reference.
 // B48.18 — every wallet the agent owns, one of each kind it is (Lens B48.1): a "both" agent's fiat wallet and its USDC
 // wallet, each with its balance and how to add money to it.
 
@@ -56,13 +57,37 @@ export function QrCode({ text, label }: { text: string; label: string }) {
   )
 }
 
-function Detail({ name, value }: { name: string; value: string }) {
+/** Puts text on the clipboard and says so in one line at the bottom. */
+function copy(text: string) {
+  void (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('no clipboard'))).then(
+    () => showToast('Copied'),
+    () => showToast('We couldn’t copy it. Select it and copy it instead.'),
+  )
+}
+
+/** How to pay into a wallet, as Pocket's facts: each detail by name, its value, and an icon that copies it. */
+function Details({ rows }: { rows: { name: string; value: string; copy?: boolean }[] }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="w-28 text-body text-ink-3">{name}</span>
-      <span className="min-w-0 break-all font-figure text-body text-ink">{value}</span>
-      <CopyButton text={value} label={`Copy ${name.replace(/^[A-Z][a-z]/, (c) => c.toLowerCase())}`} />
-    </div>
+    <Facts
+      facts={rows.map((r) => ({
+        label: r.name,
+        value: (
+          <span className="inline-flex max-w-full items-center justify-end gap-2">
+            <span className="min-w-0 break-all">{r.value}</span>
+            {r.copy === false ? null : (
+              <button
+                type="button"
+                aria-label={`Copy ${r.name.replace(/^[A-Z][a-z]/, (c) => c.toLowerCase())}`}
+                className={`shrink-0 rounded-pill text-ink-3 ${pocketFocusRing}`}
+                onClick={() => copy(r.value)}
+              >
+                <Icon name="copy" size={14} />
+              </button>
+            )}
+          </span>
+        ),
+      }))}
+    />
   )
 }
 
@@ -85,23 +110,27 @@ function AddMoney({ agent, wallet, shows }: { agent: Agent; wallet: AgentMoneyWa
     return (
       <div className="flex flex-col gap-3 wide:flex-row wide:items-start" data-testid="wallet-address">
         <QrCode text={r.address} label={`QR code of ${agent.name}’s ${r.asset} address`} />
-        <div className="flex min-w-0 flex-col gap-2">
-          <p className="text-ink">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <p className="text-body text-ink">
             Send {r.asset}
             {network ? ` on ${network}` : ''} to this address. Money sent on another network is lost.
           </p>
-          <Detail name="Address" value={r.address} />
+          <Details rows={[{ name: 'Address', value: r.address }, ...(network ? [{ name: 'Network', value: network, copy: false }] : [])]} />
         </div>
       </div>
     )
   }
   return (
     <div className="flex flex-col gap-2" data-testid="wallet-iban">
-      <p className="text-ink">Pay in from your own bank with these details.</p>
-      {r.holder ? <Detail name="Account holder" value={r.holder} /> : null}
-      <Detail name="IBAN" value={r.iban ?? ''} />
-      {r.bic ? <Detail name="BIC" value={r.bic} /> : null}
-      {wallet.payment_reference ? <Detail name="Reference" value={wallet.payment_reference} /> : null}
+      <p className="text-body text-ink">Pay in from your own bank with these details.</p>
+      <Details
+        rows={[
+          ...(r.holder ? [{ name: 'Account holder', value: r.holder }] : []),
+          { name: 'IBAN', value: r.iban ?? '' },
+          ...(r.bic ? [{ name: 'BIC', value: r.bic }] : []),
+          ...(wallet.payment_reference ? [{ name: 'Reference', value: wallet.payment_reference }] : []),
+        ]}
+      />
     </div>
   )
 }
@@ -188,12 +217,12 @@ export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
           {all.map((w) => (
             <section key={w.asset} className="grid gap-2" aria-label={all.length > 1 ? `Its ${w.asset} wallet` : 'Add money'} data-testid={`agent-wallet-${w.asset}`}>
               {all.length > 1 ? (
-                <h3 className="flex items-baseline justify-between gap-2 font-semibold text-ink">
+                <h3 className="flex items-baseline justify-between gap-2 text-body font-semibold text-ink">
                   <span>Its {w.asset} wallet</span>
                   <Money minor={w.balance_minor} currency={w.asset} />
                 </h3>
               ) : null}
-              <h3 className={all.length > 1 ? 'text-body font-semibold text-ink-2' : 'font-semibold text-ink'}>Add money</h3>
+              <Eyebrow>Add money</Eyebrow>
               {shows ? <AddMoney agent={agent} wallet={w} shows={shows} /> : null}
             </section>
           ))}
@@ -201,7 +230,7 @@ export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
       )}
       {shows?.bankTransfers ? (
         <section className="grid gap-2" aria-label="Send money">
-          <h3 className="font-semibold text-ink">Send</h3>
+          <Eyebrow>Send</Eyebrow>
           <Send agent={agent} />
         </section>
       ) : null}
