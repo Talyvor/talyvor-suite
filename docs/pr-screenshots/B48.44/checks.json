@@ -1,0 +1,16 @@
+[
+  {
+    "route": "/agents/agt_research?top_up=wm_ask",
+    "answers": {
+      "/api/agents/agt_research/wallet-moves/wm_ask": { "id": "wm_ask", "agent_id": "agt_research", "route": "card", "sell_minor": 10000, "sell_currency": "EUR", "fee_minor": 150,
+        "buy_minor": 106700000, "buy_currency": "USDC", "rate": "1.0820", "status": "quoted", "expires_at": "2027-01-01T09:30:00Z", "created_at": "2026-11-25T09:00:00Z" }
+    }
+  },
+  {
+    "route": "/agents/agt_research?top_up=wm_old",
+    "answers": {
+      "/api/agents/agt_research/wallet-moves/wm_old": { "id": "wm_old", "agent_id": "agt_research", "route": "card", "sell_minor": 10000, "sell_currency": "EUR", "fee_minor": 150,
+        "buy_minor": 106700000, "buy_currency": "USDC", "rate": "1.0820", "status": "quoted", "expires_at": "2026-10-01T09:30:00Z", "created_at": "2026-10-01T09:00:00Z" }
+    }
+  }
+]

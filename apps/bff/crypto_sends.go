@@ -86,11 +86,15 @@ func (a *app) handleCryptoSendQuote(w http.ResponseWriter, r *http.Request, t te
 	a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
 }
 
-// cryptoSendChallengeOrNotFound answers /api/agents/{id}/{kind}/{action}: …/crypto-sends/challenge, and for any other
-// path what the mux answered before this was mounted.
+// cryptoSendChallengeOrNotFound answers /api/agents/{id}/{kind}/{action}: …/crypto-sends/challenge, B48.44's
+// …/wallet-moves/{mid}, and for any other path what the mux answered before this was mounted.
 func (a *app) cryptoSendChallengeOrNotFound(w http.ResponseWriter, r *http.Request) {
 	if r.PathValue("kind") == "crypto-sends" && r.PathValue("action") == "challenge" {
 		a.requireTenant(a.handleCryptoSendChallenge)(w, r)
+		return
+	}
+	if r.PathValue("kind") == "wallet-moves" {
+		a.requireTenant(a.handleWalletMove)(w, r)
 		return
 	}
 	a.requireSession(a.handleAPINotFound)(w, r)

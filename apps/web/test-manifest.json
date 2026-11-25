@@ -191,6 +191,7 @@
   "src/areas/lens/Subscriptions.test.tsx": 5,
   "src/areas/lens/TeamRoles.test.tsx": 3,
   "src/areas/lens/TopUp.test.tsx": 31,
+  "src/areas/lens/TopUpLink.test.tsx": 3,
   "src/areas/lens/topupPeg.test.ts": 6,
   "src/areas/lens/TryIt.test.tsx": 4,
   "src/areas/lens/unpaidNotice.test.ts": 7,

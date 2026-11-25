@@ -17,6 +17,7 @@ import (
 //	POST /api/agents/{id}/wallet-moves/{mid}/challenge   what a cash-out's or convert's confirm is signed over
 //	POST /api/agents/{id}/wallet-moves/{mid}/confirm     {assertion?} make it, once
 //	GET  /api/agents/{id}/wallet-moves                   its top-ups and cash-outs
+//	GET  /api/agents/{id}/wallet-moves/{mid}             B48.44: one move by id, a quote its agent asked for included
 //	GET  /api/agents/{id}/wallet/activity?limit=         its wallets' postings, newest first
 //	GET  /api/agents/{id}/wallet/statement?month=&format=   a month's statement as JSON, CSV or PDF
 //	GET  /api/agents/{id}/crypto-requests                its requests to be paid, each with where it stands
@@ -110,6 +111,25 @@ func (a *app) handleWalletMoves(w http.ResponseWriter, r *http.Request, t tenant
 		return
 	}
 	suffix, ok := agentSuffix(w, r, "wallet-moves")
+	if !ok {
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
+}
+
+// handleWalletMove — GET /api/agents/{id}/wallet-moves/{mid}: B48.44, the top-up an agent's wallet_topup_link asks the
+// owner for (Lens B48.43). Nothing goes up but the path. It is reached through cryptoSendChallengeOrNotFound, as the
+// mux refuses this pattern beside /api/agents/approvals/{id}/approve.
+func (a *app) handleWalletMove(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	mid, ok := pathID(w, "move id", r.PathValue("action"))
+	if !ok {
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "wallet-moves/"+url.PathEscape(mid))
 	if !ok {
 		return
 	}
