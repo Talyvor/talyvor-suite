@@ -217,6 +217,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/x1/tasks", body: `{"task":"t","provider":"openai","model":"m"}`},                                                                   // B28.359
 		{method: http.MethodPost, path: "/api/agents/x1/card/freeze", body: `{}`},                                                                                                       // B28.360
 		{method: http.MethodPost, path: "/api/agents/x1/card/unfreeze", body: `{}`},                                                                                                     // B28.360
+		{method: http.MethodPost, path: "/api/agents/x1/card/replace", body: `{}`},                                                                                                      // B28.47
+		{method: http.MethodPost, path: "/api/agents/x1/card/cancel", body: `{}`},                                                                                                       // B28.47
 		{method: http.MethodPost, path: "/api/agents/x1/prompt-schedules", body: `{"prompt":"p","provider":"openai","model":"m","every":"once","first_run_at":"2099-01-01T00:00:00Z"}`}, // B28.377
 		{method: http.MethodPost, path: "/api/agents/prompt-schedules/x1/stop", body: `{}`},                                                                                             // B28.377
 		{method: http.MethodPut, path: "/api/agents/x1/rules", body: `{"daily_limit_ulxc":1}`},

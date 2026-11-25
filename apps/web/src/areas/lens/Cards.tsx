@@ -21,11 +21,65 @@ import { readFailure } from './WalletMoney'
 // B57.155 — drawn in Pocket as REFERENCE 4.1 draws a card page (w-card) and an agent's rules (w-agent-research): each card
 // a white card headed by its agent, the art and its controls beside the details, limits and purchases, each under its own
 // heading; the details on a row behind the lock, the limits as the rules card's list of ticks.
+//
+// B28.47 — Replace card and Cancel card (Lens B28.321), each asked once in a dialog: a replaced card is cancelled and its
+// new one keeps its freeze and merchant lock; a cancelled one is gone for good. A purchase on either is refused and nothing
+// leaves the agent's wallet.
 
 export function frozenText(name: string, card: AgentCard): string {
   return card.frozen
     ? `Frozen. Every purchase on ${name}’s card is refused, and nothing leaves its wallet, until you unfreeze it.`
     : `Unfrozen. ${name}’s card takes purchases again, each one judged by ${name}’s rules.`
+}
+
+export function replacedText(name: string, card: AgentCard): string {
+  return `Replaced. ${name}’s new card ends ${card.last4}. Every purchase on the old one is refused, and nothing leaves its wallet.`
+}
+
+export function cancelledText(name: string): string {
+  return `Cancelled. Every purchase on ${name}’s card is refused, and nothing leaves its wallet. Issue it a new card on Agents.`
+}
+
+/** B28.47 — asks once before the card is replaced or cancelled, as the reference asks before Freeze and replace. */
+function EndCardDialog({
+  ending,
+  name,
+  card,
+  busy,
+  onKeep,
+  onEnd,
+}: {
+  ending: 'replace' | 'cancel' | null
+  name: string
+  card: AgentCard
+  busy: boolean
+  onKeep: () => void
+  onEnd: () => void
+}) {
+  const replace = ending === 'replace'
+  return (
+    <Dialog
+      open={ending !== null}
+      onClose={onKeep}
+      title={replace ? `Replace ${name}’s card?` : `Cancel ${name}’s card?`}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onKeep}>
+            Keep it
+          </Button>
+          <Button variant={replace ? 'primary' : 'danger'} disabled={busy} onClick={onEnd}>
+            {replace ? 'Replace card' : 'Cancel card'}
+          </Button>
+        </>
+      }
+    >
+      <p>
+        {replace
+          ? `The card ending ${card.last4} is cancelled at once, and a new one is issued to the same cardholder. Its freeze and its merchant lock carry over to the new card.`
+          : `The card ending ${card.last4} is cancelled for good. Every purchase on it is refused, and ${name} has no card until you issue it a new one.`}
+      </p>
+    </Dialog>
+  )
 }
 
 const expiry = (card: AgentCard) =>
@@ -150,6 +204,13 @@ function AgentCardEntry({ agent, shown, onShown }: { agent: Agent; shown: boolea
     onError: (err) => setSaid(refusalText(err)),
     onSettled: () => qc.invalidateQueries({ queryKey: cardKey(agent.id) }),
   })
+  const [ending, setEnding] = useState<'replace' | 'cancel' | null>(null)
+  const end = useMutation({
+    mutationFn: (how: 'replace' | 'cancel') => (how === 'replace' ? agentBankApi.replaceCard(agent.id) : agentBankApi.cancelCard(agent.id)),
+    onSuccess: (got, how) => setSaid(how === 'replace' ? replacedText(agent.name, got) : cancelledText(agent.name)),
+    onError: (err) => setSaid(refusalText(err)),
+    onSettled: () => (setEnding(null), qc.invalidateQueries({ queryKey: cardKey(agent.id) })),
+  })
 
   const limits = (
     <Section title="Limits">
@@ -179,9 +240,27 @@ function AgentCardEntry({ agent, shown, onShown }: { agent: Agent; shown: boolea
         <div className="grid justify-items-start gap-4 wide:col-span-5">
           <AgentCardFace agent={agent} className="max-w-78" />
           {card !== null && !held.isPending && !held.isError ? (
-            <Button variant={card.frozen ? 'outline' : 'danger'} disabled={freeze.isPending} onClick={() => freeze.mutate()}>
-              {card.frozen ? 'Unfreeze card' : 'Freeze card'}
-            </Button>
+            <div className="flex flex-wrap gap-2.5">
+              <Button variant={card.frozen ? 'outline' : 'danger'} disabled={freeze.isPending} onClick={() => freeze.mutate()}>
+                {card.frozen ? 'Unfreeze card' : 'Freeze card'}
+              </Button>
+              <Button variant="outline" disabled={end.isPending} onClick={() => setEnding('replace')}>
+                Replace card
+              </Button>
+              <Button variant="outline" disabled={end.isPending} onClick={() => setEnding('cancel')}>
+                Cancel card
+              </Button>
+            </div>
+          ) : null}
+          {card !== null ? (
+            <EndCardDialog
+              ending={ending}
+              name={agent.name}
+              card={card}
+              busy={end.isPending}
+              onKeep={() => setEnding(null)}
+              onEnd={() => ending && end.mutate(ending)}
+            />
           ) : null}
           {said !== null ? (
             <p role="alert" className="text-body text-ink">
