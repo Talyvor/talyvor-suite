@@ -1,0 +1,4 @@
+[
+  { "route": "/money/wallets" },
+  { "route": "/money/wallets", "steps": ["Move between agents"] }
+]
