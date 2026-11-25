@@ -22,6 +22,8 @@ type fakeLensAgentMCP struct {
 const (
 	testAgentKey    = "tlv_" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	lensWalletsText = `{"agent_id":"agt-1","wallets":[{"asset":"GBP","balance_minor":4200},{"asset":"USDC","balance_minor":15000000}]}`
+	lensTopUpText   = `{"move_id":"wm-1","status":"quoted","method":"card","pay_minor":10000,"currency":"EUR","usdc_minor":106700000,` +
+		`"link":"https://app.talyvor.com/agents/agt-1?top_up=wm-1","confirm":"/v1/workspaces/ws-1/agents/agt-1/wallet-moves/wm-1/confirm"}`
 )
 
 func (f *fakeLensAgentMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -47,10 +49,14 @@ func (f *fakeLensAgentMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return map[string]any{"name": name, "description": "Lens's " + name, "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}}
 		}
 		answer(map[string]any{"tools": []any{tool("agent_pay"), tool("wallet_list"), tool("wallet_balance"), tool("wallet_receive_details"),
-			tool("wallet_history"), tool("wallet_send"), tool("wallet_request"), tool("wallet_pot_move"), tool("get_spend_summary")}})
+			tool("wallet_history"), tool("wallet_send"), tool("wallet_request"), tool("wallet_topup_link"), tool("wallet_pot_move"), tool("get_spend_summary")}})
 	case "tools/call":
 		if params["name"] == "wallet_list" {
 			answer(map[string]any{"content": []any{map[string]any{"type": "text", "text": lensWalletsText}}})
+			return
+		}
+		if params["name"] == "wallet_topup_link" {
+			answer(map[string]any{"content": []any{map[string]any{"type": "text", "text": lensTopUpText}}})
 			return
 		}
 		args, _ := params["arguments"].(map[string]any)
@@ -91,7 +97,7 @@ func TestMCPAgentKeyReachesLensWalletTools(t *testing.T) {
 		names = append(names, tool["name"].(string))
 	}
 	slices.Sort(names)
-	if want := []string{"wallet_balance", "wallet_history", "wallet_list", "wallet_receive_details", "wallet_request", "wallet_send"}; !slices.Equal(names, want) {
+	if want := []string{"wallet_balance", "wallet_history", "wallet_list", "wallet_receive_details", "wallet_request", "wallet_send", "wallet_topup_link"}; !slices.Equal(names, want) {
 		t.Fatalf("an agent's key is offered %v, want %v", names, want)
 	}
 
@@ -124,5 +130,26 @@ func TestMCPAgentKeyReachesLensWalletTools(t *testing.T) {
 	rec := serve(a, "POST", "/mcp", "", body, map[string]string{"Authorization": "Bearer " + unknown}, nil)
 	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Header().Get("WWW-Authenticate"), `error="invalid_token"`) {
 		t.Fatalf("a key Lens does not know: %d %q %s", rec.Code, rec.Header().Get("WWW-Authenticate"), rec.Body.String())
+	}
+}
+
+// TestMCPAgentKeyAsksOwnerForTopUp is B48.46's DONE: on app.talyvor.com/mcp an agent's own key calls B48.39's
+// wallet_topup_link, the call reaches Lens's /mcp on that key with its arguments unchanged, and the agent gets Lens's
+// quote and link as Lens gave them. This server answers nothing about the top-up itself.
+func TestMCPAgentKeyAsksOwnerForTopUp(t *testing.T) {
+	a, lens := agentMCPApp(t)
+
+	topUp := toolCall(t, a, testAgentKey, "wallet_topup_link", map[string]any{"amount_minor": 10000, "currency": "EUR", "method": "card"})
+	content, _ := topUp["content"].([]any)
+	if len(content) == 0 {
+		t.Fatalf("wallet_topup_link answered %v, want Lens's %s", topUp, lensTopUpText)
+	}
+	if got := content[0].(map[string]any)["text"]; got != lensTopUpText {
+		t.Fatalf("wallet_topup_link answered %v, want Lens's %s", topUp, lensTopUpText)
+	}
+	last := lens.sent[len(lens.sent)-1]
+	if !reflect.DeepEqual(last["params"], map[string]any{"name": "wallet_topup_link",
+		"arguments": map[string]any{"amount_minor": float64(10000), "currency": "EUR", "method": "card"}}) {
+		t.Fatalf("Lens was sent %v for the agent's wallet_topup_link", last)
 	}
 }
