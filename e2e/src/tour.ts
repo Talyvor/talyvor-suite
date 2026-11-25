@@ -2,15 +2,17 @@
 // hand list, so a screen or a Lens read added tomorrow is tested tomorrow:
 //
 //   every-screen  every screen a customer can open, opened as a person does: the console's own heading
-//                 names it (a public page shows a heading), nothing says "Nothing at this address",
-//                 and while it loads the browser sees no page error and the BFF answers no 5xx.
+//                 names it (a page in the right panel, its panel; a public page shows a heading), nothing
+//                 says "Nothing at this address", and while it loads the browser sees no page error and the
+//                 BFF answers no 5xx. A screen of an area the workspace does not have goes Home (B59.2).
 //   lens-reads    every read of the Lens API a customer's key can make (GET, no parameter but the
 //                 workspace) answers within 15 s and never with a server error.
 //
 // Neither spends: no screen is submitted, and a read costs nothing.
 
-import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Page } from 'playwright'
 import { type Entry, Matcher, cannotTest } from './coverage.ts'
 import type { Scenario, ScenarioCtx } from './scenarios.ts'
@@ -35,11 +37,34 @@ export const SWITCHED_OFF: Readonly<Record<string, { to: string; heading: string
   '/money/card': { to: '/money/spending', heading: 'Spending', why: 'the physical card is switched off until a live card issuer serves it (B60.6)' },
 }
 
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '../..')
+
+/** B17.529 — the web app's AREA_PATHS (apps/web/src/lib/workspaceAreas.tsx): each address and the area it belongs to. */
+export function areaPathsFrom(src: string): { path: string; area: string }[] {
+  return [...src.matchAll(/\{\s*path:\s*'([^']+)',\s*area:\s*'([^']+)'\s*\}/g)].map((m) => ({ path: m[1], area: m[2] }))
+}
+
+/** The area a screen's address belongs to, as the web app's areaOfPath finds it; undefined for a launch screen. */
+export function areaOf(path: string, areaPaths: readonly { path: string; area: string }[]): string | undefined {
+  const at = path.replace(/\/\*$/, '')
+  return areaPaths.find((e) => at === e.path || at.startsWith(`${e.path}/`))?.area
+}
+
+/**
+ * B17.529 — whether a screen's area is off for this workspace: then its address goes to Home by design (B59.2). Read
+ * once a run from the BFF, as the console reads it; undefined while it is not known, so nothing is excused.
+ */
+interface OffArea {
+  paths: readonly { path: string; area: string }[]
+  /** The screen's area when this workspace does not have it. */
+  off: (screen: Entry) => Promise<string | undefined>
+}
+
 /**
  * Opens `path` and reads what a person would: the heading, the catch-all's sentence, page errors and
  * the BFF's 5xx while it loads. The problems found, how long it took to settle, and where a switched-off screen went.
  */
-async function visit(ctx: ScenarioCtx, page: Page, origin: string, path: string, screen: Entry): Promise<{ problems: string[]; ms: number; off?: string }> {
+async function visit(ctx: ScenarioCtx, page: Page, origin: string, path: string, screen: Entry, offArea: OffArea): Promise<{ problems: string[]; ms: number; off?: string }> {
   const errors: string[] = []
   const failed: string[] = []
   const onError = (e: Error) => errors.push(e.message.slice(0, 160))
@@ -54,22 +79,31 @@ async function visit(ctx: ScenarioCtx, page: Page, origin: string, path: string,
   let off: string | undefined
   try {
     await page.goto(origin + path)
-    // A console screen's heading is its title; a public page names itself in its own heading.
-    const named = page.getByRole('heading', { level: 1, name: screen.feature, exact: true })
+    // A console screen's heading is its title; a public page names itself in its own heading. B17.529 — a page that
+    // opens in the right panel (B61.121) is named by the panel, over the page behind it, which keeps its own heading.
+    const h1 = (name: string) => page.getByRole('heading', { level: 1, name, exact: true })
+    const named = screen.panel === undefined ? h1(screen.feature) : h1(screen.feature).or(page.getByRole('dialog', { name: screen.feature, exact: true }))
     const switched = SWITCHED_OFF[screen.path]
+    // The heading a screen may show instead: where its switch sends a person, or Home for an area that may be off.
+    const instead = switched?.heading ?? (areaOf(screen.path, offArea.paths) === undefined ? undefined : 'Home')
     const heading = screen.public === true
       ? page.getByRole('heading').first()
-      : switched === undefined ? named : named.or(page.getByRole('heading', { level: 1, name: switched.heading, exact: true }))
+      : instead === undefined ? named.first() : named.or(h1(instead)).first()
     let shown = await heading.waitFor({ state: 'visible', timeout: HEADING_TIMEOUT_MS }).then(() => true, () => false)
     await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
-    if (shown && switched !== undefined && (await named.count()) === 0) {
-      // The other heading showed: right only on the screen the switch sends a person to.
-      if (new URL(page.url()).pathname === switched.to) off = `switched off, so it lands on ${switched.to} — ${switched.why}`
+    if (shown && instead !== undefined && (await named.count()) === 0) {
+      // The other heading showed: right only on the screen the switch sends a person to, or Home when the area is off.
+      const at = new URL(page.url()).pathname
+      const area = switched === undefined && at === '/' ? await offArea.off(screen) : undefined
+      if (switched !== undefined && at === switched.to) off = `switched off, so it lands on ${switched.to} — ${switched.why}`
+      else if (area !== undefined) off = `its area, ${area}, is off for this workspace, so it lands on Home (B59.2)`
       else shown = false
     }
     if (!shown) {
       const said = (await page.getByRole('heading', { level: 1 }).first().innerText({ timeout: 1_000 }).catch(() => '')).trim()
-      problems.push(screen.public === true ? 'no heading' : `no heading "${screen.feature}"${said !== '' ? ` (it says "${said}")` : ''}`)
+      const panel = screen.panel === undefined ? '' : (await page.locator('[data-page-panel] h2').first().innerText({ timeout: 1_000 }).catch(() => '')).trim()
+      const says = [said !== '' ? `it says "${said}"` : '', panel !== '' ? `its panel "${panel}"` : ''].filter((x) => x !== '').join(', ')
+      problems.push(screen.public === true ? 'no heading' : `no heading "${screen.feature}"${says !== '' ? ` (${says})` : ''}`)
     }
     if ((await page.getByText('Nothing at this address').count()) > 0) problems.push('it says "Nothing at this address"')
   } catch (e) {
@@ -92,6 +126,22 @@ export function everyScreen(): Scenario {
       const screens = ctx.env.inventory.screens
       const origin = new URL(ctx.app.page.url()).origin
       const page = await ctx.app.context.newPage()
+      const areaPaths = areaPathsFrom(await readFile(join(REPO, 'apps/web/src/lib/workspaceAreas.tsx'), 'utf8').catch(() => ''))
+      let on: Promise<string[] | undefined> | undefined
+      const offArea: OffArea = {
+        paths: areaPaths,
+        off: async (s) => {
+          const area = areaOf(s.path, areaPaths)
+          if (area === undefined) return undefined
+          // GET /api/workspace/areas, as the console reads it (B59.38): the areas this workspace has.
+          on ??= page.request
+            .get(`${origin}/api/workspace/areas`)
+            .then(async (r) => (r.ok() ? ((await r.json()) as { areas?: string[] }).areas : undefined))
+            .catch(() => undefined)
+          const areas = await on
+          return areas !== undefined && !areas.includes(area) ? area : undefined
+        },
+      }
       const opened = new Map<string, string>() // a screen's pattern → the address it was opened at
       const wrong: string[] = []
       const where: string[] = []
@@ -124,7 +174,7 @@ export function everyScreen(): Scenario {
             }
             path = link
           }
-          const { problems, ms, off } = await visit(ctx, page, origin, path, s)
+          const { problems, ms, off } = await visit(ctx, page, origin, path, s, offArea)
           count++
           if (off !== undefined && problems.length === 0) offCount++
           opened.set(s.path, path)
@@ -140,7 +190,7 @@ export function everyScreen(): Scenario {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: `${count} screens opened: each named itself${offCount > 0 ? ` or, switched off, landed where it should (${offCount})` : ''}, with no page error and no 5xx` }
+        ? { pass: true, detail: `${count} screens opened: each named itself${offCount > 0 ? ` or, switched off or in an area this workspace does not have, landed where it should (${offCount})` : ''}, with no page error and no 5xx` }
         : { pass: false, detail: `${wrong.length} of ${count} screens wrong — ${wrong.join(' | ')}`, where }
     },
   }
