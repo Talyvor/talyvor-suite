@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Dialog, EmptyState, Field, Icon, Input, Money, RoomBadge, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Card, Dialog, EmptyState, Field, Icon, Input, Money, Pick, PickRow, RoomBadge, pocketFocusRing } from '@talyvor/ui/pocket'
 import { cn, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
 import { IfArea } from '../../lib/workspaceAreas'
@@ -424,19 +424,17 @@ function Details({
             <span className="text-body text-ink-3">
               {merchants.length > 0 ? `${merchantCategoriesText(merchants)}. Only these, by card.` : 'Any merchant. Pick some to let it pay only them by card.'}
             </span>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Merchants and categories">
+            <PickRow label="Merchants and categories">
               {MERCHANT_CATEGORIES.map((c) => (
-                <button
+                <Pick
                   key={c.id}
-                  type="button"
-                  className={pick}
-                  aria-pressed={merchants.includes(c.id)}
-                  onClick={() => setMerchants((all) => (all.includes(c.id) ? all.filter((x) => x !== c.id) : [...all, c.id]))}
+                  checked={merchants.includes(c.id)}
+                  onCheckedChange={(on) => setMerchants((all) => (on ? [...all, c.id] : all.filter((x) => x !== c.id)))}
                 >
                   {c.name}
-                </button>
+                </Pick>
               ))}
-            </div>
+            </PickRow>
           </div>
         ) : null}
       </div>

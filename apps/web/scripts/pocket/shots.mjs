@@ -137,7 +137,7 @@ async function settle(page, t) {
 /** Press a control by its words or aria-label, as a person would. */
 async function press(page, words) {
   const opts = { name: words, exact: true }
-  const loc = ['button', 'link', 'tab', 'switch', 'menuitem', 'radio'].map((role) => page.getByRole(role, opts)).reduce((a, b) => a.or(b))
+  const loc = ['button', 'link', 'tab', 'switch', 'menuitem', 'radio', 'checkbox'].map((role) => page.getByRole(role, opts)).reduce((a, b) => a.or(b))
   await loc.first().click({ timeout: 5000 })
 }
 

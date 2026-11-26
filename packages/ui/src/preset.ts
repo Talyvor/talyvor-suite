@@ -305,8 +305,9 @@ const preset = {
       backgroundSize: { double: '200% 100%' },
       borderColor: { DEFAULT: 'var(--rule)' },
       // Pocket's: cards 24 and 18, inputs 14 (control), the sheet 28, pills for buttons and chips; B57.4's icon tiles 12
-      // (pocket.css .kindico, .roomico) and the facts inset in a card or sheet 16 (.facts2).
-      borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px', tile: '12px', inset: '16px' },
+      // (pocket.css .kindico, .roomico) and the facts inset in a card or sheet 16 (.facts2); a ticked choice's box 6
+      // (.pick::before, B57.198).
+      borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px', tile: '12px', inset: '16px', tick: '6px' },
       // `edge` is Pocket's 1.5px control edge on every field (pocket.css .input), 3:1 on the page.
       // `edge-current` is the danger button's ring (pocket.css .btn.danger): the same 1.5px in the button's own ink.
       // `pick` is a picked choice's ring (pocket.css .pick.on): 2px of ink inside it (B57.141).
@@ -329,6 +330,9 @@ const preset = {
         // B57.142 — an agent's card art on its page, 312 wide (the launch pack's W4).
         78: '19.5rem',
       },
+      // B57.198 — Pocket's ticked choices (pocket.css .pickrow): two to a row where they fit, one where they do not, each
+      // at least as wide as "Advertising" with its box; never more than two (half the row less half the 8px gap).
+      gridTemplateColumns: { picks: 'repeat(auto-fill, minmax(max(8.5rem, calc(50% - 0.25rem)), 1fr))' },
       // Pocket's focus ring is 3px of tangerine (B57.4).
       outlineWidth: { 3: '3px' },
       // `below-header` — the viewport under the console's sticky top bar (`top-header`, Pocket's 72px, B57.8).

@@ -1,0 +1,5 @@
+[
+  {"route": "/agents/agt_research/rules", "screen": "w-rules", "steps": ["Travel"]},
+  {"route": "/agents/agt_research", "screen": "w-agent-research"},
+  {"route": "/agents", "steps": ["New agent", "Make your own", "More rules", "Software", "Hosting"]}
+]

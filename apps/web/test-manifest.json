@@ -90,7 +90,7 @@
   "src/areas/lens/AgentMoney.test.tsx": 16,
   "src/areas/lens/AgentMoneyWallet.test.tsx": 5,
   "src/areas/lens/AgentOwner.test.tsx": 2,
-  "src/areas/lens/AgentPage.test.tsx": 8,
+  "src/areas/lens/AgentPage.test.tsx": 9,
   "src/areas/lens/Agents.test.tsx": 15,
   "src/areas/lens/AgentSafety.test.tsx": 3,
   "src/areas/lens/AgentSchedules.test.tsx": 1,
