@@ -178,6 +178,7 @@ import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
 import { decidedLaddersVerdict, planChange, pricingApproved } from './planLadders.ts'
 import { standingOrders } from './standingOrders.ts'
 import { allowances } from './allowances.ts'
+import { agentCardAccount } from './agentCardAccount.ts'
 
 export interface Evidence {
   note?: string
@@ -5515,6 +5516,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // it on today's day once, the agent's own £7.50 swept back first, on both accounts' statements; set again after it was stopped,
   // the month pays nothing twice. A SKIP on the 29th to the 31st, when no allowance is due.
   if (i === 3) list.push(allowances())
+  // B30.139 — an agent's card drawing on its currency account, once a run, on a workspace of its own: a 25.00 purchase held on the
+  // account, captured at 24.00 on Lens's test-mode Stripe webhook with the 1.00 given back at once, sent again moving nothing, and
+  // no credits moved.
+  if (i === 3) list.push(agentCardAccount())
   // B30.130 — invoices and pay links, once a run, on two workspaces of its own: an agent issues and sends a GBP invoice with VAT; its
   // pay page reads with no credential, test money only, quoting the agent's payment reference and naming no issuer id; another
   // company's unfunded agent is refused 409 through the link and nothing moves.

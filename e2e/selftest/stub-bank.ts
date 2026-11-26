@@ -87,6 +87,14 @@
 // frozen card is declined and nothing leaves the agent. Its defect:
 //   freeze-ignored      — a frozen card answers frozen, and a purchase on it is still approved
 //
+// B30.139 adds an agent card that spends from the agent's currency account (Lens B30.30): POST …/card/draws-on
+// {"draws_on":"account"|"credits"} (409 with no open account in the card's currency); a purchase on a card drawing on the account
+// is held there (card_hold), and its capture on Lens's test-mode Stripe webhook (issuing_transaction.created, settleCardCapture)
+// is card_charge, giving the account at once what the capture did not take of the hold; the same event again moves nothing.
+// Its defects:
+//   card-capture-unreleased — the capture takes the hold and never gives the account the rest of it back
+//   card-account-credits    — a card drawing on the account still spends the agent's credits, and the account is never touched
+//
 // B28.279 adds what Lens B17.26 does with a fund or withdraw's Idempotency-Key: it is the entry's ref, and a move whose
 // key already posted answers the agent's balance and posts nothing. Its defects:
 //   move-replay         — a move sent again under its key posts again
@@ -378,6 +386,8 @@ function weekBounds(period: string): [string, string] | undefined {
 interface CardAuth {
   id: string; agent_id: string; authorization_id: string; approved: boolean; reason: string; amount_minor: number; currency: string
   merchant_name: string; merchant_category: string; amount_usd_micros: number; amount_ulxc: number; created_at: string
+  /** B30.139 — the agent's account a purchase on a card drawing on it is held on */
+  money_account_id?: string
 }
 interface Transfer {
   id: string; from_workspace_id: string; from_agent_id: string; to_workspace_id: string; to_agent_id: string; amount_ulxc: number; memo: string
@@ -532,6 +542,8 @@ export class Bank {
   private readonly schedules: Schedule[] = []
   private readonly cashOuts: CashOut[] = []
   private readonly cards = new Map<string, { frozen: boolean; frozen_at?: string } & Record<string, unknown>>()
+  /** B30.139 — the Stripe events that settled a purchase held on an agent's account: each settles once. */
+  private readonly settledCardEvents = new Set<string>()
   /** B28.84 — each workspace's passkeys (Lens B19.16): once it has one, a decision must carry an assertion. */
   private readonly passkeys = new Map<string, { credential_id: string; name: string; created_at: string }[]>()
   /** B30.126 — each passkey's public key (SPKI, base64url), by credential id, which a payee's confirmation is verified with. */
@@ -1725,6 +1737,24 @@ export class Bank {
     if (sc.end_at !== undefined && Date.parse(sc.next_run_at) > Date.parse(sc.end_at)) sc.active = false
   }
 
+  /**
+   * B30.139 — a capture on Lens's test-mode Stripe webhook (issuing_transaction.created, type capture) of a purchase held on the agent's
+   * account: card_charge takes the whole hold, pays the merchant what was captured and gives the account the rest of the hold at once.
+   * An event already settled moves nothing. True when the event was about an agent card's purchase held on an account.
+   */
+  settleCardCapture(eventID: string, t: { type?: string; amount?: number; card?: string; authorization?: string }): boolean {
+    const auth = this.cardAuths.find((x) => x.authorization_id === t.authorization && x.approved && x.money_account_id !== undefined)
+    if (t.type !== 'capture' || auth === undefined) return false
+    if (this.settledCardEvents.has(eventID)) return true
+    this.settledCardEvents.add(eventID)
+    const a = this.agents.get(auth.agent_id)
+    const account = a === undefined ? undefined : this.payees.agentAccount(a.ws, a.id, auth.currency)
+    if (a === undefined || account === undefined || account.id !== auth.money_account_id) return true
+    const rest = auth.amount_minor - Math.abs(t.amount ?? 0)
+    if (rest !== 0 && !this.broken('card-capture-unreleased')) this.payees.cardPosting(a.ws, account, 'card_charge', rest)
+    return true
+  }
+
   tick(now = Date.now()): void {
     // B30.138 — every agent's monthly allowance due, on the money desk's clock.
     this.payees.tickAllowances()
@@ -1875,6 +1905,19 @@ export class Bank {
       const usd = minor * USD_MICROS_PER_PENNY
       const cost = usd * ULXC_PER_USD_MICRO
       const frozen = this.cards.get(a.id)?.frozen === true && !this.broken('freeze-ignored')
+      // B30.139 — on a card drawing on the agent's account, the purchase is held there and moves no credits.
+      const onAccount = this.cards.get(a.id)?.draws_on === 'account' && !this.broken('card-account-credits')
+        ? this.payees.agentAccount(a.ws, a.id, String(this.cards.get(a.id)?.currency)) : undefined
+      if (onAccount !== undefined) {
+        const refusedHere = frozen ? 'the card is frozen: every purchase on it is refused until it is unfrozen'
+          : minor > onAccount.test_minor ? `the agent's ${onAccount.currency} account holds less than this purchase` : undefined
+        const auth: CardAuth = { id: id('cau_'), agent_id: a.id, authorization_id: id('iauth_synthetic_'), approved: refusedHere === undefined,
+          reason: refusedHere ?? "within the agent's rules", amount_minor: minor, currency: (b.currency ?? 'gbp').toLowerCase(), merchant_name: b.merchant ?? 'Synthetic merchant',
+          merchant_category: b.category ?? 'miscellaneous_general_merchandise', amount_usd_micros: usd, amount_ulxc: cost, created_at: now, money_account_id: onAccount.id }
+        this.cardAuths.unshift(auth)
+        if (auth.approved) this.payees.cardPosting(a.ws, onAccount, 'card_hold', -minor)
+        return json(res, 200, { authorization_id: auth.authorization_id, approved: auth.approved, reason: auth.reason, amount_ulxc: cost }), true
+      }
       const refused = (frozen ? 'the card is frozen: every purchase on it is refused until it is unfrozen' : undefined)
         ?? this.judge(a, cost, { payment: true, fingerprint: `card\0${a.id}\0${Date.now()}` })?.error
         ?? (cost > this.balance(`agent:${a.id}`) ? `the agent holds ${lxc(this.balance(`agent:${a.id}`))} LXC and this purchase costs ${lxc(cost)} LXC` : undefined)
@@ -2535,9 +2578,21 @@ export class Bank {
       if (missing.length > 0) return json(res, 400, { error: `agentcard: the cardholder needs ${missing.join(', ')}` }), true
       if (this.cards.has(a.id)) return json(res, 409, { error: 'economy: the agent already has a card' }), true
       const card = { id: id('ic_'), agent_id: a.id, last4: String(1000 + Math.floor(Math.random() * 9000)), exp_month: 12,
-        exp_year: new Date().getUTCFullYear() + 3, currency: 'gbp', livemode: this.broken('card-live'), created_at: now, frozen: false }
+        exp_year: new Date().getUTCFullYear() + 3, currency: 'gbp', livemode: this.broken('card-live'), created_at: now, frozen: false, draws_on: 'credits' }
       this.cards.set(a.id, card)
       return json(res, 201, card), true
+    }
+    // B30.139 — what the card spends: the agent's credits, or its open account in the card's currency.
+    if (action === '/card/draws-on' && method === 'POST') {
+      const card = this.cards.get(a.id)
+      if (card === undefined) return json(res, 404, { error: 'economy: the agent has no card' }), true
+      const { draws_on: on } = await this.body<{ draws_on?: string }>(req)
+      if (on !== 'account' && on !== 'credits') return json(res, 400, { error: 'economy: a card draws on "credits" or "account"' }), true
+      if (on === 'account' && this.payees.agentAccount(ws.id, a.id, String(card.currency)) === undefined) {
+        return json(res, 409, { error: `economy: no such money account: the agent has no open ${String(card.currency).toUpperCase()} account` }), true
+      }
+      card.draws_on = on
+      return json(res, 200, card), true
     }
     // B28.360 — the card frozen or unfrozen: Lens answers the card.
     if ((action === '/card/freeze' || action === '/card/unfreeze') && method === 'POST') {
@@ -2902,7 +2957,7 @@ export class Bank {
     }
     // B52.28 — Scan agents' watches (stub-scan.ts), before the agent routes below catch …/scan-watches.
     if (await this.scan.route(req, res, ws.id, rest, now)) return true
-    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/wallet\/activity|\/rules\/challenge|\/cash-outs\/challenge|\/[a-z-]+)?$/.exec(rest)) !== null) {
+    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/card\/draws-on|\/wallet\/activity|\/rules\/challenge|\/cash-outs\/challenge|\/[a-z-]+)?$/.exec(rest)) !== null) {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true
       const action = m[2] ?? ''
