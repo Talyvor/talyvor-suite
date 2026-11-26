@@ -31,6 +31,7 @@ import {
   seeded,
   statesNumber,
 } from './oracles.ts'
+import { paymentsOut } from './paymentsOut.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
 import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, agentRunsOutDate, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
 import { chatMoneyRequests, marketAbuse, marketAgentCommitment, marketAgentMCP, marketBillRefund, marketJournal, marketOffers, marketPayout, marketRent, marketTrial, marketPayoutConnect, marketHeldSeller, marketReview, marketTakedown, walletCard, walletCardPurchase, walletCashOut, walletEscrow, walletLoan, walletLoanDefault, walletLoanRepay, walletPots, walletGiveBack, walletRecurring, walletRequest, walletSendRefund } from './trade.ts'
@@ -5486,6 +5487,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // monitoring compliance case with one round_amounts alert naming it, the fourth extends the same case, ordinary amounts open
   // none, and each statement holds exactly the payments made; read on the operator read key, a SKIP without it.
   if (i === 3) list.push(monitoring())
+  // B30.127 — payments out from an agent's own account, once a run, on a workspace of its own: £20.00 completes, £20.13 fails and
+  // £20.14 reads returned, each leaving the account whole; £100.00 above the agent's 1,000 LXC approval amount is refused 403 with
+  // nothing moved until the owner approves it, then the same request completes; the account ends at what came in less £120.00.
+  if (i === 3) list.push(paymentsOut())
   // B30.130 — invoices and pay links, once a run, on two workspaces of its own: an agent issues and sends a GBP invoice with VAT; its
   // pay page reads with no credential, test money only, quoting the agent's payment reference and naming no issuer id; another
   // company's unfunded agent is refused 409 through the link and nothing moves.
