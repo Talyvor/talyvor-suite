@@ -463,16 +463,17 @@ const PINS: Record<string, Pin> = {
   // 118 → 114 at B57.44: Members' role and "You" labels and its two form-field labels go; its roles are chips now.
   // 114 → 113 at B57.111: an agent's spend card's By day, By model and By destination titles are Pocket's Eyebrow.
   // 113 → 111 at B64.1: the website draws its eyebrows from its own stylesheet, so Landing's two uppercase lists go.
+  // 111 → 112 at B61.134: the statement paper's closing figure's label, Pocket's eyebrow in the ink tile's colour.
   'apps/web/src/caseAudit.ts|<N> uppercase class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 111,
+    states: 112,
     why: "the argument for why the rule cannot live in the token — #99 wrote TWENTY here, the 'twenty other' figure with `other` dropped",
   },
   'apps/web/src/caseAudit.ts|uppercase (<N> class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 111,
+    states: 112,
     why: '#99 wrote 25 here: every occurrence of the WORD in non-test source with comments kept, which counts the paragraphs about the class',
   },
   'packages/ui/src/components/CaseSafe.tsx|<N> other uppercase class lists': {

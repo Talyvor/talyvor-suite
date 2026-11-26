@@ -550,6 +550,15 @@ h1, h2, h3, h4 { font-family: var(--display); }
 }
 .pk-card:hover::after { opacity: 1; }
 
+/* B61.134 — a statement is a sheet of paper (Pocket Live DESIGN.md 16.2): the one surface that is solid, not glass,
+   with a 1 px line edge and a soft shadow (bg-page shadow-pocket, the shadow its own). Inside it cloud is solid too,
+   ink at 5% over the page. */
+.pk-paper {
+  --cloud: color-mix(in srgb, var(--ink) 5%, var(--page));
+  --cloud-2: color-mix(in srgb, var(--ink) 9%, var(--page));
+  --shadow: 0 0 0 1px var(--line), 0 18px 40px -26px rgba(17, 18, 22, .4);
+}
+
 /* A card's picture: a band of light crosses it once as it comes into view, then follows the pointer while the picture
    tilts towards it (fx.ts sets the transform and --sx). */
 [data-card] { transition: transform 260ms cubic-bezier(.22, 1, .36, 1); }

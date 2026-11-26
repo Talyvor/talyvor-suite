@@ -85,10 +85,14 @@ function show(at = '/statements?wallet=acct_usd') {
   )
 }
 
-/** The statement's row whose words begin with merchant's name and kind. */
+/** The statement's row of merchant's name and, beneath it, kind. B61.134: the paper writes the details on a line of their own. */
 const row = async (merchant: string, kind = 'Card payment') => {
-  const what = await screen.findByText((_, el) => el?.getAttribute('data-testid') === 'account-statement-what' && el.textContent?.startsWith(`${merchant} · ${kind}`) === true)
-  return what.closest('tr') as HTMLElement
+  await screen.findAllByTestId('account-statement-what')
+  const found = screen
+    .getAllByRole('row')
+    .find((r) => within(r).queryByTestId('account-statement-what')?.textContent?.startsWith(merchant) && within(r).queryByTestId('account-statement-detail')?.textContent?.startsWith(kind))
+  if (!found) throw new Error(`no line for ${merchant} · ${kind}`)
+  return found
 }
 
 describe('card disputes and refunds on the statement', () => {
@@ -133,7 +137,8 @@ describe('card disputes and refunds on the statement', () => {
   it('shows a merchant’s refund as its own line, money in, under the payment it refunds', async () => {
     show()
     const refund = await row('Print Shop', 'Refund')
-    expect(within(refund).getByTestId('account-statement-what').textContent).toBe('Print Shop · Refund · Print Shop')
+    expect(within(refund).getByTestId('account-statement-what').textContent).toBe('Print Shop')
+    expect(within(refund).getByTestId('account-statement-detail').textContent).toBe('Refund · Print Shop')
     expect(refund.querySelector('[data-money]')?.textContent?.replace(/ /g, ' ')).toBe('+$10.00')
     expect(within(refund).queryByRole('button', { name: 'Dispute this payment' })).toBeNull()
   })

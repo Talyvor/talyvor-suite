@@ -1,0 +1,6 @@
+[
+  { "route": "/statements" },
+  { "route": "/statements", "dark": true },
+  { "route": "/statements?wallet=macc_research_usd" },
+  { "route": "/statements?wallet=macc_research_usd", "dark": true }
+]

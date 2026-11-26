@@ -1097,13 +1097,17 @@ async function statementFile(agentID: string | null, from: string, to: string, f
   return res.blob()
 }
 
+/** B61.134 — what each file a currency account's statement downloads as is sent as. */
+const ACCOUNT_STATEMENT_ACCEPT = { csv: 'text/csv', pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as const
+
 /**
  * B56.15 — a currency account's statement for [from, to) as the CSV Lens writes (Lens B56.14), or (B30.95) the PDF
- * document Lens writes of it (Lens B30.23). A refusal carries Lens's sentence.
+ * document Lens writes of it (Lens B30.23), or (B61.134) the Excel workbook (Lens B61.132). A refusal carries Lens's
+ * sentence.
  */
-async function accountStatementFile(accountID: string, from: string, to: string, format: 'csv' | 'pdf' = 'csv'): Promise<Blob> {
+async function accountStatementFile(accountID: string, from: string, to: string, format: keyof typeof ACCOUNT_STATEMENT_ACCEPT = 'csv'): Promise<Blob> {
   const path = `/api/money/accounts/${e(accountID)}/statement?${new URLSearchParams({ from, to, format })}`
-  const res = await fetch(path, { headers: { Accept: format === 'pdf' ? 'application/pdf' : 'text/csv' } })
+  const res = await fetch(path, { headers: { Accept: ACCOUNT_STATEMENT_ACCEPT[format] } })
   if (!res.ok) {
     let sentence = ''
     try {
@@ -2697,6 +2701,8 @@ export interface CurrencyAccount {
   balance_minor: number
   test_minor: number
   live_minor: number
+  /** B61.134 — when it opened: Statements offers each month back to this one. */
+  created_at?: string
 }
 
 /** B61.84 — Lens economy.AgentFunding: one move between the company's account and an agent's, and what each holds after. */

@@ -601,6 +601,8 @@ const PRESS_SITES: Record<string, string> = {
     'a hand-rolled <button>, not a Button, so it inherits nothing and must carry the press itself',
   'apps/web/src/App.tsx':
     'B57.9 — the top bar\'s search, which opens the ⌘K bar, is a hand-rolled pill and presses as Pocket\'s button does',
+  'apps/web/src/areas/lens/WalletScreens.tsx':
+    'B61.134 — Statements’ Statement for and Period pills, a radio group each (Pocket Live DESIGN.md 16.2), which press as Pocket’s tabs do',
   'apps/web/src/components/HelpChat.tsx':
     'B61.38 — Help in the top bar, a hand-rolled pill beside the search, presses as the search does',
 }
