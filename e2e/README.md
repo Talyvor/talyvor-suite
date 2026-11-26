@@ -196,6 +196,22 @@ right under the B55 heading, next free B55 number, naming them (`e2e-scenario: p
 Problems only the phone can press (2, 15, 16, and the phone's legs of 1, 4 and 22) say so until B57.86's phone session is
 in the harness; a Lens that refuses test device keys (production) cannot hold a phone's key, so 4 and 22 say that too.
 
+## Pocket's journeys on the phone (B57.87)
+
+`src/phoneJourneys.ts` drives the phone app itself. Once a run it exports the talyvor-mobile checkout `E2E_MOBILE_SRC`
+names (its packages installed with `npm ci`) for the web, as a development build with the software test key
+(`EXPO_PUBLIC_TALYVOR_TEST_KEYS=1`) and `phone/keychain.cjs` in place of the phone's keychain (`phone/metro.config.cjs`,
+through `EXPO_OVERRIDE_METRO_CONFIG`; nothing in the checkout changes). Each journey signs that app in with the BFF's
+synthetic phone session (`POST /auth/synthetic/mobile`), opens it at 390x844 and sends its requests on to the run's BFF
+through Playwright's `route.fetch`, with no Origin, as a phone does. Four journeys, each on a workspace of its own:
+`phone-approve` (an agent's approval opened at the Live Activity's link and approved with Face ID), `phone-pay-payee`
+(£12.50 to a saved payee, through the confirm step, the payment and the account both read back from Lens),
+`phone-widget-pause` (the widget's pause link, then Resume with Face ID) and `phone-stop-everything` (Home's Pause every
+agent). Without `E2E_MOBILE_SRC` they SKIP. Signing needs a Lens that takes test keys (`LENS_DEVICE_TEST_ATTESTATION=true`):
+against one that refuses them, as production does, each journey runs what it can and then SKIPs, naming the steps it could
+not run. On the self-test's stub Lens, `STUB_TEST_KEYS=off` refuses them the same way, and `STUB_BREAK=approval-signed-unkept`,
+`payment-account-unmoved`, `pause-unkept` and `pause-all-unkept` each plant the defect one journey must FAIL on.
+
 ## Every B28 feature with its own test (B28.293)
 
 **A scenario names the build items whose feature it exercises end to end**: `items: ['B28.24', 'B28.300']` beside its
