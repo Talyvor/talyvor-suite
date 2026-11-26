@@ -87,6 +87,7 @@ import { invoicePayLink } from './invoices.ts'
 import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
+import { agentCryptoSpendPermission } from './spendPermission.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
@@ -5557,6 +5558,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B48.27 — an agent's USDC payments, once a run, on a workspace of its own: a flagged address refused with nothing held; a regulated
   // provider's address with its Travel Rule record; more than 1,000 USDC to a self-hosted address held only once the owner proves its key.
   if (i === 6) list.push(screeningTravelRule())
+  // B48.38 — an agent's crypto payment under the owner's signed spend permission, once a run, on a workspace of its own: 10 USDC lands
+  // once on its history; over the cap, over the allowance, to a blocked address, in another token and after it ended, each refused 403.
+  if (i === 6) list.push(agentCryptoSpendPermission())
   // B40.29 — one approval for an agent's two-item batch, once a run, on a workspace of its own: signed with the phone's device
   // key it pays exactly two payments out from the agent's card-funded account; replayed, 409 and nothing moves; the record verifies.
   if (i === 6) list.push(batchApproval())

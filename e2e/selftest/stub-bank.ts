@@ -166,6 +166,7 @@ import { EarningsDesk } from './stub-earnings.ts'
 import { PermissionMandateDesk } from './stub-permission-mandates.ts'
 import { DeviceKeyDesk } from './stub-device-keys.ts'
 import { PaymentRequestDesk } from './stub-payment-requests.ts'
+import { SpendPermissionDesk } from './stub-spend-permissions.ts'
 import { TermsDesk } from './stub-terms.ts'
 import { ScanDesk } from './stub-scan.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
@@ -569,6 +570,8 @@ export class Bank {
   private readonly devices: DeviceKeyDesk
   /** B40.27 — prepared payment requests, judged against the saved payees and the mandates (stub-payment-requests.ts). */
   private readonly paymentRequests: PaymentRequestDesk
+  /** B48.38 — agents' smart accounts, the owner's spend permissions and the agents' crypto sends (stub-spend-permissions.ts). */
+  private readonly spendPermissions: SpendPermissionDesk
   /** B30.122 — each B30 capability's terms and the workspace's acceptances (stub-terms.ts). */
   private readonly terms: TermsDesk
   /** B52.28 — Scan agents' watches and the public track record (stub-scan.ts). */
@@ -618,6 +621,9 @@ export class Bank {
       (ws, a, challenge) => a?.device_id !== undefined ? (a.challenge !== challenge ? "economy: the signature is not over this approval's challenge" : this.devices.refused(ws, a))
         : (this.passkeys.get(ws) ?? []).some((k) => k.credential_id === a?.credential_id) ? undefined : 'economy: the approval is not signed: sign its challenge with a passkey or the phone app',
       (ws, agentID, b) => this.payees.payItem(ws, agentID, b), (ws) => this.payees.billsOf(ws))
+    this.spendPermissions = new SpendPermissionDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
+      (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
+      (ws, agentID) => { const a = this.agents.get(agentID); return a !== undefined && a.ws === ws && a.archived_at === undefined && a.wallet_kind !== 'fiat' })
     this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => this.recoveryCodes.has(ws) ? undefined : this.newRecoveryCode(ws))
     this.earningsPayouts = new EarningsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID, asset) => this.payees.wallet(ws, agentID, asset))
@@ -692,6 +698,15 @@ export class Bank {
     const who = this.agentOfKey(key)
     if (who === undefined || path !== '/v1/money/payments' || req.method !== 'POST') return false
     return await this.payees.agentPay(req, res, who.ws.id, who.agent.id), true
+  }
+
+  /** B48.38 — an agent's crypto sends on its own key, under the owner's spend permission (stub-spend-permissions.ts). */
+  async agentCryptoSends(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
+    const m = /^\/v1\/workspaces\/([^/]+)(\/agents\/[^/]+\/crypto-sends.*)$/.exec(path)
+    const who = this.agentOfKey(key)
+    if (m === null || who === undefined) return false
+    if (who.ws.id !== m[1]) return this.d.json(res, 403, { error: 'forbidden' }), true
+    return this.spendPermissions.route(req, res, who.ws.id, m[2], who.agent.id)
   }
 
   /** B46.20 — the card routes on an agent's own key, which Lens judges as the agent itself (stub-payees.ts). */
@@ -2479,6 +2494,7 @@ export class Bank {
     let m: RegExpExecArray | null
     if (rest === '/agents' && method === 'GET') return json(res, 200, this.book(ws)), true
     if (await this.launch.route(req, res, ws.id, rest)) return true
+    if (await this.spendPermissions.route(req, res, ws.id, rest, agent?.id ?? '')) return true
     if (rest === '/name') {
       if (method === 'PUT') {
         const name = ((await this.body<{ name?: string }>(req)).name ?? '').trim()
