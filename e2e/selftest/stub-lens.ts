@@ -39,6 +39,7 @@
 //   call-replay — an agent's byte-identical retry under one Idempotency-Key is charged again (B28.279)
 //   hangup-unbilled — an agent's streamed answer is spent from it only once the stream ends, so one it hangs up on
 //                 is never billed to it (B28.279)
+//   stream-cut-30s — every stream is ended 30 s after its request, mid-answer, as Lens's server's WriteTimeout did (B28.79)
 //   move-replay, move-race — a fund or withdraw sent again under its key posts again; one landing beside another
 //                 answers and posts nothing (B28.279, stub-bank.ts)
 //   webhook-unsigned — Stripe's webhooks credit an event whatever its signature, or with none (B28.280)
@@ -490,6 +491,19 @@ function shrink(v: unknown): unknown {
 
 /** B28.368 — what Chat's Continue asks after an answer cut off at the length limit (apps/web history.ts CONTINUE_PROMPT). */
 const CONTINUE = /^Your answer above was cut off at the length limit\./
+/** B28.79 — asked for the numbers in words: an answer far longer than fits in 30 s, which the stub streams slowly (LONG_STREAM_MS). */
+const IN_WORDS = /^Write the whole numbers from 1 to (\d+) in English words, one per line/
+/** B28.79 — how long the stub takes to stream an IN_WORDS answer: longer than the 30 s Lens's server once cut streams at. */
+const LONG_STREAM_MS = 32_000
+const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
+  'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen']
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+function inWords(n: number): string {
+  if (n >= 1000) return `${inWords(Math.floor(n / 1000))} thousand${n % 1000 === 0 ? '' : ` ${inWords(n % 1000)}`}`
+  if (n >= 100) return `${ONES[Math.floor(n / 100)]} hundred${n % 100 === 0 ? '' : ` ${inWords(n % 100)}`}`
+  if (n >= 20) return `${TENS[Math.floor(n / 10)]}${n % 10 === 0 ? '' : `-${ONES[n % 10]}`}`
+  return ONES[n]
+}
 
 /** talyvor-lens B28.118 — what a web search "finds": two news pages, served by this stub at their paths. */
 const WEB_PAGES = [
@@ -574,6 +588,7 @@ function think(messages: Msg[]): string {
     const pick = (s: string) => (/\d[\d,]*/.exec(s)?.[0] ?? s.trim().toLowerCase()).replace(/,/g, '')
     return pick(m[1]) === pick(m[2]) ? 'YES' : 'NO'
   }
+  if ((m = IN_WORDS.exec(q))) return Array.from({ length: Number(m[1]) }, (_, n) => inWords(n + 1)).join('\n')
   if ((m = /What is (\d+) \+ (\d+)\?/.exec(q))) return String(Number(m[1]) + Number(m[2]))
   if ((m = /What is (\d+) times (\d+)\?/.exec(q))) return String(Number(m[1]) * Number(m[2]))
   if ((m = /what is (\d+) minus (\d+)\?/i.exec(q))) return String(Number(m[1]) - Number(m[2]))
@@ -840,6 +855,7 @@ async function vllm(req: IncomingMessage, res: ServerResponse, path: string, raw
 }
 
 async function proxy(req: IncomingMessage, res: ServerResponse, provider: string, path: string): Promise<void> {
+  const started = Date.now()
   // talyvor-lens auth extractCredential: Authorization's bearer, else X-Talyvor-Key, else X-API-Key.
   const header = (name: string) => String(req.headers[name] ?? '')
   const credential = header('authorization').replace(/^Bearer /, '') || header('x-talyvor-key') || header('x-api-key')
@@ -1108,6 +1124,13 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   }
   res.writeHead(200, { 'Content-Type': 'text/event-stream', ...headers })
   const pieces = answer.match(/.{1,12}/gs) ?? ['']
+  // B28.79 — a long answer streams for LONG_STREAM_MS; STUB_BREAK=stream-cut-30s ends any stream 30 s after its request.
+  const long = IN_WORDS.test(text(messages[messages.length - 1] ?? { role: 'user', content: '' }))
+  const begun = Date.now()
+  // The nth piece waits 30 ms, or for a long answer until its share of LONG_STREAM_MS has passed, however fast timers fire.
+  const after = (n: number) => new Promise((r) => setTimeout(r, long ? Math.max(0, begun + ((n + 1) * LONG_STREAM_MS) / pieces.length - Date.now()) : 30))
+  const cutAt = broke('stream-cut-30s') ? setTimeout(() => res.destroy(), 30_000 - (Date.now() - started)) : undefined
+  res.on('close', () => clearTimeout(cutAt))
   const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
   // talyvor-lens B28.118 — the pages it searched, first, on either writer (apps/web chatStream.ts CITATIONS_FRAME).
   if (searched) send('talyvor.citations', { type: 'talyvor.citations', citations: WEB_PAGES.map((p, i) => ({ n: i + 1, url: `${BASE}${p.path}`, title: p.title })) })
@@ -1118,17 +1141,19 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   }
   if (provider === 'anthropic') {
     send('message_start', { type: 'message_start', message: { ...named, usage: { input_tokens: shownIn, output_tokens: 0 } } })
-    for (const p of pieces) {
+    for (const [n, p] of pieces.entries()) {
+      if (res.destroyed) return
       send('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: p } })
-      await new Promise((r) => setTimeout(r, 30))
+      await after(n)
     }
     send('message_delta', { type: 'message_delta', delta: { stop_reason: cut ? 'max_tokens' : 'end_turn' }, usage: { output_tokens: outTok } })
     sayCharged()
     send('message_stop', { type: 'message_stop' })
   } else {
-    for (const p of pieces) {
+    for (const [n, p] of pieces.entries()) {
+      if (res.destroyed) return
       res.write(`data: ${JSON.stringify({ ...named, choices: [{ index: 0, delta: { content: p } }] })}\n\n`)
-      await new Promise((r) => setTimeout(r, 30))
+      await after(n)
     }
     res.write(`data: ${JSON.stringify({ ...named, choices: [{ index: 0, delta: {}, finish_reason: cut ? 'length' : 'stop' }] })}\n\n`)
     res.write(`data: ${JSON.stringify({ ...named, choices: [], usage: { prompt_tokens: shownIn, completion_tokens: outTok } })}\n\n`)
