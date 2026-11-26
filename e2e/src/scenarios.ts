@@ -88,6 +88,7 @@ import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { agentCryptoSpendPermission } from './spendPermission.ts'
+import { agentCryptoWallet } from './agentCryptoWallet.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
@@ -5624,6 +5625,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
   if (i === 4) list.push(agentWalletKinds())
+  // B48.21 — an agent's crypto wallet end to end, once a run, on a workspace of its own and a second user's: topped up by card, 10 USDC
+  // to the other user's agent, 4 asked back with its x402 requirement and paid, a frozen agent's send moves nothing, the sweep pays all.
+  if (i === 4) list.push(agentCryptoWallet())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.

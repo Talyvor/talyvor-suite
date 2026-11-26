@@ -55,6 +55,16 @@ export class SpendPermissionDesk {
     this.cryptoAgent = cryptoAgent
   }
 
+  /** B48.21 — `agentID`'s smart account made here, for the desk that keeps its wallet (stub-crypto-wallet.ts). */
+  account(agentID: string): { address: string; credential_id: string } | undefined {
+    return this.accounts.get(agentID)
+  }
+
+  /** B48.21 — the agent whose smart account is at `address`, if one was made here. */
+  agentAt(address: string): string | undefined {
+    return [...this.accounts.entries()].find(([, a]) => a.address.toLowerCase() === address.toLowerCase())?.[0]
+  }
+
   /**
    * The routes under /v1/workspaces/{ws}: `rest` is the path after it, `agent` the agent whose own key asks ('' for the owner).
    * True when `rest` was one of them.

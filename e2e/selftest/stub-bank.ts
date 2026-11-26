@@ -167,6 +167,7 @@ import { PermissionMandateDesk } from './stub-permission-mandates.ts'
 import { DeviceKeyDesk } from './stub-device-keys.ts'
 import { PaymentRequestDesk } from './stub-payment-requests.ts'
 import { SpendPermissionDesk } from './stub-spend-permissions.ts'
+import { CryptoWalletDesk } from './stub-crypto-wallet.ts'
 import { TermsDesk } from './stub-terms.ts'
 import { ScanDesk } from './stub-scan.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
@@ -572,6 +573,8 @@ export class Bank {
   private readonly paymentRequests: PaymentRequestDesk
   /** B48.38 — agents' smart accounts, the owner's spend permissions and the agents' crypto sends (stub-spend-permissions.ts). */
   private readonly spendPermissions: SpendPermissionDesk
+  /** B48.21 — the wallets of agents it funds: top-up, the owner's signed sends, requests, freeze, sweep and the ledger (stub-crypto-wallet.ts). */
+  private readonly cryptoWallets: CryptoWalletDesk
   /** B30.122 — each B30 capability's terms and the workspace's acceptances (stub-terms.ts). */
   private readonly terms: TermsDesk
   /** B52.28 — Scan agents' watches and the public track record (stub-scan.ts). */
@@ -624,6 +627,10 @@ export class Bank {
     this.spendPermissions = new SpendPermissionDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
       (ws, agentID) => { const a = this.agents.get(agentID); return a !== undefined && a.ws === ws && a.archived_at === undefined && a.wallet_kind !== 'fiat' })
+    this.cryptoWallets = new CryptoWalletDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
+      (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
+      (agentID) => this.spendPermissions.account(agentID), (address) => this.spendPermissions.agentAt(address),
+      (agentID) => { const a = this.agents.get(agentID); return a === undefined || a.archived_at !== undefined ? undefined : a.ws })
     this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => this.recoveryCodes.has(ws) ? undefined : this.newRecoveryCode(ws))
     this.earningsPayouts = new EarningsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID, asset) => this.payees.wallet(ws, agentID, asset))
@@ -2494,6 +2501,7 @@ export class Bank {
     let m: RegExpExecArray | null
     if (rest === '/agents' && method === 'GET') return json(res, 200, this.book(ws)), true
     if (await this.launch.route(req, res, ws.id, rest)) return true
+    if (agent === undefined && await this.cryptoWallets.route(req, res, ws.id, rest)) return true
     if (await this.spendPermissions.route(req, res, ws.id, rest, agent?.id ?? '')) return true
     if (rest === '/name') {
       if (method === 'PUT') {
