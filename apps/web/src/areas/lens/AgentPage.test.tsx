@@ -41,7 +41,7 @@ function summary(over: { agent?: Record<string, unknown>; all_paused_at?: string
   }
 }
 
-function mockBff(first: ReturnType<typeof summary>) {
+function mockBff(first: ReturnType<typeof summary>, rules: Record<string, unknown> = {}) {
   let now = first
   const sent: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -66,7 +66,7 @@ function mockBff(first: ReturnType<typeof summary>) {
       return json({ agent_id: 'agt_1', paused: true })
     }
     if (url === '/api/agents/agt_1/rules')
-      return json({ max_per_request_ulxc: 10_000 * M, daily_limit_ulxc: 5_000 * M, monthly_limit_ulxc: 20_000 * M, approval_above_ulxc: 2_500 * M, allowed_models: null, allowed_providers: null, active_from: '08:00', active_until: '20:00', timezone: 'Europe/London' })
+      return json({ max_per_request_ulxc: 10_000 * M, daily_limit_ulxc: 5_000 * M, monthly_limit_ulxc: 20_000 * M, approval_above_ulxc: 2_500 * M, allowed_models: null, allowed_providers: null, active_from: '08:00', active_until: '20:00', timezone: 'Europe/London', ...rules })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 100_000 * M, allocated_ulxc: 16_500 * M, unallocated_ulxc: 83_500 * M, spent_ulxc: 0, agents: [now.agent] })
     return new Response('null', { status: 404 })
   })
@@ -83,8 +83,8 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
-async function open(s: ReturnType<typeof summary>) {
-  const bff = mockBff(s)
+async function open(s: ReturnType<typeof summary>, rules: Record<string, unknown> = {}) {
+  const bff = mockBff(s, rules)
   window.history.pushState({}, '', '/agents/agt_1')
   render(<App />)
   const page = await screen.findByTestId('agent-page-balance')
@@ -123,6 +123,14 @@ describe('An agent’s page (B57.20)', () => {
     const card = screen.getByTestId('agent-page-card')
     expect(card).toHaveTextContent('Agent card · pounds')
     expect(card).not.toHaveTextContent('4242')
+  })
+
+  // B57.198 — the launch pack's W4 row: the rules card names the merchants and categories it may pay in by card, in words.
+  it('says its merchants and categories on its rules card: Software, hosting, freight', async () => {
+    await open(summary(), { allowed_merchant_categories: ['freight', 'software', 'hosting'], blocked_merchant_categories: ['gambling'] })
+    const rules = screen.getByTestId('agent-page-rules')
+    await within(rules).findByText('Merchants and categories')
+    expect(rules).toHaveTextContent('Merchants and categoriesSoftware, hosting, freight. Never gambling')
   })
 
   // B57.111 — its spend by day, model and destination is the page's own card, and today's view under it no longer repeats it.

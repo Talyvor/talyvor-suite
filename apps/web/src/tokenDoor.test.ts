@@ -102,7 +102,7 @@ const CLOSED: Record<string, string> = {
   fontSize:
     'the locked scale. Each step carries its own leading AND weight, so a Tailwind step is ' +
     'not merely a different size — it silently drops the weight the step exists to carry',
-  borderRadius: 'Pocket\'s corners: control 14, card 24, card-tight 18, sheet 28, pill, tile 12, inset 16. Tailwind ships nine others',
+  borderRadius: 'Pocket\'s corners: control 14, card 24, card-tight 18, sheet 28, pill, tile 12, inset 16, tick 6. Tailwind ships nine others',
 }
 
 /**
@@ -134,6 +134,7 @@ const OPEN: Record<string, string> = {
   keyframes: 'the frames of those two animations (B61.75); keyframes make no class of their own',
   backgroundImage: 'shape, the loading shapes\' grey gradient in the theme\'s cloud colours (B61.75), ADDED beside Tailwind\'s gradients',
   backgroundSize: 'double, the 200% the shimmer slides across (B61.75), ADDED beside Tailwind\'s auto/cover/contain',
+  gridTemplateColumns: 'picks, as many ticked choices to a row as fit (B57.198), ADDED beside Tailwind\'s grid-cols-1 to 12',
 }
 
 /**

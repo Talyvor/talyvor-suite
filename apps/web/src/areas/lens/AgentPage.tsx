@@ -21,6 +21,7 @@ import { approvalSheetTo } from './ApprovalSheet'
 import { PAYEES_KEY } from './Pay'
 import { type AgentApproval, type AgentRules, type AgentSummary, agentBankApi } from './agentBankApi'
 import { useMoney } from './money'
+import { merchantCategoriesText } from './merchantCategories'
 
 // AgentPage.tsx — B57.20: an agent's page, as Pocket's w-agent-research, w-agent-sales and w-agent-ops draw it. Every
 // figure comes from GET /api/agents/{id}/summary, which Lens (B57.12) reads in one transaction, so the balance less what
@@ -71,7 +72,7 @@ export interface RuleLine {
 
 /**
  * B57.20 — the agent's rules in words, as the reference's rules card says them: each limit in the person's currency
- * (B61.14: never LXC), the hours, who it may pay and what it always allows. None set reads as such.
+ * (B61.14: never LXC), the hours, where it may pay by card, who it may pay and what it always allows. None set reads as such.
  */
 export function rulesInWords(
   r: AgentRules,
@@ -96,6 +97,13 @@ export function rulesInWords(
     out.push({ title: `At most ${lead(r.monthly_limit_ulxc)} a month`, line: from })
   }
   if (r.active_from && r.active_until) out.push({ title: `Only from ${r.active_from} to ${r.active_until}`, line: `${zone} time` })
+  // B57.198 — the launch pack's W4 row: "Merchants and categories", "Software, hosting, freight".
+  const shops = r.allowed_merchant_categories ?? []
+  const neverShops = r.blocked_merchant_categories ?? []
+  if (shops.length > 0 || neverShops.length > 0) {
+    const only = shops.length > 0 ? merchantCategoriesText(shops) : 'Any merchant'
+    out.push({ title: 'Merchants and categories', line: neverShops.length > 0 ? `${only}. Never ${merchantCategoriesText(neverShops).toLowerCase()}` : only })
+  }
   const allowed = r.allowed_payees ?? []
   if (allowed.length > 0) out.push({ title: `Pays only ${andList(allowed.map(payeeName))}`, line: 'Any other payee is refused, card shops included' })
   const blocked = r.blocked_payees ?? []

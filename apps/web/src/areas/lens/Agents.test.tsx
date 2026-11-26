@@ -254,8 +254,11 @@ describe('New agent (B61.13)', () => {
     const more = within(dialog).getByTestId('new-agent-more-rules')
     expect(more).toHaveTextContent('Any merchant. Pick some to let it pay only them by card.')
     const categories = within(more).getByRole('group', { name: 'Merchants and categories' })
-    fireEvent.click(within(categories).getByRole('button', { name: 'Hosting' }))
-    fireEvent.click(within(categories).getByRole('button', { name: 'Software' }))
+    // B57.198 — Pocket's ticked choices, two to a row, as the Rules page draws them.
+    expect(within(categories).getAllByRole('checkbox').map((b) => b.textContent)).toEqual(['Software', 'Hosting', 'Freight', 'Advertising', 'Travel', 'Telecoms', 'Gambling'])
+    fireEvent.click(within(categories).getByRole('checkbox', { name: 'Hosting' }))
+    fireEvent.click(within(categories).getByRole('checkbox', { name: 'Software' }))
+    expect(within(categories).getByRole('checkbox', { name: 'Hosting' })).toBeChecked()
     expect(more).toHaveTextContent('Software, hosting. Only these, by card.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))

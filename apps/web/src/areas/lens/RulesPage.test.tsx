@@ -183,7 +183,11 @@ describe('an agent’s rules page', () => {
     const row = () => screen.getByRole('switch', { name: 'Merchants and categories' }).parentElement!
     expect(row()).toHaveTextContent('Merchants and categoriesAny merchant')
     turnOn('Merchants and categories')
-    fireEvent.click(within(screen.getByRole('group', { name: 'Merchants and categories Research may pay in' })).getByRole('button', { name: 'Software' }))
+    // B57.198 — Pocket's ticked choices (pocket.css .pick): each category is a checkbox a screen reader hears ticked.
+    const software = within(screen.getByRole('group', { name: 'Merchants and categories Research may pay in' })).getByRole('checkbox', { name: 'Software' })
+    expect(software).not.toBeChecked()
+    fireEvent.click(software)
+    expect(software).toBeChecked()
     expect(row()).toHaveTextContent('Merchants and categoriesSoftware')
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     await waitFor(() => expect(sent.some((s) => s.method === 'PUT')).toBe(true))

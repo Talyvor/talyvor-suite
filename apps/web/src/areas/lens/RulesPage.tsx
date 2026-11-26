@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { type UseQueryResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink } from '@talyvor/ui'
-import { Button, Card, Chip, Crumb, Dialog, Icon, Input, Money, PageHeading, Select, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Crumb, Dialog, Icon, Input, Money, PageHeading, Pick, PickRow, Select, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, changedBy, rulesHistoryKey, rulesKey, useKeys, useRulesChange } from './AgentBank'
 import { AgentFace } from './AgentFace'
 import { CATALOG_KEY } from '../marketplace/parts'
@@ -599,23 +599,17 @@ function merchantsLine(d: Draft): string {
   return d.blockedMerchants.length > 0 ? `${allowed}. Never ${merchantCategoriesText(d.blockedMerchants).toLowerCase()}` : allowed
 }
 
-/** B61.64 — the merchant categories as choices, each pressed to allow it; a code Lens holds that is not one of them is a choice too. */
+/** B61.64 — the merchant categories as Pocket's ticked choices (B57.198), each ticked to allow it; a code Lens holds that is not one of them is a choice too. */
 function MerchantChoices({ label, chosen, onChange }: { label: string; chosen: string[]; onChange: (ids: string[]) => void }) {
   const choices = [...MERCHANT_CATEGORIES.map((c) => c.id), ...chosen.filter((id) => !MERCHANT_CATEGORIES.some((c) => c.id === id))]
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+    <PickRow label={label}>
       {choices.map((id) => (
-        <button
-          key={id}
-          type="button"
-          aria-pressed={chosen.includes(id)}
-          className={`inline-flex h-8.5 items-center whitespace-nowrap rounded-pill bg-cloud px-3.5 text-body font-semibold text-ink aria-pressed:bg-page aria-pressed:shadow-pick ${pocketFocusRing}`}
-          onClick={() => onChange(chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id])}
-        >
+        <Pick key={id} checked={chosen.includes(id)} onCheckedChange={(on) => onChange(on ? [...chosen, id] : chosen.filter((x) => x !== id))}>
           {merchantCategoryName(id)}
-        </button>
+        </Pick>
       ))}
-    </div>
+    </PickRow>
   )
 }
 
