@@ -881,6 +881,15 @@ describe('the pages under Pay (B57.32)', () => {
     expect(within(row).getByText('Active')).toBeTruthy()
     expect(within(row).getByRole('button', { name: 'Stop' })).toBeTruthy()
   })
+
+  it('draws Download CSV in the Standing orders card header as the small secondary button with the download icon (B57.199)', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/money/pay/standing-orders')
+    render(<App />)
+    const csv = await screen.findByRole('button', { name: 'Download CSV' })
+    expect(csv.className.split(' ')).toEqual(expect.arrayContaining(['h-8.5', 'bg-cloud-2']))
+    expect(csv.querySelector('svg')).toBeTruthy()
+  })
 })
 
 // B58.8 — Lens refuses live money at a person's word while the workspace has no key (Lens B58.7); Pay says so first.

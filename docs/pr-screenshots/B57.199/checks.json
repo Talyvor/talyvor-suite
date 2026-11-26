@@ -1,0 +1,4 @@
+[
+  { "route": "/money/pay/standing-orders", "screen": "w-pay-orders" },
+  { "route": "/approvals", "screen": "w-approvals" }
+]
