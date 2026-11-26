@@ -23,6 +23,7 @@
 //   schedule-twice      — each run of a recurring transfer pays twice
 //   cash-out-free       — a cash-out is paid without holding the credits from the agent
 //   cash-out-unsigned   — B28.67: in a workspace with a passkey, a cash-out with no signature is held and paid anyway
+//   lockdown-keeps-key  — B28.68: a lost phone's lockdown leaves the phone's key signing
 //   card-live           — an agent's card is issued in live mode
 //   review-public       — a listing held for review is in the public catalog
 //   approve-noop        — a moderator's approval answers but leaves the listing held
@@ -530,6 +531,10 @@ export class Bank {
   private readonly passkeyKeys = new Map<string, string>()
   /** B50.38 — Lens B55.1: an unsigned second passkey waits here, signing nothing, until a key the workspace has lets it in. */
   private readonly enrolments = new Map<string, { id: string; ws: string; kind: string; name: string; code: string; status: string; created_at: string; expires_at: string }>()
+  /** B28.68 — each workspace's live recovery code (Lens B55.48), made with its first key and spent by a recovery. */
+  private readonly recoveryCodes = new Map<string, string>()
+  /** B28.68 — each workspace's lost-phone lockdown (Lens B41.116), lifted or not. */
+  private readonly lockdowns = new Map<string, { started_at: string; reason: string; lifted_at?: string }>()
   private readonly reports: Report[] = []
   private readonly accounts = new Map<string, ConnectAccount>()
   private readonly payouts: Payout[] = []
@@ -608,7 +613,8 @@ export class Bank {
       (ws, a, challenge) => a?.device_id !== undefined ? (a.challenge !== challenge ? "economy: the signature is not over this approval's challenge" : this.devices.refused(ws, a))
         : (this.passkeys.get(ws) ?? []).some((k) => k.credential_id === a?.credential_id) ? undefined : 'economy: the approval is not signed: sign its challenge with a passkey or the phone app',
       (ws, agentID, b) => this.payees.payItem(ws, agentID, b), (ws) => this.payees.billsOf(ws))
-    this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
+    this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
+      (ws) => this.recoveryCodes.has(ws) ? undefined : this.newRecoveryCode(ws))
     this.earningsPayouts = new EarningsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID, asset) => this.payees.wallet(ws, agentID, asset))
     this.terms = new TermsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), B30_CAPABILITIES)
     this.scan = new ScanDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID) => this.agents.get(agentID)?.ws === ws)
@@ -1919,6 +1925,46 @@ export class Bank {
       buyer_workspace_id: u.buyer, seller_workspace_id: u.seller, price_ulxc: u.price_ulxc, refunded_at: now })) }), true
   }
 
+  /** B28.68 — a new recovery code for `ws`, 20 Crockford base32 characters as Lens makes them; the old one stops working. */
+  private newRecoveryCode(ws: string): string {
+    const code = [...randomBytes(20)].map((b) => '0123456789ABCDEFGHJKMNPQRSTVWXYZ'[b % 32]).join('')
+    this.recoveryCodes.set(ws, code)
+    return code
+  }
+
+  /** B28.68 — Lens B41.116's lost-phone lockdown of `ws`: read, started over the keys it names, and lifted. */
+  private async lockdownRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const { json } = this.d
+    const now = new Date().toISOString()
+    const standing = () => { const l = this.lockdowns.get(ws); return l?.lifted_at === undefined ? l : undefined }
+    if (path === '/v1/money/lockdown' && req.method === 'GET') {
+      const l = standing()
+      return json(res, 200, l === undefined ? { active: false } : { active: true, started_at: l.started_at, reason: l.reason }), true
+    }
+    // The named keys stop signing at once, the last one included; every key when it names none. STUB_BREAK=lockdown-keeps-key
+    // revokes none. (Lens also pauses every agent, freezes every card and ends every other sign-in; the stub does not.)
+    if (path === '/v1/money/lockdown' && req.method === 'POST') {
+      const b = await this.body<{ device_ids?: string[]; passkey_ids?: string[]; reason?: string }>(req)
+      const all = !(b.device_ids?.length) && !(b.passkey_ids?.length)
+      const keep = this.broken('lockdown-keeps-key')
+      const devices = keep ? [] : this.devices.lockOut(ws, all ? undefined : b.device_ids ?? [], now)
+      const passkeys = keep ? [] : (this.passkeys.get(ws) ?? []).filter((k) => all || (b.passkey_ids ?? []).includes(k.credential_id)).map((k) => k.credential_id)
+      this.passkeys.set(ws, (this.passkeys.get(ws) ?? []).filter((k) => !passkeys.includes(k.credential_id)))
+      this.lockdowns.set(ws, { started_at: now, reason: b.reason ?? '' })
+      return json(res, 200, { active: true, started_at: now, reason: b.reason ?? '', revoked_devices: devices, revoked_passkeys: passkeys, frozen_cards: 0 }), true
+    }
+    if (path === '/v1/money/lockdown/lift' && req.method === 'POST') {
+      const l = standing()
+      if (l === undefined) return json(res, 200, { active: false }), true
+      if (!this.verification.identityCheckedSince(ws, l.started_at)) {
+        return json(res, 403, { error: "economy: lifting the lockdown takes an identity check of the workspace's person, passed since it began" }), true
+      }
+      l.lifted_at = now
+      return json(res, 200, { active: false }), true
+    }
+    return false
+  }
+
   /** Writes a signed-in person makes outside their workspace: a report on a listing; and wallet lookups. */
   async publicWrite(req: IncomingMessage, res: ServerResponse, path: string, viewer: string): Promise<boolean> {
     const { json } = this.d
@@ -1932,6 +1978,7 @@ export class Bank {
     }
     if (await this.payees.route(req, res, viewer, path)) return true
     if (await this.permissionMandates.route(req, res, viewer, path)) return true
+    if (await this.lockdownRoute(req, res, viewer, path)) return true
     if (await this.devices.route(req, res, viewer, path)) return true
     if (await this.paymentRequests.route(req, res, viewer, path)) return true
     if (await this.earningsPayouts.route(req, res, viewer, path)) return true
@@ -2605,6 +2652,33 @@ export class Bank {
       return json(res, 200, { challenge: challenge(), allow_credentials: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id) }), true
     }
     if (rest === '/agents/passkeys') return json(res, 200, { passkeys: this.passkeys.get(ws.id) ?? [] }), true
+    // B28.68 — Approvals and devices' keys (Lens B55.16): the live passkeys and phone keys by name; a passkey removed unsigned,
+    // never the last live key; and with no live key and no lockdown standing, the recovery code (Lens B55.48) adds a
+    // passkey at once and answers a new code in its place.
+    const live = () => [...(this.passkeys.get(ws.id) ?? []).map((k) => ({ kind: 'passkey', id: k.credential_id, name: k.name, created_at: k.created_at })),
+      ...this.devices.live(ws.id).map((d) => ({ kind: 'phone', id: d.id, name: d.name, created_at: d.created_at }))]
+    if (rest === '/agents/keys' && method === 'GET') return json(res, 200, { keys: live() }), true
+    if ((m = /^\/agents\/passkeys\/([^/]+)$/.exec(rest)) !== null && method === 'DELETE') {
+      const gone = decodeURIComponent(m[1] ?? '')
+      if (!(this.passkeys.get(ws.id) ?? []).some((k) => k.credential_id === gone)) return json(res, 404, { error: 'economy: no such passkey in this workspace' }), true
+      if (live().length <= 1) return json(res, 409, { error: 'economy: this is the workspace\'s last key: add another before removing it' }), true
+      this.passkeys.set(ws.id, (this.passkeys.get(ws.id) ?? []).filter((k) => k.credential_id !== gone))
+      return json(res, 200, { removed: true }), true
+    }
+    if (rest === '/keys/recover' && method === 'GET') return json(res, 200, { recovery: null }), true
+    if (rest === '/keys/recover' && method === 'POST') {
+      const b = await this.body<{ code?: string; passkey?: { credential_id?: string; name?: string; public_key?: string } }>(req)
+      const l = this.lockdowns.get(ws.id)
+      if (l !== undefined && l.lifted_at === undefined) return json(res, 409, { error: 'This workspace is locked down. Lift the lockdown first, then add a key.' }), true
+      if (live().length > 0) return json(res, 409, { error: 'This workspace still has a key. Add the new one from Approvals and devices on a device that has a key.' }), true
+      const typed = (b.code ?? '').replace(/[\s-]+/g, '').toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1')
+      if (typed === '' || typed !== this.recoveryCodes.get(ws.id)) return json(res, 403, { error: 'That recovery code is not right. Check it and try again.' }), true
+      const { credential_id = '', name = '', public_key = '' } = b.passkey ?? {}
+      if (credential_id === '') return json(res, 400, { error: 'economy: a recovery adds a passkey or a phone key' }), true
+      this.passkeyKeys.set(credential_id, public_key)
+      this.passkeys.set(ws.id, [...(this.passkeys.get(ws.id) ?? []), { credential_id, name, created_at: now }])
+      return json(res, 200, { key: { kind: 'passkey', id: credential_id, name }, recovery_code: this.newRecoveryCode(ws.id) }), true
+    }
     if ((m = /^\/agents\/keys\/enrolments\/([^/]+)(\/decline)?$/.exec(rest)) !== null && (method === 'GET' || (m[2] !== undefined && method === 'POST'))) {
       const e = this.enrolments.get(m[1] ?? '')
       if (e?.ws !== ws.id || (m[2] !== undefined && e.status !== 'waiting')) return json(res, 404, { error: 'economy: no such key waiting to join this workspace' }), true

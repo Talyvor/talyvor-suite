@@ -15,7 +15,7 @@ import type { Answered, LensClient, SyntheticUser, VerificationCheck, WorkspaceV
 export const UNCONFIRMED_SCENARIOS: ReadonlySet<string> = new Set(['verification-levels', 'verification-screen'])
 
 /** A person the Test provider passes: no TESTFAIL, TESTSANCTION, TESTRETURN or TESTPENDING in the name. */
-const PERSON = { name: 'Nightly Confirmed Owner', country: 'GB', date_of_birth: '1990-04-12' }
+export const PERSON = { name: 'Nightly Confirmed Owner', country: 'GB', date_of_birth: '1990-04-12' }
 /** How many users confirm at once in a run's set-up. */
 const WIDTH = 8
 
