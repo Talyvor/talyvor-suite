@@ -50,6 +50,17 @@ export class VerificationDesk {
     return { level: `L${level}`, live_level: `L${live}` }
   }
 
+  /**
+   * B28.68 — whether an identity check started after `since` passed for the person of the workspace's first one, as Lens
+   * B41.116 asks before a lost phone's lockdown lifts.
+   */
+  identityCheckedSince(ws: string, since: string): boolean {
+    const identity = (this.checks.get(ws) ?? []).filter((c) => c.level === 2 && c.status === 'completed')
+    const first = identity.filter((c) => c.started_at <= since).at(-1)
+    return identity.some((c) => c.started_at > since &&
+      (first === undefined || (c.verified_name ?? '').toLowerCase() === (first.verified_name ?? '').toLowerCase() && c.country === first.country))
+  }
+
   private reached(ws: string): { level: number; live: number } {
     const passed = new Set((this.checks.get(ws) ?? []).filter((c) => c.status === 'completed').map((c) => c.level))
     let level = 0

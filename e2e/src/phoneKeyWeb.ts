@@ -7,10 +7,16 @@
 // B55.3 — then, on a page with a virtual Face ID, Add this device waits for the phone with the code Lens holds; the phone key
 // lets it in over its enrolment challenge and the page says this browser signs. A second phone registered unsigned then waits,
 // and the page lets it in with this browser's new passkey: Lens holds that enrolment approved.
+// B28.68 — last, the phones are lost. On Approvals and devices the person removes this browser's passkey, then Lost your
+// phone? locks both phones out: Lens holds no live key and the lockdown, and the first phone's signature on the waiting
+// approval is refused and it stays pending. They pass an identity check again, Lift the lockdown, sign in again and type
+// the recovery code Lens answered with the first phone: a new passkey on this browser, a new code shown once, and that
+// passkey approves the waiting approval on its sheet. Lens holds it approved.
 
 import type { Page } from 'playwright'
 import { card, dollarsTyped, fail } from './bank.ts'
 import { softDevice } from './deviceKeyApproval.ts'
+import { PERSON } from './confirmIdentity.ts'
 import { RUN_SALT } from './oracles.ts'
 import { said } from './routes.ts'
 import { CannotTest, type Scenario, type ScenarioCtx, type Verdict } from './scenarios.ts'
@@ -93,6 +99,127 @@ export function enrolVerdict(seen: EnrolSeen): Verdict {
   return { pass: true, detail: 'the phone let this browser in with the code both showed, and this browser let a second phone in' }
 }
 
+/** B28.68 — what a lost phone's lockout and the recovery code came to, on the page and on Lens. */
+export interface LostSeen {
+  why?: string
+  /** passkeys and phone keys Lens holds live once Lost your phone? locked the phones out */
+  liveAfterLockout: number
+  /** Lens holds the lockdown, and the Locked down card headed the page */
+  lockdown: boolean
+  card: boolean
+  /** what Lens answered the locked-out phone's signature on the waiting approval, and the approval's status after */
+  phoneAnswer: number
+  afterPhone: string
+  /** Lens holds no lockdown once Lift the lockdown was pressed */
+  lifted: boolean
+  /** passkeys Lens holds live once the recovery code was used, and the new code was shown once */
+  recovered: number
+  newCode: boolean
+  /** the sheet said it was approved with the recovered passkey, and the approval's status on Lens after */
+  approved: boolean
+  status: string
+}
+
+export function lostPhoneVerdict(seen: LostSeen): Verdict {
+  const wrong: string[] = []
+  if (seen.liveAfterLockout !== 0) wrong.push(`after Lost your phone? Lens holds ${seen.liveAfterLockout} live key(s), not none`)
+  if (!seen.lockdown || !seen.card) wrong.push(`the lockdown ${seen.lockdown ? 'is held' : 'is not held'} on Lens and its card ${seen.card ? 'showed' : 'did not show'}`)
+  if (seen.phoneAnswer !== 403) wrong.push(`the locked-out phone's signature on the waiting approval must be refused 403; Lens answered ${seen.phoneAnswer}`)
+  if (seen.afterPhone !== 'pending') wrong.push(`after the locked-out phone signed, the approval is ${seen.afterPhone || 'missing'}, not pending`)
+  // Stopped part-way: what the lockout came to, as far as it got, then where it stopped.
+  if (seen.why !== undefined) return fail(`the lost phone could not be locked out and replaced: ${[...(seen.liveAfterLockout < 0 ? [] : wrong), seen.why].join('; ')}`)
+  if (!seen.lifted) wrong.push('Lift the lockdown, after an identity check, left the lockdown standing')
+  if (seen.recovered !== 1) wrong.push(`after the recovery code Lens holds ${seen.recovered} live passkey(s), not the new one`)
+  if (!seen.newCode) wrong.push('the recovery code was used and no new one was shown to save')
+  if (!seen.approved) wrong.push('Approve with your passkey did not say the payment was approved')
+  if (seen.status !== 'approved') wrong.push(`the approval is ${seen.status || 'missing'} on Lens, not approved by the recovered passkey`)
+  if (wrong.length > 0) return fail(wrong.join('; '))
+  return { pass: true, detail: 'locked out, the lost phone could no longer approve; after an identity check and the recovery code, a new passkey on this browser approved' }
+}
+
+/** B28.68 — the phones are lost: this browser's passkey removed, both phones locked out, then a passkey got back by the recovery code. */
+async function lostPhone(ctx: ScenarioCtx, phone: ReturnType<typeof softDevice>, phoneID: string, approvalID: string, code: string): Promise<LostSeen> {
+  const { lens } = ctx.env
+  const user = ctx.app.user
+  const seen: LostSeen = { liveAfterLockout: -1, lockdown: false, card: false, phoneAnswer: 0, afterPhone: '', lifted: false, recovered: -1, newCode: false, approved: false, status: '' }
+  type Key = { credential_id?: string; id?: string; name: string; revoked_at?: string }
+  const liveKeys = async () => {
+    const pk = await lens.act<{ passkeys: Key[] | null }>(user, 'GET', '/v1/workspaces/{ws}/agents/passkeys')
+    const dk = await lens.act<{ devices: Key[] | null }>(user, 'GET', '/v1/money/devices')
+    if (!pk.ok || !dk.ok) throw new Error(`the keys could not be read: ${said(pk)} ${said(dk)}`)
+    return { passkeys: (pk.value.passkeys ?? []).filter((k) => !k.revoked_at), devices: (dk.value.devices ?? []).filter((k) => !k.revoked_at) }
+  }
+  const lockdown = async () => {
+    const l = await lens.act<{ active: boolean }>(user, 'GET', '/v1/money/lockdown')
+    if (!l.ok) throw new Error(`the lockdown could not be read: ${said(l)}`)
+    return l.value.active
+  }
+  let page: Page | undefined
+  try {
+    page = await ctx.app.tab('/settings/devices')
+    const cdp = await ctx.app.context.newCDPSession(page)
+    await cdp.send('WebAuthn.enable', { enableUI: false })
+    await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+    })
+    const origin = new URL(page.url()).origin
+
+    // This browser's passkey goes first, as any key but the last is removed; then the phones, lost, are locked out.
+    for (const k of (await liveKeys()).passkeys) {
+      await page.getByRole('button', { name: `Remove ${k.name || 'Passkey'}`, exact: true }).click({ timeout: TIMEOUT_MS })
+      await page.getByRole('dialog').getByRole('button', { name: 'Remove it', exact: true }).click({ timeout: TIMEOUT_MS })
+      await page.getByRole('dialog').waitFor({ state: 'detached', timeout: TIMEOUT_MS })
+    }
+    await page.getByRole('region', { name: 'Your phone' }).getByRole('button', { name: 'Lost your phone?' }).click({ timeout: TIMEOUT_MS })
+    await page.getByRole('dialog', { name: 'Lost your phone?' }).getByRole('button', { name: 'Lock out my phone', exact: true }).click({ timeout: TIMEOUT_MS })
+    seen.card = await page.getByRole('region', { name: 'Locked down' }).waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
+    const after = await liveKeys()
+    seen.liveAfterLockout = after.passkeys.length + after.devices.length
+    seen.lockdown = await lockdown()
+    ctx.evidence.push({ note: 'Remove this browser\'s passkey, then Lost your phone? → Lock out my phone', answer: JSON.stringify({ live: after, lockdown: seen.lockdown }) })
+
+    // The lost phone signs the waiting approval: refused.
+    const ch = await lens.act<{ challenge: string }>(user, 'POST', `/v1/workspaces/{ws}/agents/approvals/${approvalID}/challenge`, {})
+    if (!ch.ok) throw new Error(`the approval's challenge was refused: ${said(ch)}`)
+    const signed = await lens.act(user, 'POST', `/v1/workspaces/{ws}/agents/approvals/${approvalID}/approve`, { assertion: phone.assert(phoneID, ch.value.challenge) })
+    ctx.evidence.push({ note: 'the locked-out phone signs the waiting approval', answer: said(signed) })
+    seen.phoneAnswer = signed.status
+    seen.afterPhone = (await lens.agentApprovals(user)).find((a) => a.id === approvalID)?.status ?? ''
+
+    // Who they are, checked again from this sign-in, lifts the lockdown.
+    const check = await page.request.post(`${origin}/api/verification/identity`, { headers: { Origin: origin }, data: PERSON })
+    ctx.evidence.push({ note: 'an identity check again, from this sign-in', answer: `${check.status()} ${(await check.text()).slice(0, 200)}` })
+    await page.getByRole('region', { name: 'Locked down' }).getByRole('button', { name: 'Lift the lockdown' }).click({ timeout: TIMEOUT_MS })
+    await page.getByRole('region', { name: 'Locked down' }).waitFor({ state: 'detached', timeout: TIMEOUT_MS }).catch(() => undefined)
+    seen.lifted = !(await lockdown())
+
+    // A recovery needs a sign-in in the last 10 minutes: the person signs in again, then types the code they saved.
+    const again = await page.evaluate(async ({ u, key }) => (await fetch('/auth/synthetic', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Talyvor-Synthetic-Key': key },
+      body: JSON.stringify({ workspace_id: u.workspaceID, token: u.token, expires_at: u.expiresAt }),
+    })).status, { u: user, key: process.env.LENS_SYNTHETIC_KEY ?? '' })
+    if (again !== 200) throw new Error(`signing in again answered ${again}`)
+    await page.reload()
+    await page.getByLabel('Recovery code').fill(code, { timeout: TIMEOUT_MS })
+    await page.getByRole('button', { name: 'Use your recovery code' }).click({ timeout: TIMEOUT_MS })
+    const sheet = page.getByRole('dialog', { name: 'Save your recovery code' })
+    seen.newCode = await sheet.waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
+    if (seen.newCode) await sheet.getByRole('button', { name: 'I saved it' }).click()
+    seen.recovered = (await liveKeys()).passkeys.length
+
+    // The recovered passkey approves the payment that waited.
+    await page.goto(`${origin}/?approval=${encodeURIComponent(approvalID)}`)
+    await page.getByRole('dialog', { name: /wants to pay/ }).getByRole('button', { name: 'Approve with your passkey' }).click({ timeout: TIMEOUT_MS })
+    seen.approved = await page.getByText(/^Approved: /).first().waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
+  } catch (e) {
+    seen.why = (e as Error).message.split('\n')[0]
+  } finally {
+    await page?.close()
+  }
+  seen.status = (await lens.agentApprovals(user)).find((a) => a.id === approvalID)?.status ?? ''
+  return seen
+}
+
 async function addBrowserThenPhone(ctx: ScenarioCtx, phone: ReturnType<typeof softDevice>, phoneID: string): Promise<EnrolSeen> {
   const { lens } = ctx.env
   const user = ctx.app.user
@@ -154,16 +281,17 @@ export function phoneKeyWeb(): Scenario {
     own: true,
     agents: 2,
     feature: 'Agent Wallets',
-    items: ['B55.2', 'B55.14', 'B55.3'],
+    items: ['B55.2', 'B55.14', 'B55.3', 'B28.68'],
     title: 'with only a phone key, Approvals says to approve on the phone, shows no Approve or Deny, sends nothing, and the approval stays pending; ' +
-      'a raised limit is not sent and a lowered one saves at once; then the phone lets this browser in with the code both show, and this browser lets a second phone in',
+      'a raised limit is not sent and a lowered one saves at once; then the phone lets this browser in with the code both show, and this browser lets a second phone in; ' +
+      'then the phones are lost and locked out, the lost phone can no longer approve, and a passkey got back by the recovery code approves',
     run: async (ctx) => {
       const { lens } = ctx.env
       const user = ctx.app.user
       const ch = await lens.act<{ challenge: string }>(user, 'POST', '/v1/money/devices/challenge', {})
       if (!ch.ok) return fail(`the device registration challenge was refused: ${said(ch)}`)
       const phone = softDevice()
-      const reg = await lens.act<{ id: string }>(user, 'POST', '/v1/money/devices', phone.register(ch.value.challenge, 'Nightly phone'))
+      const reg = await lens.act<{ id: string; recovery_code?: string }>(user, 'POST', '/v1/money/devices', phone.register(ch.value.challenge, 'Nightly phone'))
       if (reg.status === 400 && !reg.ok && reg.error.includes('test device keys are not accepted')) {
         throw new CannotTest(`Lens refuses the "test" device platform: ${reg.error} — it needs LENS_DEVICE_TEST_ATTESTATION=true in lens.env`)
       }
@@ -229,11 +357,18 @@ export function phoneKeyWeb(): Scenario {
       const shown = phoneKeyWebVerdict(seen)
       const enrol = shown.pass ? await addBrowserThenPhone(ctx, phone, reg.value.id) : undefined
       if (enrol) ctx.evidence.push({ note: 'a key let in from the other device, each way', answer: JSON.stringify(enrol) })
+      const before = enrol ? enrolVerdict(enrol) : shown
+      // B28.68 — whatever the parts before it came to. Lens answers the recovery code once, with the workspace's first key: the phone's.
+      const lost: LostSeen = reg.value.recovery_code ? await lostPhone(ctx, phone, reg.value.id, id, reg.value.recovery_code)
+        : { why: "Lens answered no recovery code with the workspace's first key", liveAfterLockout: -1, lockdown: false, card: false, phoneAnswer: 0, afterPhone: '', lifted: false, recovered: -1, newCode: false, approved: false, status: '' }
+      ctx.evidence.push({ note: 'the phones lost: locked out, then a passkey got back by the recovery code', answer: JSON.stringify(lost) })
+      const recovered = lostPhoneVerdict(lost)
       const devices = await lens.act<{ devices: Array<{ id: string; revoked_at?: string }> | null }>(user, 'GET', '/v1/money/devices')
       for (const d of devices.ok ? devices.value.devices ?? [] : [{ id: reg.value.id }]) {
         if (!d.revoked_at) await lens.act(user, 'POST', `/v1/money/devices/${d.id}/revoke`, {})
       }
-      return enrol ? enrolVerdict(enrol) : shown
+      const failed = [before, recovered].filter((v) => !v.pass)
+      return failed.length > 0 ? fail(failed.map((v) => v.detail).join('; ')) : { pass: true, detail: `${before.detail}; ${recovered.detail}` }
     },
   }
 }
