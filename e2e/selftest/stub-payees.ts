@@ -127,6 +127,11 @@
 // total that leaves the account, the rate and what arrives — and POST /v1/money/payments pays it only with its quote_id (400
 // without one; 409 for a quote of another payment), the total leaving the account. Its defect:
 //   intl-fee-off-ledger    — the payment takes only its amount from the account, not the partner's cost and the fee
+// B30.148 — and a completed payment's entry (Lens B30.147): the payment carries its entry_id, and GET /v1/money/payments/{id}/entry
+// reads every posting with its account's purpose — the hold out, the partner in, Talyvor's fee to revenue and, for an international
+// one, what arrives through the route's conversion and payments accounts in the payee's currency — and the sums per currency; 409
+// while the payment is not posted. Its defect:
+//   intl-fee-unposted      — the entry takes the amount and the partner's cost out of the hold but leaves the fee there, nothing to revenue
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createHmac, createPublicKey, randomBytes, randomUUID, timingSafeEqual, verify } from 'node:crypto'
@@ -162,7 +167,9 @@ interface StubBatch { id: string; workspace_id: string; funding: string; idempot
 /** A payment out (economy.OutsidePayment). */
 interface Payment { id: string; workspace_id: string; account_id: string; payee_id: string; payee_name: string; amount_minor: number; currency: string
   funding: string; reference: string; idempotency_key: string; status: string; created_at: string; address?: string; travel_rule?: Record<string, string>
-  quote_id?: string; partner_cost_minor?: number; fee_minor?: number; arrives_minor?: number; arrives_currency?: string; rate?: string }
+  quote_id?: string; partner_cost_minor?: number; fee_minor?: number; arrives_minor?: number; arrives_currency?: string; rate?: string; entry_id?: string }
+/** B30.148 — one posting of a payment's entry (economy.PaymentEntryPosting). */
+interface EntryPosting { account_id: string; purpose: string; amount_minor: number; currency: string }
 /** A card batch and its cards (economy.CardBatch, economy.MoneyCard). */
 interface StubCard { id: string; line: number; merchant: string; cap_minor: number; currency: string; status: string; spent_minor: number; last4?: string; expires_at?: string }
 interface StubCardBatch { id: string; workspace_id: string; agent_id: string; idempotency_key: string; purpose: string; currency: string; funding: string
@@ -236,6 +243,8 @@ export class PayeeDesk {
   private readonly testMoneyKeys = new Set<string>()
   private readonly payments = new Map<string, Payment[]>()
   private readonly quotes = new Map<string, IntlQuote>()
+  /** B30.148 — each completed payment's entry, by the payment's id. */
+  private readonly entries = new Map<string, { entry_id: string; created_at: string; postings: EntryPosting[] }>()
   /** B48.27 — each workspace's wallet ledger lines, newest first, and the addresses its owner proved they hold. */
   private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string; entry_id?: string }[]>()
   /** B56.28 — each invoice's payment by an agent account, by `${invoice id}\n${account id}`: a retry answers it. */
@@ -402,6 +411,19 @@ export class PayeeDesk {
       if (/TESTPENDING/i.test(name)) p.screening = `${HELD} (compliance case ${this.openCase(ws, p.id, name, 'held').id})`
       this.payees.set(ws, [...list, p])
       return this.json(res, 201, p), true
+    }
+    const entry = /^\/v1\/money\/payments\/([^/]+)\/entry$/.exec(path)
+    if (entry !== null && req.method === 'GET') {
+      const p = (this.payments.get(ws) ?? []).find((x) => x.id === entry[1])
+      const e = p === undefined ? undefined : this.entries.get(p.id)
+      if (p === undefined) return this.json(res, 404, { error: 'economy: no such payment' }), true
+      if (e === undefined) return this.json(res, 409, { error: `economy: the payment's entry is not posted: payment ${p.id} is ${p.status}, and its entry is posted only once it completes` }), true
+      const sums: { currency: string; sum_minor: number }[] = []
+      for (const lp of e.postings) {
+        const s = sums.find((x) => x.currency === lp.currency) ?? sums[sums.push({ currency: lp.currency, sum_minor: 0 }) - 1]
+        s.sum_minor += lp.amount_minor
+      }
+      return this.json(res, 200, { payment_id: p.id, entry_id: e.entry_id, kind: 'payment_out', funding: p.funding, created_at: e.created_at, postings: e.postings, sums }), true
     }
     const one = /^\/v1\/money\/payments\/([^/]+)$/.exec(path)
     if (one !== null && req.method === 'GET') {
@@ -1065,6 +1087,27 @@ export class PayeeDesk {
   }
 
   /** B30.127 — payment `p` as the Test partner has it now: a completed one whose minor units end in 14 came back, its money in the account again. */
+  /**
+   * B30.148 — `p`'s entry as Lens's movements post it: the `debit` out of the hold and the amount and the partner's cost to the
+   * partner, the fee to revenue, and an international payment's arrival in its currency in from the conversion account and out
+   * through the payments account.
+   */
+  private post(p: Payment, debit: number, quote: IntlQuote | undefined): void {
+    const fee = quote?.fee_minor ?? 0
+    const toPartner = p.amount_minor + (quote?.partner_cost_minor ?? 0)
+    const unposted = this.broken('intl-fee-unposted') ? fee : 0
+    const at = (purpose: string, currency: string, route = '') => `ma_${purpose}_${route}${currency.toLowerCase()}_${p.workspace_id}`
+    const postings: EntryPosting[] = [{ account_id: at('hold', p.currency), purpose: 'hold', amount_minor: -(debit - unposted), currency: p.currency },
+      { account_id: at('partner', p.currency), purpose: 'partner', amount_minor: toPartner, currency: p.currency }]
+    if (fee - unposted > 0) postings.push({ account_id: at('revenue', p.currency), purpose: 'revenue', amount_minor: fee - unposted, currency: p.currency })
+    if (quote !== undefined) {
+      postings.push({ account_id: at('partner', quote.arrives_currency, 'conversion_'), purpose: 'partner', amount_minor: -quote.arrives_minor, currency: quote.arrives_currency },
+        { account_id: at('partner', quote.arrives_currency, 'payments_'), purpose: 'partner', amount_minor: quote.arrives_minor, currency: quote.arrives_currency })
+    }
+    p.entry_id = `me_${randomUUID()}`
+    this.entries.set(p.id, { entry_id: p.entry_id, created_at: p.created_at, postings })
+  }
+
   private refresh(ws: string, p: Payment): void {
     if (p.status !== 'completed' || p.amount_minor % 100 !== 14) return
     const account = (this.accounts.get(ws) ?? []).find((a) => a.id === p.account_id)
@@ -1153,6 +1196,7 @@ export class PayeeDesk {
       ...(address === '' ? {} : { address, travel_rule: travelRule }),
       ...(quote === undefined ? {} : { quote_id: quote.id, partner_cost_minor: quote.partner_cost_minor, fee_minor: quote.fee_minor, arrives_minor: quote.arrives_minor,
         arrives_currency: quote.arrives_currency, rate: quote.rate }) }
+    if (p.status === 'completed' && address === '') this.post(p, debit, quote)
     this.payments.set(ws, [p, ...payments])
     if (p.status === 'completed' && address === '' && !this.broken('payment-account-unmoved')) this.monitor(ws, account, p)
     return p
