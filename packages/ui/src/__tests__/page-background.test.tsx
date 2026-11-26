@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PageBackground, agentHues, businessHues, personalHues } from '../pocket'
+import { PageBackground, Shell, agentHues, businessHues, personalHues, pocketFocusRing } from '../pocket'
 import { pocket } from '../tokens'
 
 // B61.70 — Pocket Live's background (design/pocket-live/DESIGN.md section 6): still with reduced motion, nothing drawn
@@ -102,5 +102,40 @@ describe('the background (B61.70)', () => {
     const { container } = render(<PageBackground hues={businessHues} />)
     const bg = container.querySelector<HTMLElement>('[data-background="streams"]')!
     expect([bg.style.getPropertyValue('--h1'), bg.style.getPropertyValue('--h2')]).toEqual([...businessHues])
+  })
+})
+
+// B61.125 — Pocket Live's 26 Nov pass (DESIGN.md section 6.0): the colour fills the whole window. One glass, drawn once
+// by the Shell behind the sidebar, the top bar and every page; it does not scroll and does not fade; five washes.
+describe('the glass across the whole window (B61.125)', () => {
+  const css = readFileSync(resolve(import.meta.dirname, '../theme.css'), 'utf8')
+  const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? ''
+
+  it('is drawn once for the window by the Shell, hidden from assistive technology, behind the sidebar', () => {
+    const { container } = render(
+      <div data-design="pocket">
+        <Shell sidebar={<a href="/" className={pocketFocusRing}>Home</a>} bar={<span>Bar</span>} background={<PageBackground hues={personalHues} />}>
+          <p>Page</p>
+        </Shell>
+      </div>,
+    )
+    const glass = container.querySelectorAll('[data-glass]')
+    expect(glass).toHaveLength(1)
+    expect(glass[0]!.closest('[aria-hidden="true"]')).not.toBeNull()
+    expect(glass[0]!.querySelectorAll('.pk-bg-tint i')).toHaveLength(5)
+    // The frosted tokens reach the sidebar as well as the page, and the sidebar is raised over the window's glass.
+    expect(container.firstElementChild!.firstElementChild).toHaveClass('pk-glass')
+    expect(container.querySelector('aside')).toHaveClass('pk-side-glass', 'wide:relative', 'wide:z-10')
+  })
+
+  it('fills the window edge to edge, with no fade, and stays put while the page scrolls', () => {
+    const glass = rule('.pk-bg-glass')
+    expect(glass).toMatch(/position: fixed; inset: 0;/)
+    expect(glass).not.toMatch(/mask-image|height: 70vh/)
+    expect(rule('.pk-bg')).not.toMatch(/70vh|--bg-scroll/)
+    // Only the streams fade to 40% and lift 24 px.
+    expect(rule('.pk-bg-streams')).toMatch(/--bg-scroll, 0\) \* \.6/)
+    expect(css).toMatch(/--bg-wash: 46%;\s*--bg-veil: 16%;/)
+    expect(css).toMatch(/--bg-wash: 32%;\s*--bg-veil: 12%;/)
   })
 })

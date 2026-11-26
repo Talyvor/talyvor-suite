@@ -7,11 +7,12 @@ export interface CrumbProps {
   className?: string
 }
 
-// pocket.css .crumb: Agents › Research, faint, the page you are on in ink.
+// pocket.css .crumb: Agents › Research, the page you are on in ink. B61.125: it sits straight on the glass, so the trail
+// is the ink for words on the background (pk-on-bg), never the third ink: on an agent's own colour that reads under 4.5:1.
 export function Crumb({ trail, className }: CrumbProps) {
   return (
     <nav aria-label="Breadcrumb" className={className}>
-      <ol className="flex flex-wrap items-center gap-1.5 text-body text-ink-3">
+      <ol className="flex flex-wrap items-center gap-1.5 text-body pk-on-bg">
         {trail.map((c, i) => {
           const last = i === trail.length - 1
           return (

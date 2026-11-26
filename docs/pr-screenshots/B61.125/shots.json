@@ -1,0 +1,10 @@
+[
+ { "route": "/" },
+ { "route": "/agents" },
+ { "route": "/agents/agt_research" },
+ { "route": "/approvals", "steps": ["Review"] },
+ { "route": "/", "dark": true },
+ { "route": "/agents", "dark": true },
+ { "route": "/agents/agt_research", "dark": true },
+ { "route": "/approvals", "steps": ["Review"], "dark": true }
+]

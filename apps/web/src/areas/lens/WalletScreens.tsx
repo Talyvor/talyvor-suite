@@ -281,7 +281,7 @@ function ApprovalsPage() {
   return (
     <div className="grid min-w-0 gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-3xl text-reading pk-on-bg">
+        <p className="max-w-3xl text-reading text-ink">
           A request or payment waits here when it is above an agent’s approval amount. Approve it and the agent’s next identical request goes through,
           once; decline it and the request is refused, and asking again the same way is refused for 24 hours.
         </p>

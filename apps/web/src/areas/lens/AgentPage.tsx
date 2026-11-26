@@ -405,7 +405,7 @@ function Header({ s }: { s: AgentSummary }) {
               </Chip>
             )}
             {s.card.status === 'frozen' ? <Chip tone="paused">Card frozen</Chip> : null}
-            {made ? <span className="text-caption text-ink-3">{`Made${by} on ${made}`}</span> : null}
+            {made ? <span className="text-caption text-ink">{`Made${by} on ${made}`}</span> : null}
           </div>
         </div>
       </div>

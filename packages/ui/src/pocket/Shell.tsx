@@ -11,7 +11,8 @@ export interface ShellProps {
   children: React.ReactNode
   /** B47.2 — the sidebar is a drawer at every width, opened only by Menu (Chat takes the whole page). */
   drawer?: boolean
-  /** B61.70 — the page's background (PageBackground), at the top of the content and running behind the top bar. */
+  /** B61.70 — the page's background (PageBackground): its streams at the top of the content, running behind the top bar.
+   *  B61.125 — its glass fills the whole window, behind the sidebar too, and is the only one drawn. */
   background?: React.ReactNode
   /** B61.74 — the address of the page drawn in the content: a new one fades up 12 px over 300 ms. */
   page?: string
@@ -20,7 +21,8 @@ export interface ShellProps {
 
 /**
  * B61.70 — the page's scroll, read on scroll and never in a frame: past 4 px the top bar turns to glass, and over the first
- * 80 px the background fades and lifts (--bg-scroll, 0 to 1, on the content's column; theme.css .pk-bg).
+ * 80 px the streams fade and lift (--bg-scroll, 0 to 1, on the content's column; theme.css .pk-bg-streams). B61.125 — the
+ * glass behind them stays put.
  */
 function usePageScroll(ref: React.RefObject<HTMLDivElement | null>): boolean {
   const [scrolled, setScrolled] = useState(false)
@@ -38,8 +40,8 @@ function usePageScroll(ref: React.RefObject<HTMLDivElement | null>): boolean {
 }
 
 /**
- * B57.8 — Pocket's app frame (pocket.css .pk.app, .side, .top, .content): the 232px sidebar on the page colour beside
- * the main column, and the top bar over the content. Below 840px the sidebar is a drawer, opened by Menu in the top bar
+ * B57.8 — Pocket's app frame (pocket.css .pk.app, .side, .top, .content): the 232px sidebar beside the main column (B61.125:
+ * glass over the window's colour, raised over it; a solid panel while it is a drawer; theme.css .pk-glass), and the top bar over the content. Below 840px the sidebar is a drawer, opened by Menu in the top bar
  * and closed by Esc, the scrim or following one of its links. It is the same <aside> at every width, off-screen and
  * invisible (so nothing in it takes focus) until opened.
  */
@@ -75,7 +77,7 @@ export function Shell({ sidebar, bar, children, drawer = false, background, page
   }, [open])
 
   return (
-    <div className={cn('flex min-h-full flex-col', !drawer && 'wide:flex-row', className)}>
+    <div className={cn('pk-glass flex min-h-full flex-col', !drawer && 'wide:flex-row', className)}>
       {open ? (
         <button
           type="button"
@@ -90,7 +92,7 @@ export function Shell({ sidebar, bar, children, drawer = false, background, page
         ref={asideRef}
         className={cn(
           'fixed inset-y-0 left-0 z-30 w-58 max-w-full shrink-0 border-r border-line bg-page',
-          !drawer && 'wide:visible wide:static wide:z-auto',
+          !drawer && 'pk-side-glass wide:visible wide:relative wide:z-10',
           open ? 'visible' : 'invisible',
         )}
         aria-label="Primary"

@@ -53,7 +53,7 @@ const preset = {
         // Pocket's (B57.2). Text is ink, ink-2 or ink-3; tangerine-ink is the one orange that may
         // carry words; tangerine, the agent colours, success and danger fills are never text.
         page: 'var(--page)',
-        cloud: { DEFAULT: 'var(--cloud)', 2: 'var(--cloud-2)' },
+        cloud: { DEFAULT: 'var(--cloud)', 2: 'var(--cloud-2)' }, tint: 'var(--tint)', // B61.125: a track, a pressed row
         ink: { DEFAULT: 'var(--ink)', 2: 'var(--ink-2)', 3: 'var(--ink-3)' },
         line: 'var(--line)',
         control: 'var(--control)',
