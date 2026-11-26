@@ -108,6 +108,17 @@ func (p *roleProofs) lastHour(key string, now time.Time) []time.Time {
 	return kept
 }
 
+// dropPastHour drops every key whose newest time is an hour old or more, the rule lastHour applies to one key, so an
+// address typed once does not stay in memory after the hour it limits (B61.124). Times go in oldest first. The caller
+// holds mu.
+func (p *roleProofs) dropPastHour(now time.Time) {
+	for key, times := range p.sent {
+		if len(times) == 0 || now.Sub(times[len(times)-1]) >= time.Hour {
+			delete(p.sent, key)
+		}
+	}
+}
+
 // forget drops what is kept for sub: the addresses they proved and the code waiting for them (B61.123).
 func (p *roleProofs) forget(sub string) {
 	p.mu.Lock()
@@ -198,6 +209,7 @@ func (a *app) handleRoleEmailCode(w http.ResponseWriter, r *http.Request) {
 	if a.roles.codes == nil {
 		a.roles.codes, a.roles.sent = map[string]roleCode{}, map[string][]time.Time{}
 	}
+	a.roles.dropPastHour(now)
 	bySub, byEmail := a.roles.lastHour("sub:"+c.s.sub, now), a.roles.lastHour("email:"+email, now)
 	if len(bySub) >= roleCodesAnHour || len(byEmail) >= roleCodesAnHour {
 		a.roles.mu.Unlock()
