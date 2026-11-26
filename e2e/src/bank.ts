@@ -1549,6 +1549,29 @@ export function agentRulesRollback(seed: number): Scenario {
   }
 }
 
+/** What the service worker shows for one tag: the notification, or, when none came, every tag it shows and whether notifications are allowed. */
+export type PushShown =
+  | { title: string; body: string; url?: string; actions: string[] }
+  | { actions?: undefined; permission: string; shown: string[] }
+
+/** How long one delivery of a test push is given to show before it is delivered again. */
+export const PUSH_RETRY_MS = 5_000
+
+/**
+ * B17.536 — a push the run delivers through DevTools can be dropped while the browser is loaded: user 33 on 25 and 26 Nov
+ * saw nothing for 30 seconds, and the same push showed at once on the retry. So a push that has not shown is delivered
+ * again every `every` ms until it shows or `ms` have passed. Every delivery carries the same tag, so a second one
+ * replaces the first; a worker that never shows it still fails.
+ */
+export async function pushUntilShown(deliver: () => Promise<unknown>, shown: (ms: number) => Promise<PushShown>, ms: number, every = PUSH_RETRY_MS): Promise<PushShown & { deliveries: number }> {
+  const until = Date.now() + ms
+  for (let deliveries = 1; ; deliveries++) {
+    await deliver()
+    const s = await shown(Math.max(100, Math.min(every, until - Date.now())))
+    if (s.actions !== undefined || Date.now() >= until) return { ...s, deliveries }
+  }
+}
+
 /**
  * B55.43 — a spending notice in the browser says what it is, never "approve a payment". The push Lens sends for a due
  * spending notice (talyvor-lens economy/spend_notices.go pushSpendNotice) is delivered to the app's service worker: it
@@ -1578,30 +1601,30 @@ export function spendNoticePush(seed: number): Scenario {
       const registrationId = await registered
       const sw = ctx.app.context.serviceWorkers().find((w) => new URL(w.url()).pathname === '/sw.js')
       if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
-      const shownFor = (tag: string) => sw.evaluate(async ({ tag, ms }) => {
+      const shownFor = (tag: string) => (ms: number): Promise<PushShown> => sw.evaluate(async ({ tag, ms }) => {
         const w = globalThis as unknown as ApprovalWorker
         for (let waited = 0; waited < ms; waited += 100) {
           const [n] = await w.registration.getNotifications({ tag })
           if (n !== undefined) return { title: n.title, body: n.body, url: (n.data as { url?: string } | null)?.url, actions: (n as Notification & { actions: { action: string }[] }).actions.map((a) => a.action) }
           await new Promise((ok) => setTimeout(ok, 100))
         }
-        return { shown: (await w.registration.getNotifications()).map((n) => n.tag) }
-      }, { tag, ms: ACTION_TIMEOUT_MS })
+        return { permission: Notification.permission, shown: (await w.registration.getNotifications()).map((n) => n.tag) }
+      }, { tag, ms })
+      const push = (data: object) => () => cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(data) })
+      const sent = (n: number) => n > 1 ? `, shown on delivery ${n}` : ''
 
       const id = `ntc_e2e_${seed}`
       const notice = { type: 'spend_notice', kind: 'payment', notice_id: id, workspace_id: 'ws_e2e', title: `You paid Bistro £25.00 (${seed})`, body: 'Paid from your own account.' }
-      await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(notice) })
-      const n = await shownFor(`spend-notice-${id}`)
-      if (n.actions === undefined) return fail(`the spending notice push showed no notification tagged spend-notice-${id}; showing ${JSON.stringify(n.shown)}`)
-      ctx.evidence.push({ note: `the spending notice: "${n.title}", "${n.body}", ${n.actions.join(', ') || 'no actions'}, opens ${n.url}` })
+      const n = await pushUntilShown(push(notice), shownFor(`spend-notice-${id}`), ACTION_TIMEOUT_MS)
+      if (n.actions === undefined) return fail(`the spending notice push, delivered ${n.deliveries} times, showed no notification tagged spend-notice-${id} (notifications ${n.permission}; showing ${JSON.stringify(n.shown)})`)
+      ctx.evidence.push({ note: `the spending notice: "${n.title}", "${n.body}", ${n.actions.join(', ') || 'no actions'}, opens ${n.url}${sent(n.deliveries)}` })
       if (n.title !== notice.title || n.body !== notice.body) return fail(`the spending notice does not read as Lens wrote it: ${JSON.stringify(n)}`)
       if (n.actions.length !== 0) return fail(`the spending notice carries ${n.actions.join(', ')}`)
       if (n.url !== `/money/spending#notice-${id}`) return fail(`a tap on the payment notice opens ${n.url}, not its notice on Spending`)
 
-      await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify({ type: `not_yet_${seed}`, approval_id: `apr_e2e_${seed}` }) })
-      const other = await shownFor('talyvor')
-      if (other.actions === undefined) return fail(`a push of an unknown type showed no "Talyvor" notification; showing ${JSON.stringify(other.shown)}`)
-      ctx.evidence.push({ note: `an unknown push: "${other.title}", "${other.body}", ${other.actions.join(', ') || 'no actions'}, opens ${other.url}` })
+      const other = await pushUntilShown(push({ type: `not_yet_${seed}`, approval_id: `apr_e2e_${seed}` }), shownFor('talyvor'), ACTION_TIMEOUT_MS)
+      if (other.actions === undefined) return fail(`a push of an unknown type, delivered ${other.deliveries} times, showed no "Talyvor" notification (notifications ${other.permission}; showing ${JSON.stringify(other.shown)})`)
+      ctx.evidence.push({ note: `an unknown push: "${other.title}", "${other.body}", ${other.actions.join(', ') || 'no actions'}, opens ${other.url}${sent(other.deliveries)}` })
       if (other.title !== 'Talyvor' || other.actions.length !== 0 || other.url !== '/') return fail(`an unknown push does not read as Talyvor with no actions opening Home: ${JSON.stringify(other)}`)
       return { pass: true, detail: `the spending notice read "${n.title}" with no actions and opens /money/spending#notice-${id}; an unknown push read "Talyvor" with no actions and opens Home` }
     }),
