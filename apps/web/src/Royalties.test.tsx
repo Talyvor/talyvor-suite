@@ -74,16 +74,29 @@ describe('Royalties sits under Statements', () => {
   // rather than redirecting into an empty main before the load event.
   it('the old /earnings address keeps Royalties drawn while the areas are still being read', async () => {
     areaSource.initial = undefined
-    let answer: (areas: string[]) => void = () => {}
+    let answer: ((areas: string[]) => void) | undefined
     areaSource.read = () => new Promise<string[]>((resolve) => (answer = resolve))
+    const areasRead = () => queryClient.getQueryState(['workspace-areas'])?.status
+    const heading = { level: 2, name: 'What your shared answers earned' } as const
     window.history.pushState({}, '', '/earnings')
     const { container } = render(<App />)
-    expect(await screen.findByRole('heading', { level: 2, name: 'What your shared answers earned' })).toBeInTheDocument()
+    const before = await screen.findByRole('heading', heading)
+    // B17.547 — the areas are still being read: the read has started and has not answered.
+    await waitFor(() => expect(answer).toBeDefined())
+    expect(areasRead()).toBe('pending')
     await new Promise((r) => setTimeout(r, 50))
+    expect(areasRead()).toBe('pending')
     expect(window.location.pathname).toBe('/earnings')
     expect(container.querySelector('main h2')?.textContent).toBe('What your shared answers earned')
-    answer(['gateway'])
-    await waitFor(() => expect(window.location.pathname).toBe('/statements/royalties'))
-    expect(await screen.findByRole('heading', { level: 2, name: 'What your shared answers earned' })).toBeInTheDocument()
+    answer!(['gateway'])
+    await waitFor(() => expect(areasRead()).toBe('success'))
+    // The address moves before React draws its route, so the heading found then could be /earnings' own, about to
+    // leave the page: wait for Royalties' own address to have drawn its heading, a new one.
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/statements/royalties')
+      expect(screen.getByRole('heading', heading)).not.toBe(before)
+    })
+    expect(before).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', heading)).toBeInTheDocument()
   })
 })
