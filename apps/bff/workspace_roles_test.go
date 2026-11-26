@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 const (
@@ -291,5 +292,35 @@ func TestB2870_AnAddressGetsFiveCodesAnHourWhoeverAsks(t *testing.T) {
 	defer m.mu.Unlock()
 	if m.tried[b2870Email] != roleCodesAnHour {
 		t.Fatalf("%d codes were mailed to the address, want %d", m.tried[b2870Email], roleCodesAnHour)
+	}
+}
+
+// B61.124: an address sent a code is not kept in memory past the hour it limits. Once an hour has gone by, the next
+// code sent, to anyone, drops it, even when nobody asks for that address again.
+func TestB61124_AnAddressSentACodeIsDroppedOnceItsHourIsOver(t *testing.T) {
+	s, _, _ := startRoleSuite(t)
+	first, second := "first-b61124@northwind.example", "second-b61124@northwind.example"
+	if code, body := s.post(s.signUp("b61124-first", ""), "/api/roles/email/code", `{"email":"`+first+`"}`); code != http.StatusOK {
+		t.Fatalf("code to %s: %d %s, want 200", first, code, body)
+	}
+	// Move the clock past the hour: every time kept is now an hour and a second old.
+	s.app.roles.mu.Lock()
+	for key, times := range s.app.roles.sent {
+		for i := range times {
+			times[i] = times[i].Add(-time.Hour - time.Second)
+		}
+		s.app.roles.sent[key] = times
+	}
+	s.app.roles.mu.Unlock()
+	if code, body := s.post(s.signUp("b61124-second", ""), "/api/roles/email/code", `{"email":"`+second+`"}`); code != http.StatusOK {
+		t.Fatalf("code to %s: %d %s, want 200", second, code, body)
+	}
+	s.app.roles.mu.Lock()
+	defer s.app.roles.mu.Unlock()
+	if times, kept := s.app.roles.sent["email:"+first]; kept {
+		t.Fatalf("roles.sent still holds %s an hour on (%v)", first, times)
+	}
+	if len(s.app.roles.sent["email:"+second]) != 1 {
+		t.Fatalf("roles.sent = %v, want the one code sent to %s", s.app.roles.sent, second)
 	}
 }
