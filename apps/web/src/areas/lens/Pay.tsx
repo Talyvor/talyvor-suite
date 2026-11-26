@@ -1325,7 +1325,7 @@ function StandingOrders({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="font-display text-head font-bold text-ink">Standing orders</h2>
           {/* B28.59 — every schedule in the workspace as Lens's CSV. */}
-          <ListFileDownload list="schedules" />
+          <ListFileDownload list="schedules" size="sm" />
         </div>
         {schedules.isError ? (
           <div className="mt-3">
