@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { cn, focusRing, inlineLink, useSounds, useTheme, type ThemeChoice } from '@talyvor/ui'
-import { Card, Switch, Tabs } from '@talyvor/ui/pocket'
+import { Card, Dialog, Icon, KindTile, Row, Switch, Tabs, pocketFocusRing } from '@talyvor/ui/pocket'
 import { ApiError } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
 import { IfArea } from '../../lib/workspaceAreas'
@@ -137,38 +137,96 @@ function SharedAnswersCard() {
 
 const n = (v: number) => <span className="font-figure">{v.toLocaleString('en-US')}</span>
 
-/** B57.42 — the theme, moved here from the top bar: Light, Dark or Same as this device. */
-const APPEARANCE: Record<string, ThemeChoice> = {
-  Light: 'light',
-  Dark: 'dark',
-  'Same as this device': 'device',
+/** B57.42 — the theme, moved here from the top bar. B57.228 — in Pocket Live's words: Follow my computer, Light or Dark. */
+const THEMES: readonly { choice: ThemeChoice; title: string; line?: string; short: string }[] = [
+  { choice: 'device', title: 'Follow my computer', line: 'Light by day, dark by night', short: 'Follows your computer' },
+  { choice: 'light', title: 'Light', short: 'Light' },
+  { choice: 'dark', title: 'Dark', short: 'Dark' },
+]
+
+/**
+ * pocket.css .pick with its .dot: one of several, a ring that fills with ink when chosen. The ring is the radio, named by
+ * the title and described by the line under it, and a press anywhere on the box is a press on it.
+ */
+function ThemePick({ title, line, on, onPick }: { title: string; line?: string; on: boolean; onPick: () => void }) {
+  const lineId = useId()
+  return (
+    <div className={cn('relative flex items-center gap-3 rounded-control px-4 py-3 text-ink', on ? 'bg-page shadow-pick' : 'bg-cloud')}>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={on}
+        aria-label={title}
+        aria-describedby={line ? lineId : undefined}
+        onClick={onPick}
+        className={cn(
+          'grid h-5 w-5 shrink-0 place-items-center rounded-pill after:absolute after:inset-0',
+          on ? 'shadow-edge-current' : 'shadow-edge',
+          pocketFocusRing,
+        )}
+      >
+        {on ? <span className="h-2.5 w-2.5 rounded-pill bg-ink" /> : null}
+      </button>
+      <span className="grid min-w-0 flex-1">
+        <span className="text-reading font-semibold">{title}</span>
+        {line ? (
+          <span id={lineId} className="text-body text-ink-2">
+            {line}
+          </span>
+        ) : null}
+      </span>
+    </div>
+  )
 }
 
-/** B61.128 — "Look and sound" (it was "Appearance", Pocket Live section 15): the theme, and a Sounds switch under it, on
- * by default. */
-function LookAndSoundCard() {
+/**
+ * B61.128 — "Look and sound" (it was "Appearance", Pocket Live section 15): the theme, and a Sounds switch under it, on
+ * by default. B57.228 — drawn as Pocket Live's w-settings draws it: a row among the settings, saying what is chosen, that
+ * opens its sheet.
+ */
+function LookAndSound() {
+  const [open, setOpen] = useState(false)
   const choice = useTheme((s) => s.choice)
   const choose = useTheme((s) => s.choose)
   const soundsOn = useSounds((s) => s.on)
   const setSoundsOn = useSounds((s) => s.setOn)
-  const tabs = Object.keys(APPEARANCE)
+  const chosen = THEMES.find((t) => t.choice === choice) ?? THEMES[0]
   return (
-    <Card tone="white" data-testid="settings-look-and-sound">
-      <h2 className="font-display text-reading font-bold text-ink">Look and sound</h2>
-      <Tabs
-        label="Look and sound"
-        className="mt-2"
-        tabs={tabs}
-        value={tabs.find((t) => APPEARANCE[t] === choice) ?? 'Same as this device'}
-        onChange={(t) => choose(APPEARANCE[t])}
-      />
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span id="settings-sounds" className="text-body font-semibold text-ink">
-          Sounds
+    <>
+      {/* As Security's sheet rows: the tile drawn as the page links beside it, one button over it that opens the sheet. */}
+      <div className="relative flex items-center gap-3 rounded-card bg-cloud p-4 text-ink" data-testid="settings-look-and-sound">
+        <KindTile icon={<Icon name="sun" size={18} />} />
+        <span className="grid min-w-0 flex-1 gap-0.5">
+          <span className="text-reading font-semibold">Look and sound</span>
+          <span id="settings-look-line" className="text-body text-ink-3">
+            {chosen.short}, {soundsOn ? 'sounds on' : 'sounds off'}
+          </span>
         </span>
-        <Switch aria-labelledby="settings-sounds" checked={soundsOn} onCheckedChange={setSoundsOn} />
+        <Icon name="chev" size={16} className="shrink-0 text-ink-3" />
+        <button
+          type="button"
+          className={cn('absolute inset-0 rounded-inset', pocketFocusRing)}
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-label="Look and sound"
+          aria-describedby="settings-look-line"
+        />
       </div>
-    </Card>
+      <Dialog open={open} onClose={() => setOpen(false)} title="Look and sound">
+        <div role="radiogroup" aria-label="Look" className="grid gap-2">
+          {THEMES.map((t) => (
+            <ThemePick key={t.choice} title={t.title} line={t.line} on={t.choice === chosen.choice} onPick={() => choose(t.choice)} />
+          ))}
+        </div>
+        <Card tone="white" className="py-1">
+          <Row
+            title={<span id="settings-sounds">Sounds</span>}
+            line="Soft sounds when money moves"
+            action={<Switch aria-labelledby="settings-sounds" checked={soundsOn} onCheckedChange={setSoundsOn} />}
+          />
+        </Card>
+      </Dialog>
+    </>
   )
 }
 
@@ -264,14 +322,15 @@ export function Settings() {
       <SignedIn />
       <div className="grid items-start gap-4.5 wide:grid-cols-12">
         <div className="wide:col-span-7">
-          <SettingsCards links={links} />
+          <SettingsCards links={links}>
+            <LookAndSound />
+          </SettingsCards>
         </div>
         <div className="grid gap-3 wide:col-span-5">
           {/* B59.2 — shared answers are the gateway's, and go with it. */}
           <IfArea area="gateway">
             <SharedAnswersCard />
           </IfArea>
-          <LookAndSoundCard />
           <ShowAmountsCard />
           {/* B27.27 — BYOK's keys: added, replaced and removed here, only their last four ever shown. */}
           <ProviderKeysCard />

@@ -66,8 +66,8 @@ export interface SettingsLink extends PageLink {
   icon: IconName
 }
 
-/** Settings' cards: every settings page, two to a row, each a link. */
-export function SettingsCards({ links }: { links: readonly SettingsLink[] }) {
+/** Settings' cards: every settings page, two to a row, each a link; then what is drawn in place (Look and sound). */
+export function SettingsCards({ links, children }: { links: readonly SettingsLink[]; children?: React.ReactNode }) {
   return (
     <nav aria-label="Settings pages" className="grid content-start gap-3 wide:grid-cols-2">
       {links.map((l) => (
@@ -80,6 +80,7 @@ export function SettingsCards({ links }: { links: readonly SettingsLink[] }) {
           <Icon name="chev" size={16} className="shrink-0 text-ink-3" />
         </Link>
       ))}
+      {children}
     </nav>
   )
 }
