@@ -191,7 +191,7 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
             testId="money-row-crypto-send"
             icon="send"
             title="Send USDC"
-            line={`From ${name}’s crypto wallet to any wallet address or another agent, with the network fee shown first`}
+            line={`From ${name}’s crypto wallet to any wallet address, name.eth, saved address or another agent, with the network fee shown first`}
             onOpen={() => setOpen('crypto-send')}
           />
         ) : null}

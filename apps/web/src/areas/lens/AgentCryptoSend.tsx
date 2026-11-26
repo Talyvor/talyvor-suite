@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Chip, Facts, Field, Icon, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
+import { Button, Chip, Facts, Field, Icon, Input, Money, Row, Select, pocketFocusRing, type ChipTone } from '@talyvor/ui/pocket'
 import { inlineLink } from '@talyvor/ui'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
@@ -24,6 +24,9 @@ import { assertOver } from './passkeys'
 // resolved to; the owner keeps their saved addresses under Send; and once the workspace has a passkey, the owner's send,
 // and their yes to an agent's send to a new address or its test amount, are signed with it over Lens's challenge for
 // exactly that send. Nothing is signed when the challenge names another address or amount than the one reviewed.
+// B57.223 — in Pocket: each saved address is a w-agent-research Money card row (its initial on a round tile, the whole
+// row pressed to send to it, Remove at its end), as the phone draws it (B48.51); a send by name keeps that name on the
+// receipt and the history; and the quote carries W3's passkey note.
 
 export const cryptoSendsKey = (id: string) => ['agent-crypto-sends', id]
 
@@ -36,6 +39,9 @@ const networkName = (n: string) => NETWORKS.find((x) => x.value === n)?.name ?? 
 
 const isAddress = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s.trim())
 const shortAddress = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a)
+/** Where a send goes, by the name it was sent to when it has one: "Treasury (0x1111…1111)". */
+const sendsTo = (s: Pick<CryptoSendQuote, 'to' | 'saved_name' | 'ens_name'>) =>
+  s.saved_name || s.ens_name ? `${s.saved_name || s.ens_name} (${shortAddress(s.to)})` : shortAddress(s.to)
 
 /** Wei as the network's coin, to at most six decimals: "0.000042 ETH". */
 export function feeText(wei: string): string {
@@ -126,7 +132,7 @@ function Receipt({ s }: { s: CryptoSend }) {
               ? s.reason || 'Nothing was sent.'
               : (
                   <>
-                    <Money minor={s.amount_minor} currency="USDC" /> to {shortAddress(s.to)}
+                    <Money minor={s.amount_minor} currency="USDC" /> to {sendsTo(s)}
                   </>
                 )}
         </span>
@@ -255,6 +261,39 @@ export function AwaitingCryptoSend({ agent, s }: { agent: Agent; s: CryptoSend }
 
 const addressesKey = ['crypto-addresses']
 
+/** A saved address's initial on its round tile, as w-members draws a person's. */
+function Initial({ of }: { of: string }) {
+  return (
+    <span aria-hidden="true" data-testid="crypto-address-initial" className="grid h-9 w-9 shrink-0 place-items-center rounded-pill bg-cloud-2 text-body font-bold text-ink">
+      {(of.trim().charAt(0) || '?').toUpperCase()}
+    </span>
+  )
+}
+
+/** One saved address as a Money card row: pressing the row sends to it by its name; Remove sits above the press. */
+function SavedAddressRow({ a, busy, onPick, onRemove }: { a: CryptoAddress; busy: boolean; onPick: () => void; onRemove: () => void }) {
+  const id = useId()
+  return (
+    <div data-crypto-address={a.id} className="relative flex items-center gap-3 border-t border-line py-2.5 text-reading first:border-t-0">
+      <Initial of={a.name} />
+      <span className="min-w-0 flex-1">
+        <button type="button" onClick={onPick} aria-describedby={id} className={`block rounded-control text-left font-semibold text-ink ${pocketFocusRing}`}>
+          <span aria-hidden="true" className="absolute inset-0" />
+          {a.name}
+        </button>
+        <span id={id} className="block font-figure text-body text-ink-3">
+          {shortAddress(a.address)}
+        </span>
+      </span>
+      <span className="relative shrink-0">
+        <Button variant="secondary" size="sm" aria-label={`Remove ${a.name}`} disabled={busy} onClick={onRemove}>
+          Remove
+        </Button>
+      </span>
+    </div>
+  )
+}
+
 /** B48.50 — the workspace's saved addresses: pressing one sends to it by its name; the owner saves and removes them. */
 function SavedAddresses({ onPick }: { onPick: (name: string) => void }) {
   const qc = useQueryClient()
@@ -282,25 +321,13 @@ function SavedAddresses({ onPick }: { onPick: (name: string) => void }) {
       ) : book.isError ? (
         <p className="text-body text-ink-2">{readFailure(book.error, 'Your saved addresses')}</p>
       ) : list.length === 0 ? (
-        <p className="text-body text-ink-3">No saved addresses yet.</p>
+        <p className="text-body text-ink-3">No saved addresses yet. Add one below.</p>
       ) : (
-        list.map((a) => (
-          <div key={a.id} className="border-t border-line first:border-t-0">
-            <Row
-              title={
-                <button type="button" className={`font-semibold text-ink ${inlineLink}`} onClick={() => onPick(a.name)}>
-                  {a.name}
-                </button>
-              }
-              line={<span className="font-figure">{shortAddress(a.address)}</span>}
-              action={
-                <Button variant="secondary" size="sm" aria-label={`Remove ${a.name}`} disabled={busy} onClick={() => remove.mutate(a)}>
-                  Remove
-                </Button>
-              }
-            />
-          </div>
-        ))
+        <div>
+          {list.map((a) => (
+            <SavedAddressRow key={a.id} a={a} busy={busy} onPick={() => onPick(a.name)} onRemove={() => remove.mutate(a)} />
+          ))}
+        </div>
       )}
       <PanelForm className="pt-2" onSubmit={() => (ok && !busy ? save.mutate() : undefined)}>
         <div className="grid gap-3 wide:grid-cols-2">
@@ -355,7 +382,7 @@ function History({ agent }: { agent: Agent }) {
             <div key={s.id} data-crypto-send={s.id} className="border-t border-line first:border-t-0">
               <Row
                 wrap
-                title={s.direction === 'in' ? `From ${shortAddress(s.to)}` : `To ${shortAddress(s.to)}`}
+                title={s.direction === 'in' ? `From ${shortAddress(s.to)}` : `To ${s.saved_name || s.ens_name || shortAddress(s.to)}`}
                 line={
                   <span className="inline-flex flex-wrap items-center gap-2">
                     <Chip tone={STATUS[s.status].tone}>{STATUS[s.status].words}</Chip>
@@ -439,6 +466,10 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
               <span>A new address: this workspace has not paid it before.</span>
             </p>
           ) : null}
+          <p className="flex items-start gap-2 rounded-card-tight bg-cloud p-3.5 text-body text-ink-2">
+            <Icon name="key" size={16} />
+            <span>Your passkey or Face ID asks before anything is sent.</span>
+          </p>
           {sent.isError ? <Note ok={false}>{sendFailure(sent.error)}</Note> : null}
         </div>
       ) : (
