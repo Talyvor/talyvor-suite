@@ -17,7 +17,7 @@ import { openAccount } from '../lens/accountsApi'
 import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
 import { passkeysSupported, registerThisDevice } from '../lens/passkeys'
 import { showRecoveryCode } from '../lens/recoveryCodeStore'
-import { IdentityChecks } from '../lens/IdentityChecks'
+import { IdentityChecks, OpenTheApp } from '../lens/IdentityChecks'
 import { FindMeQuestion } from '../lens/FindMe'
 import { Choice } from './Choice'
 import { AccessLine, EntryFrame, PrivacyTerms, SignInCard, useReturnTo } from './Entry'
@@ -25,7 +25,6 @@ import { DoorError, makeSignInKey, rememberPasskeyHere, signupAccount, takePassc
 import { countryRefusal, useServedCountries } from './servedCountries'
 import {
   ACCOUNT_TYPES,
-  IDENTITY_WORDS,
   KIND_NOTE,
   MONEY_KINDS,
   PROFILE_ERRORS,
@@ -593,11 +592,7 @@ export function SignUpConfirm() {
         done={
           // B61.93 — the end of sign-up asks once whether people may pay you by your name or phone number.
           <FindMeQuestion
-            then={
-              <Button asChild>
-                <a href="/">{IDENTITY_WORDS.open}</a>
-              </Button>
-            }
+            then={<OpenTheApp />}
           />
         }
       />
@@ -666,11 +661,7 @@ export function OpenAnotherConfirm() {
       <Stepper at={3} steps={ANOTHER_STEPS} />
       <StepTitle id="signup-confirm">{SIGNUP_STEPS[3]}</StepTitle>
       <IdentityChecks
-        done={
-          <Button asChild>
-            <a href="/">{IDENTITY_WORDS.open}</a>
-          </Button>
-        }
+        done={<OpenTheApp />}
       />
     </SignUpFrame>
   )

@@ -455,6 +455,29 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(sent[0].body).toMatchObject({ name: 'Maya Lind', return_to: 'signup' })
   })
 
+  it('the Persona step is a white Pocket card beside the checks, its Verify your ID the page’s one primary, and it says why a check must start again (B57.194)', async () => {
+    mockFetch({ authenticated: true, record: [{ ...personCheck('pending', 'Your ID check is waiting for you. Open the link to finish it.'), link: LINK }, contactPassed] })
+    const { container, unmount } = at('/signup/confirm')
+    const go = await screen.findByRole('link', { name: 'Verify your ID' })
+    const step = screen.getByRole('region', { name: 'Your ID document' })
+    expect(step).toHaveClass('rounded-card', 'bg-page', 'shadow-pocket')
+    // in the form's place, in the column beside the checks, not under the whole page
+    expect(screen.getByTestId('identity-aside').parentElement).toContainElement(step)
+    expect(container.querySelectorAll('.bg-primary')).toHaveLength(1)
+    expect(go).toHaveClass('bg-primary')
+    // the way into the app steps back while the step's own button waits
+    expect(within(screen.getByTestId('identity-way-in')).getByRole('link', { name: 'Open the app' })).toHaveClass('shadow-edge')
+    unmount()
+    queryClient.clear()
+
+    mockFetch({ authenticated: true, record: [personCheck('failed', 'Your ID check expired. Start it again.'), contactPassed] })
+    at('/signup/confirm?inquiry-id=inq_1&status=expired')
+    const again = await screen.findByRole('region', { name: 'Your ID document' })
+    expect(within(again).getByText('Your identity check expired. Start it again.')).toBeInTheDocument()
+    expect(screen.getByTestId('identity-aside').parentElement).toContainElement(again)
+    expect(screen.getByRole('button', { name: 'Start again' })).toBeInTheDocument()
+  })
+
   it('until the checks pass, Home says so in one sentence and leads back to the step', async () => {
     mockFetch({ authenticated: true })
     at('/')
