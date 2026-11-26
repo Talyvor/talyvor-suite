@@ -113,6 +113,11 @@
 // request pays. The Test partner returns a payment whose minor units end in 14: completed when made, it reads returned, its money
 // back in the account, once read again (GET /v1/money/payments/{id}). Its defect:
 //   payment-above-moved    — a payment refused for its approval takes its amount from the account anyway
+// B30.135 — and an international payment (Lens B30.22): POST /v1/money/payments/quote prices paying a payee whose account is in
+// another currency (an IBAN's is EUR) — the Test partner's cost, Talyvor's fee for the sending currency (INTL_FEE_MINOR), the
+// total that leaves the account, the rate and what arrives — and POST /v1/money/payments pays it only with its quote_id (400
+// without one; 409 for a quote of another payment), the total leaving the account. Its defect:
+//   intl-fee-off-ledger    — the payment takes only its amount from the account, not the partner's cost and the fee
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -147,7 +152,8 @@ interface StubBatch { id: string; workspace_id: string; funding: string; idempot
   rows_invalid: number; totals_minor: Record<string, number>; approved_by?: string; approved_at?: string; created_at: string; updated_at: string }
 /** A payment out (economy.OutsidePayment). */
 interface Payment { id: string; workspace_id: string; account_id: string; payee_id: string; payee_name: string; amount_minor: number; currency: string
-  funding: string; reference: string; idempotency_key: string; status: string; created_at: string; address?: string; travel_rule?: Record<string, string> }
+  funding: string; reference: string; idempotency_key: string; status: string; created_at: string; address?: string; travel_rule?: Record<string, string>
+  quote_id?: string; partner_cost_minor?: number; fee_minor?: number; arrives_minor?: number; arrives_currency?: string; rate?: string }
 /** A card batch and its cards (economy.CardBatch, economy.MoneyCard). */
 interface StubCard { id: string; line: number; merchant: string; cap_minor: number; currency: string; status: string; spent_minor: number; last4?: string; expires_at?: string }
 interface StubCardBatch { id: string; workspace_id: string; agent_id: string; idempotency_key: string; purpose: string; currency: string; funding: string
@@ -186,9 +192,20 @@ const HELD = 'screening: held — the name is close to one on a sanctions list, 
 const A2A_FEE_BPS = 100
 /** B30.127 — what a minor unit is worth in µLXC at the Test rate, as the agent's rules count a payment out: £100.00 is 1,250 LXC. */
 const ULXC_PER_MINOR: Record<string, number> = { GBP: 125_000 }
+/** B30.135 — Talyvor's fee for an international payment by sending currency, as stub-lens.ts states it at /v1/public/fees (Lens's fees.go). */
+export const INTL_FEE_MINOR: Record<string, number> = { GBP: 500, EUR: 600, USD: 700 }
+/** B30.135 — the Test partner's cost of an international payment, in minor units of the sending currency, and its rates. */
+const INTL_COST_MINOR = 100
+const INTL_RATE: Record<string, string> = { 'GBP>EUR': '1.16', 'GBP>USD': '1.27', 'EUR>GBP': '0.86', 'USD>GBP': '0.79' }
+/** B30.135 — the currency a payee's account details are in (Lens's payeeCurrency). */
+const payeeCurrency = (p: Payee): string => p.address ? 'USDC' : p.iban ? 'EUR' : p.routing_number ? 'USD' : 'GBP'
 const PAYMENT_UNSIGNED = 'economy: this workspace signs its payments with a passkey or the phone app — sign this payment\'s challenge (POST /v1/money/payments/challenge)'
 
-type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }
+type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string; quote_id?: string }
+/** B30.135 — an international payment's quote (economy.InternationalQuote). */
+interface IntlQuote { id: string; workspace_id: string; account_id: string; payee_id: string; payee_name: string; destination_country: string; amount_minor: number
+  currency: string; partner_cost_minor: number; fee_minor: number; total_minor: number; arrives_minor: number; arrives_currency: string; rate: string; funding: string
+  partner: string; expires_at: string; created_at: string }
 
 /** B54.35 — the challenge's key: every field of the payment as asked (Lens's paymentPurpose), so a signature for it pays no other. */
 /** B55.56 — a mandate grant as the owner signs it (Lens economy.MandateGrant), and the challenge key its signature answers. */
@@ -207,6 +224,7 @@ export class PayeeDesk {
   private readonly accounts = new Map<string, Account[]>()
   private readonly testMoneyKeys = new Set<string>()
   private readonly payments = new Map<string, Payment[]>()
+  private readonly quotes = new Map<string, IntlQuote>()
   /** B48.27 — each workspace's wallet ledger lines, newest first, and the addresses its owner proved they hold. */
   private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string; entry_id?: string }[]>()
   /** B56.28 — each invoice's payment by an agent account, by `${invoice id}\n${account id}`: a retry answers it. */
@@ -339,6 +357,7 @@ export class PayeeDesk {
     const list = this.payees.get(ws) ?? []
     if (path === '/v1/money/accounts' || path === '/v1/money/payments') return this.money(req, res, ws, path, list), true
     if (path === '/v1/money/payments/challenge' && req.method === 'POST') return this.paymentChallenge(req, res, ws), true
+    if (path === '/v1/money/payments/quote' && req.method === 'POST') return this.intlQuote(req, res, ws, list), true
     const funded = /^\/v1\/money\/accounts\/([^/]+)\/test-money$/.exec(path)
     if (funded !== null && req.method === 'POST') return this.testMoney(req, res, ws, funded[1]), true
     const moved = /^\/v1\/money\/accounts\/([^/]+)\/funding$/.exec(path)
@@ -846,6 +865,34 @@ export class PayeeDesk {
     return this.json(res, 201, p)
   }
 
+  /** B30.135 — POST /v1/money/payments/quote: an international payment priced first, kept for 15 minutes; 201. */
+  private async intlQuote(req: IncomingMessage, res: ServerResponse, ws: string, payees: Payee[]): Promise<void> {
+    const b = await this.body<OwnerPayment>(req)
+    const currency = (b.currency ?? '').toUpperCase()
+    const funding = b.funding === 'live' ? 'live' : 'test'
+    const amount = b.amount_minor ?? 0
+    if (!b.payee_id || amount <= 0 || !CURRENCIES.includes(currency)) {
+      return this.json(res, 400, { error: 'economy: invalid payment: a payment names its payee, a positive amount_minor in GBP, EUR or USD and an idempotency key' })
+    }
+    const account = (this.accounts.get(ws) ?? []).find((a) => (b.account_id ? a.id === b.account_id : a.currency === currency && a.purpose === 'company'))
+    if (account === undefined || account.currency !== currency) return this.json(res, 404, { error: `economy: no such money account: no ${currency} account to pay from — open one at /v1/money/accounts` })
+    const payee = payees.find((x) => x.id === b.payee_id)
+    if (payee === undefined) return this.json(res, 404, { error: 'economy: no such payee' })
+    const deliver = payeeCurrency(payee)
+    const rate = INTL_RATE[`${currency}>${deliver}`]
+    if (deliver === currency || rate === undefined) {
+      return this.json(res, 400, { error: `economy: invalid payment: ${payee.name}'s account is in ${deliver} too, so this is not an international payment: POST /v1/money/payments pays it` })
+    }
+    const fee = INTL_FEE_MINOR[currency]
+    const now = Date.now()
+    const q: IntlQuote = { id: `mpq_${randomUUID()}`, workspace_id: ws, account_id: account.id, payee_id: payee.id, payee_name: payee.name,
+      destination_country: payee.country, amount_minor: amount, currency, partner_cost_minor: INTL_COST_MINOR, fee_minor: fee, total_minor: amount + INTL_COST_MINOR + fee,
+      arrives_minor: Math.round(amount * Number(rate)), arrives_currency: deliver, rate, funding, partner: 'test',
+      expires_at: new Date(now + 15 * 60_000).toISOString(), created_at: new Date(now).toISOString() }
+    this.quotes.set(q.id, q)
+    return this.json(res, 201, q)
+  }
+
   /** B54.35 — the challenge the owner's payment `b` is signed over, naming exactly it, and the passkeys that may sign it. */
   private async paymentChallenge(req: IncomingMessage, res: ServerResponse, ws: string): Promise<void> {
     const b = await this.body<OwnerPayment>(req)
@@ -994,7 +1041,7 @@ export class PayeeDesk {
   }
 
   /** B30.17 — one payment out, as a payment or (B30.96) a payout row makes it: each refusal as Lens words it; only compliance-live-paid moves live money. */
-  private pay(ws: string, payees: Payee[], b: { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }): Payment | { status: number; error: string } {
+  private pay(ws: string, payees: Payee[], b: OwnerPayment): Payment | { status: number; error: string } {
     const accounts = this.accounts.get(ws) ?? []
     const payments = this.payments.get(ws) ?? []
     const currency = (b.currency ?? '').toUpperCase()
@@ -1034,20 +1081,37 @@ export class PayeeDesk {
           `sign "${msg}" with ${address}'s key (personal_sign) and POST the signature to /v1/money/payees/${payee.id}/address-proof` }
       } else travelRule = { status: 'self_hosted' }
     }
+    // B30.135 — a payee whose account is in another currency is paid only at a quote of exactly this payment, its total leaving the account.
+    let quote: IntlQuote | undefined
+    if (address === '' && payeeCurrency(payee) !== currency) {
+      if (!b.quote_id) {
+        return { status: 400, error: `economy: invalid payment: ${payee.name}'s account is in ${payeeCurrency(payee)}: an international payment is made at a quote. ` +
+          'POST /v1/money/payments/quote first, then pay with its quote_id' }
+      }
+      quote = this.quotes.get(b.quote_id)
+      if (quote === undefined || quote.workspace_id !== ws) return { status: 409, error: 'economy: no such quote, or it has expired or is for another payment' }
+      if (quote.account_id !== account.id || quote.payee_id !== payee.id || quote.amount_minor !== amount || quote.currency !== currency || quote.funding !== funding) {
+        return { status: 409, error: `economy: no such quote, or it has expired or is for another payment: quote ${quote.id} priced ${money(quote.amount_minor, quote.currency)} to ${quote.payee_name} from ${quote.account_id}` }
+      }
+      if (Date.parse(quote.expires_at) <= Date.now()) return { status: 409, error: `economy: no such quote, or it has expired or is for another payment: quote ${quote.id} expired at ${quote.expires_at}. Ask for a new one` }
+    }
+    const debit = quote === undefined || this.broken('intl-fee-off-ledger') ? amount : quote.total_minor
     const holds = funding === 'live' ? account.live_minor : account.test_minor
-    if (holds < amount && !(funding === 'live' && this.broken('compliance-live-paid'))) {
-      return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(amount, currency)}` }
+    if (holds < debit && !(funding === 'live' && this.broken('compliance-live-paid'))) {
+      return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(debit, currency)}` }
     }
     const refused = amount % 100 === 13
     // B57.87 — STUB_BREAK=payment-account-unmoved lists the payment and takes nothing from the account.
     if ((!refused || this.broken('refused-payment-held')) && !this.broken('payment-account-unmoved')) {
-      account[funding === 'live' ? 'live_minor' : 'test_minor'] -= amount
-      account.balance_minor -= amount
-      this.line(ws, account, 'payment_out_hold', -amount)
+      account[funding === 'live' ? 'live_minor' : 'test_minor'] -= debit
+      account.balance_minor -= debit
+      this.line(ws, account, 'payment_out_hold', -debit)
     }
     const p: Payment = { id: `mpay_${randomUUID()}`, workspace_id: ws, account_id: account.id, payee_id: payee.id, payee_name: payee.name, amount_minor: amount, currency,
       funding, reference: b.reference ?? '', idempotency_key: b.idempotency_key, status: refused ? 'failed' : 'completed', created_at: new Date().toISOString(),
-      ...(address === '' ? {} : { address, travel_rule: travelRule }) }
+      ...(address === '' ? {} : { address, travel_rule: travelRule }),
+      ...(quote === undefined ? {} : { quote_id: quote.id, partner_cost_minor: quote.partner_cost_minor, fee_minor: quote.fee_minor, arrives_minor: quote.arrives_minor,
+        arrives_currency: quote.arrives_currency, rate: quote.rate }) }
     this.payments.set(ws, [p, ...payments])
     if (p.status === 'completed' && address === '' && !this.broken('payment-account-unmoved')) this.monitor(ws, account, p)
     return p

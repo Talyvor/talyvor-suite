@@ -6,11 +6,18 @@
 // asks the partner), reads returned with its money back; £100.00, worth more than 1,000 LXC, is refused 403 naming an approval
 // and moves nothing; the owner approves it, and the same request under the same key completes. Judged on the account's balance
 // after every step and on its statement: it ends at what came in less £120.00.
+//
+// B30.135 — then an international payment (Lens B30.22), on the owner's key from the company's GBP account to a saved payee whose
+// IBAN is in euros: paying it without a quote is refused 400 and moves nothing; POST /v1/money/payments/quote shows the partner's
+// cost, Talyvor's fee — the plan's intl_payment_fee_minor for GBP as Lens's public fees state it (£5.00 on Studio, Nicolai's
+// value) — the total that leaves the account, the rate and what arrives in EUR, and moves nothing; another amount at that quote is
+// refused 409 and moves nothing; the payment at its quote completes with the quote's figures. Judged on the account's ledger: its
+// balance falls by exactly the total, and the statement's new lines sum to minus the total.
 
 import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
-import { refusalOf } from './lens.ts'
+import { type Fees, refusalOf } from './lens.ts'
 import type { Scenario } from './scenarios.ts'
 import { call, said } from './settings.ts'
 
@@ -21,13 +28,28 @@ const PAID_MINOR = 2_000
 const FAILED_MINOR = 2_013
 const RETURNED_MINOR = 2_014
 const ABOVE_MINOR = 10_000
+const ABROAD_MINOR = 5_000
 const CAPABILITIES = ['currency_accounts', 'payments_in', 'payments_out']
 const gbp = (minor: number): string => `£${(minor / 100).toFixed(2)}`
 
 /** A payment out as Lens answers it (economy.OutsidePayment). */
 interface Payment { id: string; account_id: string; agent_id?: string; amount_minor: number; currency: string; reference: string; status: string }
 interface Account { id: string; test_minor: number }
-interface Statement { closing_minor?: number; lines: { kind?: string; amount_minor: number }[] | null }
+interface Statement { closing_minor?: number; lines: { entry_id?: string; line?: number; kind?: string; amount_minor: number }[] | null }
+/** B30.135 — an international payment's quote as Lens answers it (economy.InternationalQuote). */
+interface Quote { id: string; account_id: string; payee_id: string; amount_minor: number; currency: string; partner_cost_minor: number; fee_minor: number
+  total_minor: number; arrives_minor: number; arrives_currency: string; rate: string; expires_at: string }
+
+/**
+ * B30.135 — Talyvor's fee for the first international payment of the month in GBP on `plan`, as Lens's public fees state it: none
+ * while the plan's free ones last, else intl_payment_fee_minor less the plan's discount, rounded up (Lens's paymentFee).
+ */
+export function intlFeeMinor(fees: Fees, plan: string): number | string {
+  const free = fees.intl_free_per_month?.[plan]
+  const fee = fees.intl_payment_fee_minor?.GBP
+  if (free === undefined || fee === undefined) return `Lens's public fees state no intl_free_per_month for the plan ${plan} or no intl_payment_fee_minor for GBP`
+  return free !== 0 ? 0 : fee - Math.floor(fee * (fees.intl_discount_bps?.[plan] ?? 0) / 10_000)
+}
 
 export function paymentsOut(): Scenario {
   return {
@@ -36,10 +58,11 @@ export function paymentsOut(): Scenario {
     own: true,
     agents: 1,
     feature: 'Agent Wallets',
-    items: ['B30.17', 'B30.127'],
+    items: ['B30.17', 'B30.127', 'B30.22', 'B30.135'],
     title: "payments out: from an agent's GBP account to a saved payee, £20.00 completes, £20.13 fails and £20.14 comes back returned, " +
       "each leaving the account whole; £100.00 above the agent's approval amount moves nothing until the owner approves it, then " +
-      'the same request completes; the account ends at what came in less £120.00',
+      'the same request completes; the account ends at what came in less £120.00; then the company pays a euro IBAN only at a quote ' +
+      "showing its fee and rate first, and the account falls by exactly the quote's total",
     run: async (ctx) => {
       const { lens } = ctx.env
       const user = ctx.app.user
@@ -82,10 +105,10 @@ export function paymentsOut(): Scenario {
       if (issued.status >= 300 || issued.value?.key === undefined) return fail(`issuing ${agent.name} a key answered ${said(issued)}`)
       const agentKey = issued.value.key
 
-      const holds = async (note: string): Promise<number> => {
+      const holds = async (note: string, id = from): Promise<number> => {
         const r = await step<{ accounts: Account[] | null }>('GET', '/v1/money/accounts', undefined, note)
-        const a = (r.value?.accounts ?? []).find((x) => x.id === from)
-        if (a === undefined) throw new Error(`${agent.name}'s GBP account ${from} is not on the list: ${said(r)}`)
+        const a = (r.value?.accounts ?? []).find((x) => x.id === id)
+        if (a === undefined) throw new Error(`the GBP account ${id} is not on the list: ${said(r)}`)
         return a.test_minor
       }
       /** The agent pays the payee `minor` from its account, on its own key. */
@@ -174,19 +197,91 @@ export function paymentsOut(): Scenario {
         const end = FUND_AGENT_MINOR - PAID_MINOR - ABOVE_MINOR
         const last = await holds(`${agent.name}'s account at the end`)
         if (last !== end) return fail(`${agent.name}'s account must end at ${gbp(FUND_AGENT_MINOR)} less ${gbp(PAID_MINOR + ABOVE_MINOR)}, ${gbp(end)}; it holds ${gbp(last)}`)
-        const st = await step<Statement>('GET', `/v1/money/accounts/${from}/statement`, undefined, `${agent.name}'s account's statement`)
-        if (st.status !== 200 || st.value === undefined) return fail(`${agent.name}'s account's statement answered ${said(st)}`)
-        const lines = st.value.lines ?? []
+        const statement = async (id: string, note: string): Promise<Statement> => {
+          const r = await step<Statement>('GET', `/v1/money/accounts/${id}/statement`, undefined, note)
+          if (r.status !== 200 || r.value === undefined) throw new Error(`the statement of ${id} answered ${said(r)}`)
+          return r.value
+        }
+        const st = await statement(from, `${agent.name}'s account's statement`)
+        const lines = st.lines ?? []
         const sum = lines.reduce((n, l) => n + l.amount_minor, 0)
-        if (sum !== end || (st.value.closing_minor !== undefined && st.value.closing_minor !== end) || !lines.some((l) => l.amount_minor === FUND_AGENT_MINOR)) {
+        if (sum !== end || (st.closing_minor !== undefined && st.closing_minor !== end) || !lines.some((l) => l.amount_minor === FUND_AGENT_MINOR)) {
           return fail(`${agent.name}'s statement must hold the ${gbp(FUND_AGENT_MINOR)} in and close on ${gbp(end)}; its lines ` +
-            `${JSON.stringify(lines.map((l) => [l.kind, l.amount_minor]))} sum to ${gbp(sum)}${st.value.closing_minor === undefined ? '' : `, closing ${gbp(st.value.closing_minor)}`}`)
+            `${JSON.stringify(lines.map((l) => [l.kind, l.amount_minor]))} sum to ${gbp(sum)}${st.closing_minor === undefined ? '' : `, closing ${gbp(st.closing_minor)}`}`)
+        }
+
+        // 9. B30.135 — an international payment from the company's GBP account to a saved payee whose IBAN is in euros.
+        const companyID = company.value.id
+        const abroad = await step<{ id: string; needs_confirmation?: boolean }>('POST', '/v1/money/payees', { name: `Nightly Payments Abroad ${RUN_SALT} GmbH`,
+          country: 'DE', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' }, 'the owner saves a payee whose account is in euros')
+        if (abroad.status !== 201 || abroad.value === undefined) return fail(`saving a payee with an IBAN must answer 201; Lens answered ${said(abroad)}`)
+        if (abroad.value.needs_confirmation) return fail(`a payee whose name matches its IBAN must not wait for confirmation; Lens saved ${abroad.text.slice(0, 200)}`)
+        const plan = (await lens.workspacePlan(user)).plan
+        const wantFee = intlFeeMinor(ctx.env.fees, plan)
+        if (typeof wantFee === 'string') return fail(wantFee)
+        const ownerPays = (body: Record<string, unknown>, note: string) => step<Payment & Partial<Quote> & { quote_id?: string }>('POST', '/v1/money/payments', { payee_id: abroad.value?.id,
+          account_id: companyID, currency: 'GBP', funding: 'test', reference: `Nightly ${RUN_SALT} abroad`, idempotency_key: key(), ...body }, note)
+        const before = await holds("the company's account before the payment abroad", companyID)
+        const seenLines = new Set(((await statement(companyID, "the company's statement before the payment abroad")).lines ?? []).map((l) => `${l.entry_id}:${l.line}`))
+
+        const bare = await ownerPays({ amount_minor: ABROAD_MINOR }, `the owner pays ${gbp(ABROAD_MINOR)} abroad with no quote`)
+        const afterBare = await holds("the company's account after the payment abroad with no quote", companyID)
+        if (bare.status !== 400 || !/quote/i.test(refusalOf(bare.text))) return fail(`a payment to a euro IBAN without a quote must be refused 400 naming the quote; Lens answered ${said(bare)}`)
+        if (afterBare !== before) return fail(`the payment abroad refused for its missing quote moved money: ${gbp(before)} → ${gbp(afterBare)}`)
+
+        // 10. The quote: the fee and the rate first, and nothing moves.
+        const quoted = await step<Quote>('POST', '/v1/money/payments/quote', { payee_id: abroad.value.id, account_id: companyID, amount_minor: ABROAD_MINOR,
+          currency: 'GBP', funding: 'test' }, `the owner asks what ${gbp(ABROAD_MINOR)} abroad costs`)
+        if (quoted.status !== 201 || quoted.value === undefined) return fail(`quoting ${gbp(ABROAD_MINOR)} to a euro IBAN must answer 201; Lens answered ${said(quoted)}`)
+        const q = quoted.value
+        const wrongQuote: string[] = []
+        if (q.fee_minor !== wantFee) wrongQuote.push(`its fee must be the plan ${plan}'s ${gbp(wantFee)} as Lens's public fees state it; it is ${gbp(q.fee_minor)}`)
+        if (!(q.partner_cost_minor >= 0)) wrongQuote.push(`the partner's cost must be shown; it is ${q.partner_cost_minor}`)
+        if (q.total_minor !== ABROAD_MINOR + q.partner_cost_minor + q.fee_minor) {
+          wrongQuote.push(`its total must be ${gbp(ABROAD_MINOR)} + the partner's ${gbp(q.partner_cost_minor)} + the fee ${gbp(q.fee_minor)}; it is ${gbp(q.total_minor)}`)
+        }
+        if (q.arrives_currency !== 'EUR' || !(q.arrives_minor > 0) || !(Number(q.rate) > 0)) {
+          wrongQuote.push(`it must show what arrives in EUR and the rate; it shows ${q.arrives_minor} ${q.arrives_currency} at "${q.rate}"`)
+        }
+        if (wrongQuote.length > 0) return fail(`the quote for ${gbp(ABROAD_MINOR)} abroad is wrong: ${wrongQuote.join('; ')} (${quoted.text.slice(0, 300)})`)
+        const afterQuote = await holds("the company's account after the quote", companyID)
+        if (afterQuote !== before) return fail(`a quote must move no money: ${gbp(before)} → ${gbp(afterQuote)}`)
+
+        // 11. Another amount at that quote is refused 409, and nothing moves.
+        const other = await ownerPays({ amount_minor: ABROAD_MINOR + 100, quote_id: q.id }, `the owner pays ${gbp(ABROAD_MINOR + 100)} at the quote for ${gbp(ABROAD_MINOR)}`)
+        const afterOther = await holds("the company's account after the payment of another amount at the quote", companyID)
+        if (other.status !== 409) return fail(`${gbp(ABROAD_MINOR + 100)} at a quote for ${gbp(ABROAD_MINOR)} must be refused 409; Lens answered ${said(other)}`)
+        if (afterOther !== before) return fail(`the payment refused at another payment's quote moved money: ${gbp(before)} → ${gbp(afterOther)}`)
+
+        // 12. At its quote it completes, with the quote's figures, and the account falls by exactly the total.
+        const sent = await ownerPays({ amount_minor: ABROAD_MINOR, quote_id: q.id }, `the owner pays ${gbp(ABROAD_MINOR)} abroad at quote ${q.id}`)
+        if (sent.status !== 201 || sent.value === undefined) return fail(`${gbp(ABROAD_MINOR)} at its quote must answer 201; Lens answered ${said(sent)}`)
+        const p = sent.value.status === 'completed' ? sent.value : await readUntil(sent.value.id, 'completed', `the payment abroad read again`)
+        if (p?.status !== 'completed') return fail(`the Test partner completes ${gbp(ABROAD_MINOR)} abroad; it reads ${p?.status}`)
+        const s0 = sent.value
+        if (s0.quote_id !== q.id || s0.fee_minor !== q.fee_minor || s0.partner_cost_minor !== q.partner_cost_minor || s0.arrives_minor !== q.arrives_minor ||
+          s0.arrives_currency !== 'EUR' || s0.rate !== q.rate) {
+          return fail(`the payment must keep its quote's figures — ${JSON.stringify([q.id, q.fee_minor, q.partner_cost_minor, q.arrives_minor, 'EUR', q.rate])}; it keeps ` +
+            JSON.stringify([s0.quote_id, s0.fee_minor, s0.partner_cost_minor, s0.arrives_minor, s0.arrives_currency, s0.rate]))
+        }
+        const afterSent = await holds("the company's account after the payment abroad", companyID)
+        if (afterSent !== before - q.total_minor) {
+          return fail(`the payment abroad must take its quote's total ${gbp(q.total_minor)} from the account: ${gbp(before)} → ${gbp(afterSent)}, ${gbp(before - afterSent)} taken`)
+        }
+        const cs = await statement(companyID, "the company's statement after the payment abroad")
+        const fresh = (cs.lines ?? []).filter((l) => !seenLines.has(`${l.entry_id}:${l.line}`))
+        const freshSum = fresh.reduce((n, l) => n + l.amount_minor, 0)
+        if (freshSum !== -q.total_minor || (cs.closing_minor !== undefined && cs.closing_minor !== afterSent)) {
+          return fail(`the company's statement must show the payment abroad as −${gbp(q.total_minor)} and close on ${gbp(afterSent)}; its new lines ` +
+            `${JSON.stringify(fresh.map((l) => [l.kind, l.amount_minor]))} sum to ${gbp(freshSum)}${cs.closing_minor === undefined ? '' : `, closing ${gbp(cs.closing_minor)}`}`)
         }
         return {
           pass: true,
           detail: `from ${agent.name}'s GBP account: ${gbp(PAID_MINOR)} completed; ${gbp(FAILED_MINOR)} failed and ${gbp(RETURNED_MINOR)} read returned, ` +
             `each leaving it whole; ${gbp(ABOVE_MINOR)} above 1,000 LXC was refused 403 on approval ${asked.id} with nothing moved, then approved and ` +
-            `paid under the same key; the account ended at ${gbp(end)}, its statement summing to it`,
+            `paid under the same key; the account ended at ${gbp(end)}, its statement summing to it. Abroad: with no quote 400, ${gbp(ABROAD_MINOR)} quoted at ` +
+            `a fee of ${gbp(q.fee_minor)} and the partner's ${gbp(q.partner_cost_minor)}, ${gbp(q.total_minor)} in all, ${(q.arrives_minor / 100).toFixed(2)} EUR ` +
+            `arriving at ${q.rate}; another amount at the quote 409; at the quote it completed and the company's account fell by exactly ${gbp(q.total_minor)}`,
         }
       } catch (e) {
         return fail((e as Error).message)
