@@ -8,7 +8,7 @@ import { CannotTest, type ScenarioCtx, type Verdict } from '../src/scenarios.ts'
 // B30.138 — agent-allowances against the stub Lens (selftest/stub-payees.ts), whose tick pays an agent's monthly allowance on its
 // day: it passes when the month is paid once with the agent's own money swept back first, and FAILs when a month that already ran
 // is paid again or the agent is paid without the company's account being debited. On the 29th to the 31st the stub's clock and the
-// scenario's run four days ahead, so the allowance's day is one it can have.
+// scenario's run four days ahead, so the allowance's day is one it can have. Each waits for two of the stub's 2-second ticks.
 
 const AHEAD_MS = new Date().getUTCDate() > 28 ? 4 * 86_400_000 : 0
 
@@ -47,19 +47,19 @@ describe('agent-allowances (B30.138)', () => {
     const v = await onStub('')
     expect(v.detail).toMatch(/^Allowances \d+'s £20\.00 a month on day \d+ ran once for \d{4}-\d\d: the £7\.50 it held swept back, then £20\.00 in from the company's account, one line of each on both statements, leaving £20\.00 and £480\.00; stopped, it shows stopped_at; set again, the month ran again and paid nothing twice; then stopped for good$/)
     expect(v.pass).toBe(true)
-  })
+  }, 40_000)
 
   it.concurrent('FAILs when a month that already ran is paid again', async () => {
     const v = await onStub('allowance-twice')
     expect(v.pass).toBe(false)
     expect(v.detail).toMatch(/^set again in a month that already ran, the allowance paid again: its runs are \[\{.*"status":"funded".*\},\{.*; Allowances \d+'s statement must hold one allowance of £20\.00 .*it holds allowance £20\.00, £20\.00/)
-  })
+  }, 40_000)
 
   it.concurrent("FAILs when the agent is paid without the company's account being debited", async () => {
     const v = await onStub('allowance-unfunded')
     expect(v.pass).toBe(false)
     expect(v.detail).toMatch(/^the month's allowance is wrong on the ledger: the company's statement must hold one allowance of −£20\.00 .*it holds allowance none.*the balances must be £20\.00 for Allowances \d+ and £480\.00 for the company; they are £20\.00 and £500\.00$/)
-  })
+  }, 40_000)
 
   it('SKIPs on the 29th to the 31st, when no allowance is due', async () => {
     await expect(allowances({ now: () => new Date('2026-12-30T12:00:00Z') }).run({ evidence: [] } as unknown as ScenarioCtx)).rejects.toBeInstanceOf(CannotTest)
