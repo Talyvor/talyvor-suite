@@ -52,6 +52,7 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/members': '/members',
   '/join': '/join',
   '/settings': '/settings',
+  '/settings/profile': '/settings/profile',
   '/settings/devices': '/settings/devices',
   '/settings/security': '/settings/security',
   '/settings/verification': '/settings/verification',

@@ -2,9 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
-// B61.93 — Settings, Privacy: your Talyvor name and who can find you, by name, phone number and email, each its own
-// switch, off until pressed, with Lens's refusal words for a name taken, a look-alike and one kept for Talyvor; and the
-// one question at the end of sign-up, which switches nothing on without Yes. The BFF answers what Lens recorded.
+// B61.93, B57.196 — Settings, Profile: your Talyvor name and who can find you, "Let people find me" (by name or phone
+// number) and email, off until pressed, with Lens's refusal words for a name taken, a look-alike and one kept for
+// Talyvor; and the one question at the end of sign-up, su7, which switches nothing on without Yes. The BFF answers
+// what Lens recorded.
 
 /** Lens B61.32's words, as writeJSONErr says them. */
 const TAKEN = 'That Talyvor name is taken: choose another'
@@ -55,48 +56,72 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
-async function openPrivacy() {
-  window.history.pushState({}, '', '/settings')
+async function openProfile() {
+  window.history.pushState({}, '', '/settings/profile')
   render(<App />)
-  const card = await screen.findByTestId('settings-privacy')
-  await within(card).findByLabelText('Your Talyvor name')
-  return card
+  const page = await screen.findByTestId('settings-profile')
+  await within(page).findByLabelText('Your Talyvor name')
+  return page
 }
 
-const sw = (card: HTMLElement, name: string) => within(card).getByRole('switch', { name })
+const sw = (page: HTMLElement, name: string) => within(page).getByRole('switch', { name })
+const FIND_ME = 'Let people find me'
 
-describe('Settings, Privacy', () => {
+describe('Settings, Profile', () => {
+  it('Settings links Profile first, and Privacy is no longer a card there', async () => {
+    window.history.pushState({}, '', '/settings')
+    render(<App />)
+    const pages = await screen.findByRole('navigation', { name: 'Settings pages' })
+    const first = within(pages).getAllByRole('link')[0]
+    expect(first).toHaveAttribute('href', '/settings/profile')
+    expect(first).toHaveTextContent('Name, phone number, who can find you')
+    expect(screen.queryByTestId('settings-privacy')).toBeNull()
+  })
+
   it('saves your Talyvor name and shows the name Lens kept', async () => {
-    const card = await openPrivacy()
-    fireEvent.change(within(card).getByLabelText('Your Talyvor name'), { target: { value: ' Maya.L ' } })
-    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+    const page = await openProfile()
+    fireEvent.change(within(page).getByLabelText('Your Talyvor name'), { target: { value: ' Maya.L ' } })
+    fireEvent.click(within(page).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(posts).toEqual([{ name: 'Maya.L' }]))
-    expect(await within(card).findByText('@maya.l')).toBeInTheDocument()
+    expect(await within(page).findByText('@maya.l')).toBeInTheDocument()
   })
 
-  it('every switch is off until pressed, and each sends only its own change', async () => {
+  it('shows what Talyvor has for you, and every switch is off until pressed', async () => {
     recorded = { ...recorded, name: 'maya.l', email: 'maya@example.com' }
-    const card = await openPrivacy()
-    for (const name of ['Name', 'Phone number', 'Email']) expect(sw(card, name)).toHaveAttribute('aria-checked', 'false')
+    const page = await openProfile()
+    expect(within(page).getByText('+447700900456')).toBeInTheDocument()
+    expect(within(page).getAllByText('maya@example.com').length).toBeGreaterThan(0)
+    expect(within(page).getByText('By my name or phone number, to pay me')).toBeInTheDocument()
+    for (const name of [FIND_ME, 'Email']) expect(sw(page, name)).toHaveAttribute('aria-checked', 'false')
     expect(posts).toEqual([])
-    const cases: [string, string][] = [['Name', 'by_name'], ['Phone number', 'by_phone'], ['Email', 'by_email']]
-    for (const [label, field] of cases) {
-      fireEvent.click(sw(card, label))
-      await waitFor(() => expect(sw(card, label)).toHaveAttribute('aria-checked', 'true'))
-      expect(posts.at(-1)).toEqual({ [field]: true })
-    }
-    fireEvent.click(sw(card, 'Phone number'))
-    await waitFor(() => expect(sw(card, 'Phone number')).toHaveAttribute('aria-checked', 'false'))
-    expect(posts.at(-1)).toEqual({ by_phone: false })
   })
 
-  it('cannot be found by name before choosing one, or by an email Talyvor does not have', async () => {
-    const card = await openPrivacy()
-    expect(sw(card, 'Name')).toBeDisabled()
-    expect(within(card).getByText('Choose your Talyvor name first.')).toBeInTheDocument()
-    expect(sw(card, 'Email')).toBeDisabled()
-    expect(within(card).getByText('Talyvor has no email for you yet.')).toBeInTheDocument()
-    expect(sw(card, 'Phone number')).toBeEnabled()
+  it('Let people find me turns on name and phone number together, and off together', async () => {
+    recorded = { ...recorded, name: 'maya.l' }
+    const page = await openProfile()
+    fireEvent.click(sw(page, FIND_ME))
+    await waitFor(() => expect(sw(page, FIND_ME)).toHaveAttribute('aria-checked', 'true'))
+    expect(posts).toEqual([{ by_name: true, by_phone: true }])
+    fireEvent.click(sw(page, FIND_ME))
+    await waitFor(() => expect(sw(page, FIND_ME)).toHaveAttribute('aria-checked', 'false'))
+    expect(posts.at(-1)).toEqual({ by_name: false, by_phone: false })
+  })
+
+  it('before a name is chosen, Let people find me is by phone number only; no email, no email switch', async () => {
+    const page = await openProfile()
+    expect(sw(page, 'Email')).toBeDisabled()
+    expect(within(page).getByText('Talyvor has no email for you yet.')).toBeInTheDocument()
+    fireEvent.click(sw(page, FIND_ME))
+    await waitFor(() => expect(sw(page, FIND_ME)).toHaveAttribute('aria-checked', 'true'))
+    expect(posts).toEqual([{ by_phone: true }])
+  })
+
+  it('the email switch sends only its own change', async () => {
+    recorded = { ...recorded, email: 'maya@example.com' }
+    const page = await openProfile()
+    fireEvent.click(sw(page, 'Email'))
+    await waitFor(() => expect(sw(page, 'Email')).toHaveAttribute('aria-checked', 'true'))
+    expect(posts).toEqual([{ by_email: true }])
   })
 
   it.each([
@@ -105,46 +130,49 @@ describe('Settings, Privacy', () => {
     ['a name kept for Talyvor', 'support', KEPT],
     ['a name too short', 'mj', SHORT],
   ])('says Lens’s words for %s', async (_, name, words) => {
-    const card = await openPrivacy()
-    fireEvent.change(within(card).getByLabelText('Your Talyvor name'), { target: { value: name } })
-    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
-    expect(await within(card).findByRole('alert')).toHaveTextContent(words)
-    expect(sw(card, 'Name')).toBeDisabled()
+    const page = await openProfile()
+    fireEvent.change(within(page).getByLabelText('Your Talyvor name'), { target: { value: name } })
+    fireEvent.click(within(page).getByRole('button', { name: 'Save' }))
+    expect(await within(page).findByRole('alert')).toHaveTextContent(words)
+    expect(within(page).queryByText(`@${name}`)).toBeNull()
   })
 
   it('a session with no person yet is told to confirm a phone number', async () => {
     sub = 'usr_google'
-    window.history.pushState({}, '', '/settings')
+    window.history.pushState({}, '', '/settings/profile')
     render(<App />)
-    const card = await screen.findByTestId('settings-privacy')
-    expect(await within(card).findByText('Confirm your phone number first.')).toBeInTheDocument()
-    expect(within(card).queryByRole('switch')).toBeNull()
+    const page = await screen.findByTestId('settings-profile')
+    expect(await within(page).findByText('Confirm your phone number first.')).toBeInTheDocument()
+    expect(within(page).queryByRole('switch')).toBeNull()
   })
 })
 
 describe('the end of sign-up', () => {
-  const QUESTION = 'Let people on Talyvor pay you by your name or phone number?'
+  const QUESTION = 'Let people find you?'
 
   async function openEnd() {
     window.history.pushState({}, '', '/signup/confirm')
     return render(<App />)
   }
 
-  it('asks once, and Yes turns on being found by phone number', async () => {
+  it('asks once with nothing picked, and Yes then Open my account turns on being found by phone number and opens Home', async () => {
     await openEnd()
     expect(await screen.findByRole('heading', { name: QUESTION })).toBeInTheDocument()
+    expect(screen.getByText('So people can pay you by your name or phone number.')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Open the app' })).toBeNull()
-    expect(posts).toEqual([])
-    fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
-    expect(await screen.findByRole('link', { name: 'Open the app' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open my account' })).toBeDisabled()
+    for (const r of screen.getAllByRole('radio')) expect(r).not.toBeChecked()
+    fireEvent.click(screen.getByRole('radio', { name: /Yes, find me/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open my account' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(posts).toEqual([{ by_phone: true }])
-    expect(screen.queryByRole('heading', { name: QUESTION })).toBeNull()
   })
 
-  it('Not now switches nothing on, and is not asked again', async () => {
+  it('No switches nothing on, opens Home, and is not asked again', async () => {
     const view = await openEnd()
-    fireEvent.click(await screen.findByRole('button', { name: 'Not now' }))
-    expect(await screen.findByRole('link', { name: 'Open the app' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('radio', { name: /^No/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open my account' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(posts).toEqual([])
     view.unmount()
     queryClient.clear()

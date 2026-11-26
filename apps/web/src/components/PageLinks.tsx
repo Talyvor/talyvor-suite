@@ -86,6 +86,7 @@ export function SettingsCards({ links }: { links: readonly SettingsLink[] }) {
 
 /** Each settings page's tile. */
 const SETTINGS_ICON: Record<string, IconName> = {
+  '/settings/profile': 'user',
   '/settings/devices': 'faceid',
   '/settings/security': 'lock',
   '/settings/connect': 'model',
@@ -123,7 +124,9 @@ export function useSettingsLinks(): SettingsLink[] {
     enabled: team,
   })
   const links: PageLink[] = [
-    // B57.43 — the keys that approve, first, as w-settings draws it.
+    // B57.196 — Profile first, as Pocket Live's settings draws it: your Talyvor name and who can find you (B61.93).
+    { to: '/settings/profile', title: 'Profile', line: 'Name, phone number, who can find you' },
+    // B57.43 — the keys that approve, next, as w-settings draws it.
     { to: '/settings/devices', title: 'Approvals and devices', line: 'Your passkeys, your phone, and notifications' },
     // B61.106 — how a person signs in.
     { to: '/settings/security', title: 'Security', line: 'Your passkeys, passcode and phone number' },

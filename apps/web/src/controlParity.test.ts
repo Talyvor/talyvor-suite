@@ -246,8 +246,8 @@ const NOT_A_TEXT_FIELD: Record<string, string> = {
     'and the disabled dimming, and there is no border for today\'s hover:border-rule-strong to darken',
   'apps/web/src/areas/chat/FilePicker.tsx':
     'an sr-only <input type="file"> the chat composer\'s Attach button opens; it is never seen or typed into, so no text-field affordance applies',
-  'apps/web/src/areas/auth/SignUp.tsx':
-    'B59.8 — an sr-only <input type="radio"> inside each choice card; the card draws the choice and its focus ring, and nothing is typed into it',
+  'apps/web/src/areas/auth/Choice.tsx':
+    'B59.8 — an sr-only <input type="radio"> inside each choice card; the card draws the choice and its focus ring, and nothing is typed into it (B57.196 moved it out of SignUp.tsx)',
   'apps/web/src/areas/lens/InstantTransfer.tsx':
     'B59.19 — an sr-only <input type="radio"> inside each "Who gets it" card, as sign-up\'s; the card draws the choice and its focus ring, and nothing is typed into it',
   'apps/web/src/areas/lens/PayPerson.tsx':

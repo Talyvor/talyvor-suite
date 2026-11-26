@@ -112,6 +112,7 @@ const PINNED: Readonly<Record<string, string>> = {
   // B61.121 — Settings' pages open in the right panel over Settings, which names the page; the panel names itself.
   '/settings/devices': 'Settings',
   '/settings/security': 'Settings',
+  '/settings/profile': 'Settings',
   '/settings/verification': 'Settings',
   '/settings/payout-details': 'Payout details',
   '/settings/terms': 'Settings',

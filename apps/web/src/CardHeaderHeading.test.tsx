@@ -187,6 +187,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings': 0,
   '/settings/devices': 0, // B57.43: drawn in Pocket
   '/settings/security': 0, // B61.106: drawn in Pocket
+  '/settings/profile': 0, // B57.196: drawn in Pocket
   '/settings/verification': 0, // B57.42: drawn in Pocket
   '/settings/payout-details': 0,
   '/settings/terms': 0, // B57.42: drawn in Pocket
