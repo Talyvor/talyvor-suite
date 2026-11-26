@@ -28,6 +28,11 @@
 // name (bank_details_differ when the invoice prints other details), or marked new_payee; the same document, or the same
 // supplier's same invoice number, is one bill. Its defects:
 //   bill-duplicated        — the same invoice uploaded again is stored as a second bill
+// B30.119 — and transaction monitoring (Lens B30.7) on each payment out it completes: the third payment of whole hundreds out of
+// a workspace within an hour opens its open monitoring case, or extends it, with a round_amounts alert naming the payments
+// (GET /v1/admin/compliance/alerts). It never moves money. Its defects:
+//   monitoring-unwatched   — no payment is judged: round amounts open no case
+//   monitoring-hit-moves   — a hit takes the payment's amount from the account again
 //   bill-details-unflagged — B40.22: an invoice printing other bank details than its supplier's saved payee reads matched
 // B30.96 — and the Pay screen's other desks: a payment names the account it pays from (account_id); mandates (POST and GET
 // /v1/money/mandates, POST …/{id}/revoke, Lens B30.19: an outside business's grant answers its pull_key once); and bulk
@@ -114,6 +119,9 @@ interface Assertion { credential_id?: string; client_data_json?: string; authent
 /** A compliance case as Lens's operator reads it (screening.Case). */
 interface Case { id: string; workspace_id: string; kind: string; subject_kind: string; subject_id: string; name: string; outcome: string; status: string
   matches: unknown[]; provider: string; capability: string; opened_at: string }
+/** B30.119 — an alert transaction monitoring raised (monitoring.Alert). */
+interface MonitoringAlert { id: string; case_id: string; workspace_id: string; rule: string; entry_id: string; currency: string; funding: string
+  summary: string; entries: string[]; raised_by: string; raised_at: string }
 /** A currency account (economy.CurrencyAccount). */
 interface Account { id: string; workspace_id: string; agent_id?: string; parent_account_id?: string; currency: string; purpose: string; status: string
   name: string; balance_minor: number; test_minor: number; live_minor: number; created_at: string }
@@ -198,6 +206,9 @@ export class PayeeDesk {
   private readonly invoicePaidBy = new Map<string, unknown>()
   private readonly proved = new Set<string>()
   private readonly cases: Case[] = []
+  /** B30.119 — each workspace's payments out through the partner, as monitoring judges them, and the alerts it raised. */
+  private readonly moved = new Map<string, { entry_id: string; at: number; amount_minor: number; currency: string; funding: string }[]>()
+  private readonly alerts: MonitoringAlert[] = []
   /** B30.130 — each agent account's payment reference, by account id; and every invoice issued, found by its pay token. */
   private readonly references = new Map<string, string>()
   private readonly invoices: StubInvoice[] = []
@@ -272,6 +283,40 @@ export class PayeeDesk {
   /** B30.109 — the compliance cases in `status` (every one for ''), newest first, as GET /v1/admin/screening lists them. */
   complianceCases(status: string): Case[] {
     return this.cases.filter((c) => status === '' || c.status === status).reverse()
+  }
+
+  /** B30.119 — the monitoring alerts on `caseID` (every one for ''), newest first, as GET /v1/admin/compliance/alerts lists them. */
+  complianceAlerts(caseID: string): MonitoringAlert[] {
+    return this.alerts.filter((a) => caseID === '' || a.case_id === caseID).reverse()
+  }
+
+  /**
+   * B30.119 — Lens's rule_round_amounts at a completed payment out: 3 payments out within 60 minutes, each a whole multiple of
+   * 100 in its currency, keep a round_amounts alert on the workspace's open monitoring case, opened now for the first.
+   */
+  private monitor(ws: string, account: Account, p: Payment): void {
+    const major = p.currency === 'USDC' ? 1_000_000 : 100
+    const moved = [...(this.moved.get(ws) ?? []), { entry_id: `me_${randomUUID()}`, at: Date.now(), amount_minor: p.amount_minor, currency: p.currency, funding: p.funding }]
+    this.moved.set(ws, moved)
+    if (this.broken('monitoring-unwatched')) return
+    const last = moved[moved.length - 1]
+    const round = (m: typeof last) => m.funding === last.funding && m.amount_minor % (100 * major) === 0 && m.at > last.at - 60 * 60_000
+    const burst = moved.filter(round)
+    if (!round(last) || burst.length < 3) return
+    let c = this.cases.find((x) => x.workspace_id === ws && x.kind === 'monitoring' && x.status === 'open')
+    if (c === undefined) {
+      c = { id: `cc_${randomUUID()}`, workspace_id: ws, kind: 'monitoring', subject_kind: 'workspace', subject_id: ws, name: 'transaction monitoring',
+        outcome: 'alert', status: 'open', matches: [], provider: '', capability: '', opened_at: new Date().toISOString() }
+      this.cases.push(c)
+    }
+    this.alerts.push({ id: `cal_${randomUUID()}`, case_id: c.id, workspace_id: ws, rule: 'round_amounts', entry_id: last.entry_id, currency: last.currency,
+      funding: last.funding, summary: `${burst.length} payments of round amounts (whole multiples of 100) within an hour`, entries: burst.map((m) => m.entry_id),
+      raised_by: 'movement', raised_at: new Date().toISOString() })
+    if (this.broken('monitoring-hit-moves')) {
+      account.test_minor -= p.amount_minor
+      account.balance_minor -= p.amount_minor
+      this.line(ws, account, 'monitoring_hold', -p.amount_minor)
+    }
   }
 
   private openCase(ws: string, subjectID: string, name: string, status: 'blocked' | 'held'): Case {
@@ -960,6 +1005,7 @@ export class PayeeDesk {
       funding, reference: b.reference ?? '', idempotency_key: b.idempotency_key, status: refused ? 'failed' : 'completed', created_at: new Date().toISOString(),
       ...(address === '' ? {} : { address, travel_rule: travelRule }) }
     this.payments.set(ws, [p, ...payments])
+    if (p.status === 'completed' && address === '' && !this.broken('payment-account-unmoved')) this.monitor(ws, account, p)
     return p
   }
 

@@ -683,6 +683,11 @@ export class Bank {
     return this.payees.complianceCases(status)
   }
 
+  /** B30.119 — the monitoring alerts on `caseID` ('' for all), newest first (stub-payees.ts). */
+  complianceAlerts(caseID: string): unknown[] {
+    return this.payees.complianceAlerts(caseID)
+  }
+
   /** B48.1 — `agentID`'s wallet in `asset` (the owner's for ''), as Lens answers it: the sandbox's, so no receive details and mode TEST. */
   private walletOf(ws: string, agentID: string, asset: string): Record<string, unknown> {
     const w = this.payees.wallet(ws, agentID, asset)

@@ -126,6 +126,7 @@ import { scanAgents } from './scanAgents.ts'
 import { scanReport } from './scanReport.ts'
 import { coachWeek } from './coachWeek.ts'
 import { spendingScreen } from './spendingScreen.ts'
+import { monitoring } from './monitoring.ts'
 import { monthPlan } from './monthPlan.ts'
 import { walletStatements } from './walletStatements.ts'
 import { physicalCard } from './physicalCard.ts'
@@ -5481,6 +5482,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // TESTPENDING payee saved held on its case and a payment to it refused 403 naming it; a live payment and a live account refused,
   // the account naming its class; the GBP account still at zero, no EUR account, no payment row; both cases on the operator's view.
   if (i === 4) list.push(compliance())
+  // B30.119 — transaction monitoring, once a run, on two workspaces of its own: the third £100.00 paid out within the hour opens a
+  // monitoring compliance case with one round_amounts alert naming it, the fourth extends the same case, ordinary amounts open
+  // none, and each statement holds exactly the payments made; read on the operator read key, a SKIP without it.
+  if (i === 3) list.push(monitoring())
   // B30.130 — invoices and pay links, once a run, on two workspaces of its own: an agent issues and sends a GBP invoice with VAT; its
   // pay page reads with no credential, test money only, quoting the agent's payment reference and naming no issuer id; another
   // company's unfunded agent is refused 409 through the link and nothing moves.
