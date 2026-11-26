@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn, playSound } from '@talyvor/ui'
-import { Button, Chip, CloseX, Icon, Layer, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Chip, CloseX, Icon, Layer, pocketFocusRing, ring } from '@talyvor/ui/pocket'
 import { WorkspaceStatus } from '../../labels/workspace'
 import { accountChip } from './agentBankApi'
 import { ACCOUNTS_KEY, accountOf, readAccounts, switchAccount, type PersonAccount } from './accountsApi'
@@ -96,6 +96,7 @@ export function YourAccounts({ onClose }: { onClose: () => void }) {
     mutationFn: switchAccount,
     onSuccess: async () => {
       playSound('moved')
+      ring()
       navigate('/', { replace: true })
       // The session is on the other account now: nothing read for the one it left is kept.
       await qc.resetQueries()

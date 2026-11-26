@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Dialog, Eyebrow, Facts, Field, Icon, Input, Money, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Card, Dialog, Eyebrow, Facts, Field, Icon, Input, Money, pocketFocusRing, moneyMoved } from '@talyvor/ui/pocket'
 import { cn, inlineLink, playSound } from '@talyvor/ui'
 import { useAuthMeReader } from '../../lib/authMe'
 import { typedMinor } from './AgentFunding'
@@ -231,6 +231,7 @@ export function PayPersonDialog({
       payPersonSigned({ to: person.to, amount_minor: minor ?? 0, currency, account_id: account?.id ?? '', note: note.trim(), idempotency_key: key }),
     onSuccess: () => {
       playSound('sent')
+      moneyMoved('out')
       onPaid(person)
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
     },

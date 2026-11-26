@@ -495,3 +495,81 @@ h1, h2, h3, h4 { font-family: var(--display); }
 .pk-panel [data-page-panel] nav[aria-label="Breadcrumb"] { display: none; }
 .pk-panel [data-page-panel] [class*="wide:grid-cols-"] { grid-template-columns: minmax(0, 1fr); }
 .pk-panel [data-page-panel] [class*="wide:col-span-"] { grid-column: auto; }
+
+/* B61.129 — Pocket Live's special openings, transitions and buttons (DESIGN.md section 15). The moving parts are
+   pocket/fx.ts; these are their looks. None of them carries meaning alone, and none moves under reduced motion: fx.ts
+   never starts the ripple, the ring, the burst, the tilt or the frost, and the block at the end stops the breathing and
+   the band of light. */
+:root, [data-theme='light'] { --spot: rgba(255, 255, 255, .55); }
+[data-theme='dark'] { --spot: rgba(255, 255, 255, .07); }
+
+/* A soft ring of colour that opens across the window when money moves, and the burst when an agent is made. */
+.pk-fx-ring {
+  position: fixed; z-index: 70; border-radius: 50%; pointer-events: none; will-change: transform, opacity;
+  background: radial-gradient(closest-side, transparent 52%, color-mix(in srgb, var(--fxc) 46%, transparent) 78%, transparent 100%);
+}
+.pk-fx-burst { position: fixed; inset: 0; z-index: 80; width: 100vw; height: 100vh; pointer-events: none; }
+
+/* The ripple from the pointer: a main button's in a tint of its own words, grey buttons' and choices' in ink, the
+   waiting card's in tangerine. */
+.pk-fx-ripple {
+  position: absolute; border-radius: 50%; pointer-events: none; opacity: 0;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+[data-ripple='main'] > .pk-fx-ripple { background: color-mix(in srgb, var(--on-primary) 34%, transparent); }
+[data-ripple='wait'] > .pk-fx-ripple { background: color-mix(in srgb, var(--tangerine) 30%, transparent); }
+
+/* A main button glows in the page's colours. */
+.pk-glow:not(:disabled) {
+  box-shadow: 0 10px 26px -10px color-mix(in srgb, var(--h1, #FF7A1A) 70%, transparent),
+    0 2px 6px -2px color-mix(in srgb, var(--h2, #2F5BFF) 40%, transparent);
+}
+
+/* A small job done: the button turns green and draws a tick in place (430 ms), then its panel closes. */
+.pk-done { background-color: var(--success); color: #FFFFFF; box-shadow: none; }
+[data-theme='dark'] .pk-done { color: #06281A; }
+.pk-done-tick {
+  fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 22; stroke-dashoffset: 22; animation: pk-draw 300ms cubic-bezier(.22, 1, .36, 1) 40ms forwards;
+}
+@keyframes pk-draw { to { stroke-dashoffset: 0; } }
+
+/* What waits for your yes breathes, slowly: a soft tangerine halo, in and out over 2.8 s. */
+.pk-breathe { animation: pk-breathe 2.8s ease-in-out infinite; }
+@keyframes pk-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tangerine) 0%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--tangerine) 22%, transparent); }
+}
+
+/* A card: a soft light follows the pointer across it (--mx, --my, set by fx.ts). */
+.pk-card { position: relative; isolation: isolate; }
+.pk-card::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0;
+  transition: opacity 240ms cubic-bezier(.4, 0, .2, 1);
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), var(--spot), transparent 70%);
+}
+.pk-card:hover::after { opacity: 1; }
+
+/* A card's picture: a band of light crosses it once as it comes into view, then follows the pointer while the picture
+   tilts towards it (fx.ts sets the transform and --sx). */
+[data-card] { transition: transform 260ms cubic-bezier(.22, 1, .36, 1); }
+[data-card][data-tilt] { transition: transform 60ms linear; }
+[data-card]::after {
+  content: ''; position: absolute; top: -20%; bottom: -20%; left: -60%; width: 46%; transform: skewX(-18deg); pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .42), transparent);
+  animation: pk-card-shine 1100ms cubic-bezier(.4, 0, .2, 1) 260ms both;
+}
+[data-card][data-tilt]::after { animation: none; left: calc(var(--sx, 50%) - 23%); opacity: .9; }
+@keyframes pk-card-shine { from { left: -60%; } to { left: 130%; } }
+
+/* A frozen card: frost over the picture, crossing it from left to right when it freezes (fx.ts useFrost). */
+.pk-ice {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, rgba(255, 255, 255, .62), rgba(214, 236, 255, .4) 45%, rgba(255, 255, 255, .56));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-breathe, .pk-done-tick, [data-card]::after { animation: none !important; }
+  .pk-done-tick { stroke-dashoffset: 0; }
+  [data-card]::after { opacity: 0; }
+}

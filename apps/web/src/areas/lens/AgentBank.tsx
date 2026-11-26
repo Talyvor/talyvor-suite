@@ -15,6 +15,7 @@ import {
   RoomBadge,
   Select,
   faceOf,
+  moneyMoved,
 } from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
@@ -2367,6 +2368,7 @@ export function Approvals({
     }),
     onSuccess: (o, { decision }) => {
       playSound(decision === 'approve' ? 'approved' : 'declined')
+      if (decision === 'approve') moneyMoved('in')
       setOutcome(o)
       setDeclining(null)
     },
@@ -2388,6 +2390,7 @@ export function Approvals({
     },
     onSuccess: (o, { decision }) => {
       playSound(decision === 'approve' ? 'approved' : 'declined')
+      if (decision === 'approve') moneyMoved('in')
       setOutcome(o)
       setPicked(new Set())
     },

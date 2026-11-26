@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink, playSound } from '@talyvor/ui'
-import { Button, Card, Facts, Icon, KindTile, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Card, Facts, Icon, KindTile, pocketFocusRing, moneyMoved } from '@talyvor/ui/pocket'
 import { formatWhen } from './format'
 import { readFailure } from './WalletMoney'
 import { BOOK_KEY, OnThePhone, PREPARED_KEY, useKeys } from './AgentBank'
@@ -210,6 +210,7 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
     },
     onSuccess: (done) => {
       playSound('approved')
+      moneyMoved('in')
       qc.setQueryData(paymentRequestKey(r.id), done)
       // B41.2 — a request made of bills marks each bill it paid as paid.
       void qc.invalidateQueries({ queryKey: BILLS_KEY })

@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { cn } from '@talyvor/ui'
+import { useFrost } from '@talyvor/ui/pocket'
 
 import { cardFaces, type CardArt } from './cardArt'
 
@@ -50,10 +51,18 @@ export interface TalyvorCardProps {
   sub: string
   /** read in place of the face; by default the holder and which card it is. */
   alt?: string
+  /** B61.129 — frost over the picture, crossing it when the card freezes. */
+  frozen?: boolean
   className?: string
 }
 
-export function TalyvorCard({ card, holder, sub, alt, className }: TalyvorCardProps) {
+/** B61.129 — a frozen card's frost (theme.css .pk-ice), crossing it from left to right when it freezes. */
+export function CardIce({ frozen }: { frozen: boolean }) {
+  const ice = useFrost(frozen)
+  return frozen ? <i ref={ice} aria-hidden="true" data-card-part="ice" className="pk-ice" /> : null
+}
+
+export function TalyvorCard({ card, holder, sub, alt, frozen = false, className }: TalyvorCardProps) {
   const face = cardFaces[card.text]
   const agent = card.family === 'agent'
   const label = alt ?? (agent ? `${holder}, agent card` : `${holder}, ${card.tier} ${card.family} card`)
@@ -125,6 +134,7 @@ export function TalyvorCard({ card, holder, sub, alt, className }: TalyvorCardPr
         </div>
       ) : null}
       <CardHolder holder={holder} sub={sub} agent={agent} ink2={face.ink2} />
+      <CardIce frozen={frozen} />
     </div>
   )
 }

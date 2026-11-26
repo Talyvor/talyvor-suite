@@ -244,7 +244,7 @@ function AgentCardEntry({ agent, shown, onShown }: { agent: Agent; shown: boolea
       </div>
       <div className="grid items-start gap-5 wide:grid-cols-12">
         <div className="grid justify-items-start gap-4 wide:col-span-5">
-          <AgentCardFace agent={agent} className="max-w-78" />
+          <AgentCardFace agent={agent} frozen={card?.frozen === true} className="max-w-78" />
           {card !== null && !held.isPending && !held.isError ? (
             <div className="flex flex-wrap gap-2.5">
               <Button variant={card.frozen ? 'outline' : 'danger'} disabled={freeze.isPending} onClick={() => freeze.mutate()}>

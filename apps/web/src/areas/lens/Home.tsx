@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { type UseQueryResult, useQueries, useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Bar, Button, Card, Chip, EmptyState, Eyebrow, Face, Icon, Input, Money, Row, Shapes, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Bar, Button, Card, Chip, EmptyState, Eyebrow, Face, Icon, Input, Money, MoneyCountUp, Row, Shapes, pocketFocusRing, useOpening } from '@talyvor/ui/pocket'
 import { cn, focusRing, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, MANDATE_REQUESTS_KEY, PREPARED_KEY, PreparedRow, rulesKey } from './AgentBank'
@@ -170,8 +170,11 @@ export function Home() {
 
   const firstName = useFirstName()
   const status = [waitingKnown ? waitingLine(waiting) : '', book.data ? pausedLine(book.data) : ''].filter((x) => x !== '').join(' ')
+  // B61.129 — the web app's opening: on the first Home of a visit every figure counts up from nothing as it appears.
+  const opening = useOpening()
 
   return (
+    <MoneyCountUp on={opening}>
     <div className="grid gap-4 px-gutter pb-10 pt-4 wide:px-7 wide:pb-12 wide:pt-6">
       <div className="grid gap-1">
         <h2 className="font-display text-title font-bold text-ink">{greeting(new Date().getHours(), firstName)}</h2>
@@ -251,6 +254,7 @@ export function Home() {
           </div>
         )}
     </div>
+    </MoneyCountUp>
   )
 }
 
@@ -406,7 +410,8 @@ function Waiting({
   const preparedShown = requests.slice(0, WAITING_SHOWN)
   const requestsShown = pending.slice(0, WAITING_SHOWN - preparedShown.length)
   return (
-    <Card tone="white" className="overflow-hidden" aria-labelledby="home-waiting">
+    // B61.129 — what waits for your yes breathes, and a press on it ripples in tangerine.
+    <Card tone="white" className="pk-breathe overflow-hidden" data-ripple="wait" aria-labelledby="home-waiting">
       <div aria-hidden="true" className="-mx-5 -mt-5 mb-4 h-1.75 bg-tangerine" />
       <div className="flex items-center justify-between gap-3">
         <h3 id="home-waiting" className="font-display text-head font-bold text-ink">

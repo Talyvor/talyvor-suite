@@ -16,8 +16,10 @@ export function Pick({ checked, onCheckedChange, className, children, ...props }
       type="button"
       role="checkbox"
       aria-checked={checked}
+      // B61.129 — a choice ripples from the pointer in a tint of ink.
+      data-ripple="ink"
       className={cn(
-        'flex w-full min-w-0 items-center gap-2.5 rounded-control bg-cloud px-3 py-2.5 text-left text-body text-ink',
+        'relative flex w-full min-w-0 items-center overflow-hidden gap-2.5 rounded-control bg-cloud px-3 py-2.5 text-left text-body text-ink',
         'aria-checked:bg-page aria-checked:shadow-pick disabled:cursor-not-allowed disabled:opacity-50',
         pocketFocusRing,
         className,

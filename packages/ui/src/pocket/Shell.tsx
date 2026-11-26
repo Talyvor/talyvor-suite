@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { cn } from '../lib/cn'
 import { pocketFocusRing } from './focus'
+import { useFxPresses } from './fx'
 import { play } from './motion'
 
 export interface ShellProps {
@@ -54,6 +55,8 @@ export function Shell({ sidebar, bar, children, drawer = false, background, page
   const menuRef = useRef<HTMLButtonElement | null>(null)
   const mainRef = useRef<HTMLElement | null>(null)
   const shownPage = useRef(page)
+  // B61.129 — the ripple on a press, and the light and the tilt under the pointer on a card.
+  useFxPresses()
 
   // B61.74 — Pocket Live's move 2 on the web: the page arriving fades up; the first one is simply there.
   useEffect(() => {

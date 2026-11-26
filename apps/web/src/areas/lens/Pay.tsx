@@ -21,6 +21,7 @@ import {
   pocketFocusRing,
   type ChipTone,
   type IconName,
+  moneyMoved,
 } from '@talyvor/ui/pocket'
 import { LinkedItem } from '../../components/LinkedItem'
 import { formatDecided, formatWhen } from './format'
@@ -440,6 +441,7 @@ function PayForm({
     mutationFn: () => payOutsideSigned({ account_id: account?.id ?? '', payee_id: payeeID, amount_minor: minor ?? 0, currency, reference: reference.trim(), idempotency_key: key }),
     onSuccess: (p) => {
       playSound('sent')
+      moneyMoved('out')
       setMade(p)
       setAmount('')
       setReference('')

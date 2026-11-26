@@ -336,7 +336,7 @@ function CardColumn({ s }: { s: AgentSummary }) {
   const declined = card.last_declined
   return (
     <div className="grid gap-4 wide:grid-cols-2" data-testid="agent-page-card">
-      <AgentCardArt agent={agent} sub={`Agent card · ${CARD_CURRENCY[card.currency ?? ''] ?? (card.currency ?? '').toUpperCase()}`} />
+      <AgentCardArt agent={agent} frozen={frozen} sub={`Agent card · ${CARD_CURRENCY[card.currency ?? ''] ?? (card.currency ?? '').toUpperCase()}`} />
       <div className="grid content-start gap-4">
         <Card tight className="flex items-center justify-between gap-3">
           <span className="text-body font-semibold text-ink">Freeze card</span>

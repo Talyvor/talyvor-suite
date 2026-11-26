@@ -7,11 +7,12 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   tight?: boolean
 }
 
-// pocket.css .card, .card.white, .card.tight.
+// pocket.css .card, .card.white, .card.tight. B61.129 — pk-card: a soft light follows the pointer across it (theme.css).
 export function Card({ tone = 'cloud', tight = false, className, ...props }: CardProps) {
   return (
     <div
       className={cn(
+        'pk-card',
         tone === 'white' ? 'bg-page shadow-pocket' : 'bg-cloud',
         tight ? 'rounded-card-tight px-4 py-3.5' : 'rounded-card p-5',
         className,

@@ -2,7 +2,7 @@ import { Face, faceOf } from '@talyvor/ui/pocket'
 import { cn } from '@talyvor/ui'
 
 import { cardArt, cardFaces, type AgentCardArt } from './cardArt'
-import { CardHolder, TalyvorCard, cardFrame, cardShadow, cardUnit } from './TalyvorCard'
+import { CardHolder, CardIce, TalyvorCard, cardFrame, cardShadow, cardUnit } from './TalyvorCard'
 
 // B57.125 — an agent's own card on the web: the helper drawn for its colour (Remy for cobalt, and so on), with the
 // agent's own name and its job line. Lime has no helper yet, so a lime agent keeps today's face on a plain lime card
@@ -23,12 +23,12 @@ export function helperFor(colour: string): AgentCardArt | undefined {
 }
 
 /** `sub` is the line under the name in place of its job: the agent's page writes "Agent card · pounds" (B57.20). */
-export function AgentCard({ agent, sub: line, className }: { agent: AgentLike; sub?: string; className?: string }) {
+export function AgentCard({ agent, sub: line, frozen = false, className }: { agent: AgentLike; sub?: string; frozen?: boolean; className?: string }) {
   const { colour } = faceOf(agent)
   const sub = line ?? agent.description ?? ''
   const label = agentCardLabel(agent.name, agent.description ?? '')
   const helper = helperFor(colour)
-  if (helper) return <TalyvorCard card={helper} holder={agent.name} sub={sub} alt={label} className={className} />
+  if (helper) return <TalyvorCard card={helper} holder={agent.name} sub={sub} alt={label} frozen={frozen} className={className} />
 
   const face = cardFaces.ink
   return (
@@ -52,6 +52,7 @@ export function AgentCard({ agent, sub: line, className }: { agent: AgentLike; s
         <Face agent={agent} size={72} className="!h-full !w-full [&>svg]:h-full [&>svg]:w-full" />
       </div>
       <CardHolder holder={agent.name} sub={sub} agent ink2={face.ink2} />
+      <CardIce frozen={frozen} />
     </div>
   )
 }

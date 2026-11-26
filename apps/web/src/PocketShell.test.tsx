@@ -170,3 +170,29 @@ describe('the avatar and the drawer', () => {
     expect(menu).toHaveAttribute('aria-expanded', 'false')
   })
 })
+
+// B61.129 — the background is the agents' work: its streams stop and turn grey while every agent is paused, and on an
+// agent's page while that agent is.
+describe('a paused account marks the background still', () => {
+  const background = () => document.querySelector('[data-background="streams"]')
+
+  it('is still once every agent is paused, and on the page of an agent paused on its own', async () => {
+    mockLens()
+    const bar = await at('/money/invoices')
+    await waitFor(() => expect(bar.getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument())
+    expect(background()).not.toHaveAttribute('data-still')
+    fireEvent.click(bar.getByRole('button', { name: 'Pause every agent' }))
+    await waitFor(() => expect(background()).toHaveAttribute('data-still', 'true'))
+  })
+
+  it('on an agent’s page, only while that agent is paused', async () => {
+    mockLens()
+    await at('/agents/agt_2')
+    await waitFor(() => expect(background()).toHaveAttribute('data-still', 'true'))
+    cleanup()
+    queryClient.clear()
+    await at('/agents/agt_1')
+    await screen.findAllByText('Sales')
+    expect(background()).not.toHaveAttribute('data-still')
+  })
+})

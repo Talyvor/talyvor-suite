@@ -16,6 +16,7 @@ import {
   Money,
   Select as PocketSelect,
   pocketFocusRing,
+  moneyMoved,
 } from '@talyvor/ui/pocket'
 import { BOOK_KEY } from './AgentBank'
 import { PAYEES_KEY } from './Pay'
@@ -292,6 +293,7 @@ function InstantTransferForm() {
   }
   const done = (t: InstantTransfer) => {
     playSound('sent')
+    moneyMoved('out')
     qc.setQueryData(instantKey(t.id), t)
     void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
     setKey(newMoveKey())
