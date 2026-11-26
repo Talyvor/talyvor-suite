@@ -32,6 +32,7 @@ import {
   statesNumber,
 } from './oracles.ts'
 import { paymentsOut } from './paymentsOut.ts'
+import { bulkPayouts } from './bulkPayouts.ts'
 import { moneyMandates } from './moneyMandates.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
 import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, agentRunsOutDate, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
@@ -5498,6 +5499,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // £20.14 reads returned, each leaving the account whole; £100.00 above the agent's 1,000 LXC approval amount is refused 403 with
   // nothing moved until the owner approves it, then the same request completes; the account ends at what came in less £120.00.
   if (i === 3) list.push(paymentsOut())
+  // B30.136 — bulk payouts, once a run, on a workspace of its own: a CSV of 50 payouts from the company's GBP account reads 48
+  // valid and two invalid with their reasons and moves nothing; approved once, 48 payments out leave the account, its balance
+  // down by exactly the total; approved again, nothing is paid twice.
+  if (i === 3) list.push(bulkPayouts())
   // B30.128 — mandates, once a run, on a workspace of its own: an outside business pulls £20.00 twice on its key from an agent's
   // GBP account into the mandate's hold, paid out to the saved payee; a retry moves nothing, a third over £50.00 a month is
   // refused 403 and, revoked, a pull 409, the account unmoved by either.

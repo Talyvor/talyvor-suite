@@ -1924,6 +1924,12 @@ export class LensClient {
     return { status: res.status, headers: res.headers, text: await res.text() }
   }
 
+  /** B30.136 — as `as`, with `body` sent as it is under `contentType` (a CSV upload). */
+  async asText(credential: string, method: string, path: string, body: string, contentType: string, headers: Record<string, string> = {}): Promise<{ status: number; headers: Headers; text: string }> {
+    const res = await this.send(method, path, { headers: { Accept: 'application/json', ...this.bearer(credential), 'Content-Type': contentType, ...headers }, body })
+    return { status: res.status, headers: res.headers, text: await res.text() }
+  }
+
   /** B34.7 — `body` sent as it is, as `contentType` (a document Lens converts), on `credential`: status and body, never thrown. */
   async raw(credential: string, method: string, path: string, body: string, contentType: string): Promise<{ status: number; text: string }> {
     const res = await this.send(method, path, { headers: { Accept: 'application/json', ...this.bearer(credential), 'Content-Type': contentType }, body })
