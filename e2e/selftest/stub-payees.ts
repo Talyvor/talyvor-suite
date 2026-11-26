@@ -24,6 +24,10 @@
 // already taken, 422 no account at that ref. Its defect:
 //   payment-in-unrouted    — the quoted payment reference is ignored and the money lands in the company's account
 //   acceptance-fee-twice     — a retry pays nothing again but charges the fee again
+// B30.134 — and the payer's rules (Lens B30.131): an agent's invoice payment is judged as a payment out (judgeAgentPayment), and
+// one its rules refuse answers 403 naming the rule, moving nothing. Its defects:
+//   invoice-rules-ignored  — the payer's rules are not asked: an invoice over its monthly limit is paid
+//   invoice-refused-moved  — the refused payment still takes what is due from the payer's account
 // B30.97 adds the pay page's card (POST /v1/pay/{token}/card: a checkout URL, served here as /stub-invoice-checkout/{token} with
 // Stripe's field ids; the 4242 card posts what is due into the issuer's account and sends the browser back to the pay link with
 // ?paid=card), and POST /v1/money/invoices/{id}/send and …/void. Its defect:
@@ -1478,6 +1482,21 @@ export class PayeeDesk {
     if (from.test_minor < inv.due_minor) {
       return this.json(res, 409, { error: `economy: the account does not hold enough to pay this invoice: it holds ${money(from.test_minor, inv.currency)} of test money, ` +
         `and ${money(inv.due_minor, inv.currency)} is due` }), true
+    }
+    // B30.134 — the payer's rules judge it as a payment out (Lens B30.131), at what it is worth in LXC; refused, nothing moves.
+    const perMinor = ULXC_PER_MINOR[inv.currency]
+    if (perMinor !== undefined && !this.broken('invoice-rules-ignored')) {
+      const fingerprint = ['invoice_agent', inv.id, from.id, inv.due_minor, inv.currency, 'test'].join('\0')
+      const refused = this.judgeAgentPayment(ws, agentID, inv.due_minor * perMinor, fingerprint, `${money(inv.due_minor, inv.currency)} for invoice ${inv.number} (test money)`)
+      if (refused !== undefined) {
+        // STUB_BREAK=invoice-refused-moved — the refused payment still takes what is due from the payer's account.
+        if (this.broken('invoice-refused-moved')) {
+          from.test_minor -= inv.due_minor
+          from.balance_minor -= inv.due_minor
+          this.line(ws, from, 'invoice_payment', -inv.due_minor, entry.id)
+        }
+        return this.json(res, refused.status, { error: refused.error }), true
+      }
     }
     // STUB_BREAK=invoice-paid-unmoved — the payer holds what is due, and the invoice is marked paid, but no account moves.
     if (!this.broken('invoice-paid-unmoved')) {

@@ -11,7 +11,8 @@ import { invoicePayLink } from '../src/invoices.ts'
 // for accepting the payment once — the scenario FAILs on a Lens without B56.21, which charges none, and on one that
 // charges it again on the retry. B30.133: the payer's agent is funded through a signed payment in quoting its payment
 // reference; the scenario FAILs when the money lands in the company's account instead, and when Lens marks the invoice
-// paid by a funded agent without moving the money.
+// paid by a funded agent without moving the money. B30.134: under a monthly limit below the invoice the funded payer is
+// refused 403 and nothing moves; the scenario FAILs when Lens pays it anyway, and when the refusal still takes the money.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -47,13 +48,14 @@ async function runAgainstStub(broken: string, moneyWebhookSecret = MONEY_SECRET)
   return { verdict: await invoicePayLink().run(ctx), evidence }
 }
 
-describe('invoice-pay-link (B30.130, B56.28)', () => {
+describe('invoice-pay-link (B30.130, B56.28, B30.134)', () => {
   it('passes on a Lens that sends the invoice, serves its pay page to anyone, refuses an unfunded payer and charges a paid one\'s issuer its fee once', async () => {
     const { verdict, evidence } = await runAgainstStub('')
     expect(verdict.detail).toBe("a GBP invoice of £145.00 (two lines, 20% VAT on one) issued from the agent's account and sent, with a number, a reference and a pay link; " +
       "its pay page read with no credential, with no notice and no transfer to the Test partner's details, naming no issuer id; " +
       "another company's agent holding £0.00 refused 409; the invoice still sent with £145.00 due and no payment, both agents' accounts still 0; " +
-      'funded with £145.00 through a payment in quoting its payment reference, the agent paid it twice and was taken once; ' +
+      'funded with £145.00 through a payment in quoting its payment reference; under a monthly limit of £100.00 refused 403 naming it, nothing moved; ' +
+      'the limit raised to £200.00, the agent paid it twice and was taken once; ' +
       "the issuer charged one acceptance_fee of 145 minor (1%), shown as the payment's fee_minor, its agent account holding 14355")
     expect(verdict.pass).toBe(true)
     expect(evidence.find((e) => e.note?.includes('payment in of 14500'))?.answer).toBe('200 ')
@@ -92,5 +94,17 @@ describe('invoice-pay-link (B30.130, B56.28)', () => {
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toContain("the issuer's agent account holds the total less the fee, 14355; it holds 0")
     expect(verdict.detail).toContain("the payer's agent account paid all it held and holds 0; it holds 14500")
+  })
+
+  it("FAILs when Lens pays an invoice the payer's rules refuse (B30.134)", async () => {
+    const { verdict } = await runAgainstStub('invoice-rules-ignored')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toContain("an invoice of £145.00 over the payer's agent's monthly limit of £100.00 must be refused 403 naming the limit; Lens answered 200")
+  })
+
+  it('FAILs when a payment the rules refuse still takes the money (B30.134)', async () => {
+    const { verdict } = await runAgainstStub('invoice-refused-moved')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toContain("after a payment its rules refused, the payer's agent account must still hold 14500 test and 0 live; it reads")
   })
 }, 60_000)
