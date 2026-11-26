@@ -855,13 +855,17 @@ export class PayeeDesk {
       amount_minor: amount, at: new Date().toISOString(), ...(entryID === undefined ? {} : { entry_id: entryID }) }, ...(this.lines.get(ws) ?? [])])
   }
 
-  /** B56.28 — GET /v1/money/accounts/{id}/statement: `id`'s postings, oldest first, all test money. */
+  /** B56.28 — account `id`'s postings as statement lines, oldest first, all test money. */
+  statementLines(ws: string, id: string): { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string }[] {
+    return (this.lines.get(ws) ?? []).filter((l) => l.account_id === id).reverse()
+      .map((l, i) => ({ entry_id: l.entry_id ?? `me_line_${i}`, line: 1, at: l.at, kind: l.kind, amount_minor: l.amount_minor, funding: 'test', state: 'completed' }))
+  }
+
+  /** B56.28 — GET /v1/money/accounts/{id}/statement: `id`'s postings (statementLines). */
   private statement(res: ServerResponse, ws: string, id: string): void {
     const account = (this.accounts.get(ws) ?? []).find((a) => a.id === id)
     if (account === undefined) return this.json(res, 404, { error: 'economy: no such money account' })
-    const lines = (this.lines.get(ws) ?? []).filter((l) => l.account_id === id).reverse()
-      .map((l, i) => ({ entry_id: l.entry_id ?? `me_line_${i}`, line: 1, at: l.at, kind: l.kind, amount_minor: l.amount_minor, funding: 'test', state: 'completed' }))
-    return this.json(res, 200, { workspace_id: ws, account_id: id, currency: account.currency, lines })
+    return this.json(res, 200, { workspace_id: ws, account_id: id, currency: account.currency, lines: this.statementLines(ws, id) })
   }
 
   /** B48.27 — GET …/agents/{id}/wallet/activity: `agentID`'s wallet lines, newest first. */
