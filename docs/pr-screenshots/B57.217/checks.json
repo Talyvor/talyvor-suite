@@ -1,0 +1,20 @@
+[
+  {
+    "route": "/agents/agt_research",
+    "steps": ["Its wallet", "Limits and permissions"],
+    "answers": {
+      "/api/agents/agt_research/smart-account": { "agent_id": "agt_research", "address": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "owners": [{ "index": 0, "role": "person", "credential_id": "Y3JlZDE" }, { "index": 1, "role": "agent", "address": "0x1111111111111111111111111111111111111111" }] },
+      "/api/agents/agt_research/spend-permission": { "number": 1, "account": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "canonical": "C1", "credential_id": "Y3JlZDE", "signed_by": "u1", "signed_at": "2026-11-20T09:00:00Z",
+        "permission": { "tokens": [{ "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "allowance": 500000000, "period": "week", "per_payment": 100000000 }], "allowed": ["0x3333333333333333333333333333333333333333"], "blocked": ["0x2222222222222222222222222222222222222222"], "expires": "2027-06-30T23:59:59Z" } }
+    }
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": ["Its wallet", "Limits and permissions"],
+    "answers": {
+      "/api/agents/agt_research/smart-account": { "agent_id": "agt_research", "address": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "owners": [{ "index": 0, "role": "person", "credential_id": "Y3JlZDE" }, { "index": 1, "role": "agent", "address": "0x1111111111111111111111111111111111111111" }] },
+      "/api/agents/agt_research/spend-permission": { "number": 2, "account": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "canonical": "C2", "credential_id": "Y3JlZDE", "signed_by": "u1", "signed_at": "2026-11-21T09:00:00Z",
+        "permission": { "tokens": [], "allowed": [], "blocked": ["0x2222222222222222222222222222222222222222"], "expires": "2027-06-30T23:59:59Z" } }
+    }
+  }
+]

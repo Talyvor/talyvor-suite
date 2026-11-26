@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { SnackHost } from '@talyvor/ui/pocket'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
+import { formatWhen } from './format'
 import { AppMoney } from './money'
 import { USDC_ON_BASE, type Agent } from './agentBankApi'
 
@@ -101,7 +102,7 @@ describe('an agent’s Limits and permissions', () => {
       'At most 50.00 USDC a weekUSDC on Base',
       'At most 10.00 USDC in one paymentAnything larger is refused',
       `Never pays ${BLOCKED}A payment to it is refused`,
-      'Ends 30 Jun 2027Signed 20 Nov 2026, 09:00',
+      `Ends 30 Jun 2027Signed ${formatWhen(IN_FORCE.signed_at)}`,
     ])
   })
 
