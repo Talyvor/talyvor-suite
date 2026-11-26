@@ -1726,6 +1726,8 @@ export class Bank {
   }
 
   tick(now = Date.now()): void {
+    // B30.138 — every agent's monthly allowance due, on the money desk's clock.
+    this.payees.tickAllowances()
     // B32.75 — every paid use's share, due at once (a test bill is paid a holdback ago), released from the journal's holdback.
     for (const u of this.uses) if (u.cleared_at !== undefined && u.released_at === undefined) u.released_at = new Date(now).toISOString()
     // B25.8 — a loan's instalment due is taken from the borrower (principal, interest and, when late, the
