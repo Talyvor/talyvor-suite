@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink } from '@talyvor/ui'
-import { Button, Card, Chip, Facts, Field, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Facts, Field, Icon, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
 import { kindWords } from './AccountStatement'
+import { DownloadFailed, lineWhen } from './AgentStatement'
 import { QrCode as QrOf } from './AgentMoneyWallet'
 import { saveFile } from './AgentBank'
 import { formatWhen } from './format'
@@ -36,6 +37,9 @@ import {
 // Request a payment as a link and a QR code (Lens B48.10). Activity: every posting on each wallet, a payment on the
 // chain with its explorer link; Statements: a month of each wallet, and its CSV or PDF (Lens B48.14).
 // B48.44: on the agent's page, the top-up its wallet_topup_link asked the owner for (?top_up=<move>), quoted then confirmed.
+// B57.216 — in Pocket: the quote as P7 draws Instant transfer's (You send, Rate, Fee, They get, then the seconds its price
+// is locked for, counting down), the Statement with its downloads beside its heading as the agent's page draws its own,
+// and each Activity line dated as that statement dates its lines.
 
 export const walletMovesKey = (id: string) => ['agent-wallet-moves', id]
 export const walletActivityKey = (id: string) => ['agent-wallet-activity', id]
@@ -72,24 +76,40 @@ function confirmFailure(err: unknown): string {
   return err instanceof AgentBankError && err.status < 500 ? refusalText(err) : 'There was no answer. Press Confirm again: it is made once, however many times you press.'
 }
 
+/** The seconds a quote's price is still locked for, counted from when it arrived here, so a clock that is off does not
+ *  shorten it; and how many it was locked for. A quote without an end is never counted down. */
+function useLockedSeconds(m: WalletMove): { lockedFor: number; left: number } | null {
+  const [arrived] = useState(Date.now)
+  const [, tick] = useState(0)
+  const life = m.expires_at ? Math.max(0, Date.parse(m.expires_at) - Date.parse(m.created_at)) : NaN
+  const counts = Number.isFinite(life)
+  useEffect(() => {
+    if (!counts) return
+    const timer = setInterval(() => tick((n) => n + 1), 250)
+    return () => clearInterval(timer)
+  }, [counts])
+  if (!counts) return null
+  return { lockedFor: Math.round(life / 1000), left: Math.max(0, Math.ceil((arrived + life - Date.now()) / 1000)) }
+}
+
 /** What a quoted move costs and brings, then Confirm; a cash-out or convert is signed with the owner's passkey first. */
 function MoveQuote({
   agent,
   m,
-  gets,
   change = 'Change',
   onChange,
   onDone,
 }: {
   agent: Agent
   m: WalletMove
-  gets: string
   change?: string
   onChange: () => void
   onDone: (m: WalletMove) => void
 }) {
   const qc = useQueryClient()
   const signs = m.route === 'cash_out' || m.route === 'convert'
+  const lock = useLockedSeconds(m)
+  const over = lock !== null && lock.left === 0
   // A second press before the first has re-rendered the button disabled is not a second confirm.
   const sent = useRef(false)
   const confirm = useMutation({
@@ -118,22 +138,38 @@ function MoveQuote({
     <div className="grid gap-3" data-testid="wallet-move-quote">
       <Facts
         facts={[
-          { label: m.route === 'cash_out' ? 'You sell' : 'You pay', value: <Money minor={m.sell_minor} currency={m.sell_currency} /> },
-          { label: 'Fee', value: <Money minor={m.fee_minor} currency={m.sell_currency} /> },
+          { label: 'You send', value: <Money minor={m.sell_minor} currency={m.sell_currency} /> },
           ...(m.sell_currency === m.buy_currency ? [] : [{ label: 'Rate', value: rateText(m) }]),
+          { label: 'Fee', value: <Money minor={m.fee_minor} currency={m.sell_currency} /> },
           {
-            label: <span className="font-semibold text-ink">{gets}</span>,
+            label: <span className="font-semibold text-ink">They get</span>,
             value: (
               <span data-testid="wallet-move-gets" className="font-display text-title font-bold">
                 <Money minor={m.buy_minor} currency={m.buy_currency} />
               </span>
             ),
           },
-          ...(m.expires_at ? [{ label: 'Price held until', value: formatWhen(m.expires_at) }] : []),
         ]}
       />
-      {signs ? <p className="text-body text-ink-3">Your passkey asks before anything moves.</p> : null}
-      <Button size="lg" className="w-full" disabled={confirm.isPending} onClick={press}>
+      {lock ? (
+        <>
+          <span className="inline-flex items-center justify-end gap-1.5 text-body text-ink-2">
+            <Icon name="lock" size={14} />
+            <span>
+              Locked for <span className="font-figure">{lock.lockedFor}</span> seconds
+            </span>
+          </span>
+          <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-pill bg-cloud-2">
+            <div className="h-full bg-ink transition-all duration-200" style={{ width: `${Math.min(100, (lock.left / Math.max(1, lock.lockedFor)) * 100)}%` }} />
+          </div>
+          <p className="text-right text-body text-ink-3" data-testid="wallet-move-seconds-left" aria-live="polite" aria-label={`${lock.left} seconds left on this quote`}>
+            <span className="font-figure">{lock.left}</span> seconds left
+          </p>
+        </>
+      ) : null}
+      {over ? <Note ok={false}>This quote has expired. Nothing moved.</Note> : null}
+      {signs ? <p className="text-center text-body text-ink-3">Your passkey asks before anything moves.</p> : null}
+      <Button size="lg" className="w-full" disabled={confirm.isPending || over} onClick={press}>
         {confirm.isPending ? 'Confirming…' : 'Confirm'}
       </Button>
       <Button variant="secondary" className="w-full" disabled={confirm.isPending} onClick={onChange}>
@@ -250,7 +286,7 @@ export function TopUpLink({ agent }: { agent: Agent }) {
       </>
     )
   } else {
-    body = <MoveQuote key={m.id} agent={agent} m={m} gets={`${agent.name} gets`} change="Not now" onChange={close} onDone={setDone} />
+    body = <MoveQuote key={m.id} agent={agent} m={m} change="Not now" onChange={close} onDone={setDone} />
   }
   return (
     <Card className="grid gap-3" data-testid="agent-top-up-link">
@@ -293,7 +329,6 @@ export function WalletTopUp({ agent, wallet, agents }: { agent: Agent; wallet: A
       <MoveQuote
         agent={agent}
         m={quote}
-        gets={`${agent.name} gets`}
         onChange={() => setQuote(null)}
         onDone={(m) => {
           setQuote(null)
@@ -382,7 +417,6 @@ export function WalletCashOut({ agent }: { agent: Agent }) {
       <MoveQuote
         agent={agent}
         m={quote}
-        gets={`${payee?.name ?? 'Your bank account'} gets`}
         onChange={() => setQuote(null)}
         onDone={(m) => {
           setQuote(null)
@@ -560,7 +594,7 @@ export function WalletActivity({ agent, asset }: { agent: Agent; asset: string }
               line={
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <span>
-                    <span className="font-figure">{formatWhen(l.at)}</span>
+                    <span className="font-figure">{lineWhen(l.at)}</span>
                     {l.memo ? ` · ${l.memo}` : ''}
                   </span>
                   {link ? (
@@ -598,7 +632,18 @@ export function WalletStatements({ agent, asset }: { agent: Agent; asset: string
   const accounts = (statement.data?.accounts ?? []).filter((a) => a.currency === asset)
   return (
     <div className="grid gap-3" data-testid={`wallet-statements-${asset}`}>
-      <Field label="Month">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-display text-reading font-bold text-ink">Statement</h3>
+        <span className="flex gap-3 text-caption">
+          <button type="button" className={inlineLink} disabled={download.isPending} onClick={() => download.mutate('csv')}>
+            Download CSV
+          </button>
+          <button type="button" className={inlineLink} disabled={download.isPending} onClick={() => download.mutate('pdf')}>
+            Download PDF
+          </button>
+        </span>
+      </div>
+      <Field label="Month" className="max-w-xs">
         <Input type="month" max={thisMonth()} value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
       </Field>
       {statement.isPending ? (
@@ -609,26 +654,26 @@ export function WalletStatements({ agent, asset }: { agent: Agent; asset: string
         <p className="text-body text-ink-3">This wallet has no statement for that month.</p>
       ) : (
         accounts.map((a) => (
-          <Facts
-            key={a.account_id}
-            facts={[
-              { label: 'Opening balance', value: <Money minor={a.opening_minor} currency={a.currency} /> },
-              { label: 'Money in', value: <Money minor={Math.abs(a.in_minor)} currency={a.currency} /> },
-              { label: 'Money out', value: <Money minor={Math.abs(a.out_minor)} currency={a.currency} /> },
-              { label: 'Closing balance', value: <Money minor={a.closing_minor} currency={a.currency} /> },
-            ]}
-          />
+          <dl key={a.account_id} className="grid grid-cols-2 gap-4 rounded-card-tight bg-cloud px-4 py-3.5">
+            {(
+              [
+                ['Opening balance', a.opening_minor],
+                ['Money in', Math.abs(a.in_minor)],
+                ['Money out', Math.abs(a.out_minor)],
+                ['Closing balance', a.closing_minor],
+              ] as const
+            ).map(([label, minor]) => (
+              <div key={label} className="grid content-end gap-0.5">
+                <dt className="text-micro font-semibold text-ink-3">{label}</dt>
+                <dd className="font-display text-head font-bold text-ink">
+                  <Money minor={minor} currency={a.currency} />
+                </dd>
+              </div>
+            ))}
+          </dl>
         ))
       )}
-      <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm" disabled={download.isPending} onClick={() => download.mutate('csv')}>
-          Download CSV
-        </Button>
-        <Button variant="secondary" size="sm" disabled={download.isPending} onClick={() => download.mutate('pdf')}>
-          Download PDF
-        </Button>
-      </div>
-      {download.isError ? <Note ok={false}>{refusalText(download.error)}</Note> : null}
+      {download.isError ? <DownloadFailed error={download.error} /> : null}
     </div>
   )
 }
