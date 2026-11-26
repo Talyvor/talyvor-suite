@@ -13,6 +13,10 @@
 // value) — the total that leaves the account, the rate and what arrives in EUR, and moves nothing; another amount at that quote is
 // refused 409 and moves nothing; the payment at its quote completes with the quote's figures. Judged on the account's ledger: its
 // balance falls by exactly the total, and the statement's new lines sum to minus the total.
+//
+// B30.148 — and on the payment's own entry (Lens B30.147, GET /v1/money/payments/{id}/entry): its postings sum to zero in GBP and
+// in EUR and in no other currency, Lens's per-currency sums say the same, its revenue postings in GBP are exactly the quote's fee,
+// and what posts in EUR is exactly what the quote said arrives.
 
 import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
@@ -33,12 +37,15 @@ const CAPABILITIES = ['currency_accounts', 'payments_in', 'payments_out']
 const gbp = (minor: number): string => `£${(minor / 100).toFixed(2)}`
 
 /** A payment out as Lens answers it (economy.OutsidePayment). */
-interface Payment { id: string; account_id: string; agent_id?: string; amount_minor: number; currency: string; reference: string; status: string }
+interface Payment { id: string; account_id: string; agent_id?: string; amount_minor: number; currency: string; reference: string; status: string; entry_id?: string }
 interface Account { id: string; test_minor: number }
 interface Statement { closing_minor?: number; lines: { entry_id?: string; line?: number; kind?: string; amount_minor: number }[] | null }
 /** B30.135 — an international payment's quote as Lens answers it (economy.InternationalQuote). */
 interface Quote { id: string; account_id: string; payee_id: string; amount_minor: number; currency: string; partner_cost_minor: number; fee_minor: number
   total_minor: number; arrives_minor: number; arrives_currency: string; rate: string; expires_at: string }
+/** B30.148 — a payment's ledger entry as Lens answers it (economy.PaymentEntry). */
+interface Entry { payment_id: string; entry_id: string; postings: { account_id: string; purpose: string; amount_minor: number; currency: string }[] | null
+  sums: { currency: string; sum_minor: number }[] | null }
 
 /**
  * B30.135 — Talyvor's fee for the first international payment of the month in GBP on `plan`, as Lens's public fees state it: none
@@ -219,7 +226,7 @@ export function paymentsOut(): Scenario {
         const plan = (await lens.workspacePlan(user)).plan
         const wantFee = intlFeeMinor(ctx.env.fees, plan)
         if (typeof wantFee === 'string') return fail(wantFee)
-        const ownerPays = (body: Record<string, unknown>, note: string) => step<Payment & Partial<Quote> & { quote_id?: string }>('POST', '/v1/money/payments', { payee_id: abroad.value?.id,
+        const ownerPays = (body: Record<string, unknown>, note: string) => step<Payment & Partial<Quote> & { quote_id?: string; entry_id?: string }>('POST', '/v1/money/payments', { payee_id: abroad.value?.id,
           account_id: companyID, currency: 'GBP', funding: 'test', reference: `Nightly ${RUN_SALT} abroad`, idempotency_key: key(), ...body }, note)
         const before = await holds("the company's account before the payment abroad", companyID)
         const seenLines = new Set(((await statement(companyID, "the company's statement before the payment abroad")).lines ?? []).map((l) => `${l.entry_id}:${l.line}`))
@@ -275,13 +282,41 @@ export function paymentsOut(): Scenario {
           return fail(`the company's statement must show the payment abroad as −${gbp(q.total_minor)} and close on ${gbp(afterSent)}; its new lines ` +
             `${JSON.stringify(fresh.map((l) => [l.kind, l.amount_minor]))} sum to ${gbp(freshSum)}${cs.closing_minor === undefined ? '' : `, closing ${gbp(cs.closing_minor)}`}`)
         }
+
+        // 13. B30.148 — its entry: zero in GBP and in EUR, the fee on Talyvor's revenue account, what arrives in EUR.
+        const read = await step<Entry>('GET', `/v1/money/payments/${s0.id}/entry`, undefined, `the owner reads the payment abroad's ledger entry`)
+        if (read.status !== 200 || read.value === undefined) return fail(`the completed payment abroad's entry must read 200; Lens answered ${said(read)}`)
+        const e = read.value
+        const postings = e.postings ?? []
+        const entryOf = p.entry_id ?? s0.entry_id
+        if (e.payment_id !== s0.id || e.entry_id === '' || (entryOf !== undefined && e.entry_id !== entryOf)) {
+          return fail(`the entry must be payment ${s0.id}'s, entry ${entryOf ?? '(any)'}; it reads payment ${e.payment_id}, entry ${e.entry_id}`)
+        }
+        const sums = new Map<string, number>()
+        for (const lp of postings) sums.set(lp.currency, (sums.get(lp.currency) ?? 0) + lp.amount_minor)
+        const lensSums = new Map((e.sums ?? []).map((x) => [x.currency, x.sum_minor]))
+        const revenue = postings.filter((lp) => lp.purpose === 'revenue' && lp.currency === 'GBP').reduce((n, lp) => n + lp.amount_minor, 0)
+        const arrives = postings.filter((lp) => lp.currency === 'EUR' && lp.amount_minor > 0).reduce((n, lp) => n + lp.amount_minor, 0)
+        const wrongEntry: string[] = []
+        if ([...sums.keys()].sort().join() !== 'EUR,GBP' || sums.get('GBP') !== 0 || sums.get('EUR') !== 0) {
+          wrongEntry.push(`its postings must sum to zero in GBP and in EUR and post no other currency; they sum to ${JSON.stringify(Object.fromEntries(sums))}`)
+        }
+        if (lensSums.size !== sums.size || [...sums].some(([c, n]) => lensSums.get(c) !== n)) {
+          wrongEntry.push(`Lens's sums ${JSON.stringify(e.sums)} must be what its postings add up to, ${JSON.stringify(Object.fromEntries(sums))}`)
+        }
+        if (revenue !== q.fee_minor) wrongEntry.push(`Talyvor's revenue account must gain the fee ${gbp(q.fee_minor)}; it gains ${gbp(revenue)}`)
+        if (arrives !== q.arrives_minor) wrongEntry.push(`it must post the ${(q.arrives_minor / 100).toFixed(2)} EUR that arrives; it posts ${(arrives / 100).toFixed(2)} EUR`)
+        if (wrongEntry.length > 0) {
+          return fail(`the payment abroad's entry is wrong: ${wrongEntry.join('; ')} (${JSON.stringify(postings.map((lp) => [lp.purpose, lp.amount_minor, lp.currency]))})`)
+        }
         return {
           pass: true,
           detail: `from ${agent.name}'s GBP account: ${gbp(PAID_MINOR)} completed; ${gbp(FAILED_MINOR)} failed and ${gbp(RETURNED_MINOR)} read returned, ` +
             `each leaving it whole; ${gbp(ABOVE_MINOR)} above 1,000 LXC was refused 403 on approval ${asked.id} with nothing moved, then approved and ` +
             `paid under the same key; the account ended at ${gbp(end)}, its statement summing to it. Abroad: with no quote 400, ${gbp(ABROAD_MINOR)} quoted at ` +
             `a fee of ${gbp(q.fee_minor)} and the partner's ${gbp(q.partner_cost_minor)}, ${gbp(q.total_minor)} in all, ${(q.arrives_minor / 100).toFixed(2)} EUR ` +
-            `arriving at ${q.rate}; another amount at the quote 409; at the quote it completed and the company's account fell by exactly ${gbp(q.total_minor)}`,
+            `arriving at ${q.rate}; another amount at the quote 409; at the quote it completed and the company's account fell by exactly ${gbp(q.total_minor)}; ` +
+            `its entry's ${postings.length} postings sum to zero in GBP and in EUR, ${gbp(revenue)} to Talyvor's revenue and ${(arrives / 100).toFixed(2)} EUR arriving`,
         }
       } catch (e) {
         return fail((e as Error).message)
