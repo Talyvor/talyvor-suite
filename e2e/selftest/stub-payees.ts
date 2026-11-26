@@ -14,6 +14,11 @@
 // page anyone with the link reads (GET /v1/pay/{token}) and another agent paying it from its account in the currency (POST
 // /v1/pay/{token}/agent), which moves test money from the payer's account into the issuer's. Its defect:
 //   invoice-paid-unmoved   — an agent's payment marks the invoice paid without asking what the payer holds or moving money
+// B56.28 — and Talyvor's fee for accepting it (Lens B56.21): the agent's payment charges the issuer's account
+// merchant_a2a_fee_bps of it once, as an acceptance_fee posting and as the payment's fee_minor; a retry answers the payment
+// made and moves nothing again; GET /v1/money/accounts/{id}/statement reads the account's postings. Its defects:
+//   acceptance-fee-uncharged — a Lens without B56.21: no fee is charged and the payment carries no fee_minor
+//   acceptance-fee-twice     — a retry pays nothing again but charges the fee again
 // B30.97 adds the pay page's card (POST /v1/pay/{token}/card: a checkout URL, served here as /stub-invoice-checkout/{token} with
 // Stripe's field ids; the 4242 card posts what is due into the issuer's account and sends the browser back to the pay link with
 // ?paid=card), and POST /v1/money/invoices/{id}/send and …/void. Its defect:
@@ -118,7 +123,7 @@ interface Line { description: string; quantity: number; unit_amount_minor: numbe
 interface StubInvoice { id: string; workspace_id: string; agent_id: string; account_id: string; issuer: string; number: string; reference: string; pay_token: string
   pay_url: string; currency: string; customer_name: string; customer_email?: string; lines: Line[]; subtotal_minor: number; vat_minor: number; total_minor: number
   paid_minor: number; due_minor: number; due_date: string; remind_days_before: number; status: string; sent_at?: string; paid_at?: string; created_at: string
-  payments: { entry_id: string; method: string; amount_minor: number; paid_at: string }[] }
+  payments: { entry_id: string; method: string; amount_minor: number; fee_minor?: number; paid_at: string }[] }
 /** A mandate (economy.Mandate). */
 interface StubMandate { id: string; workspace_id: string; agent_id: string; account_id: string; currency: string; payee_workspace_id?: string; payee_business_id?: string
   payee_name: string; payee_id?: string; max_per_pull_minor: number; max_per_month_minor: number; pulled_this_month_minor: number; expires_at: string; status: string
@@ -164,6 +169,8 @@ const HELP = { MoneyHelper: 'https://www.moneyhelper.org.uk', StepChange: 'https
 // B41.12 — Lens's PayeeDetailsNotice, word for word.
 const DETAILS_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
+/** B56.28 — Talyvor's fee for accepting a payment from an account, as stub-lens.ts states it at /v1/public/fees. */
+const A2A_FEE_BPS = 100
 const PAYMENT_UNSIGNED = 'economy: this workspace signs its payments with a passkey or the phone app — sign this payment\'s challenge (POST /v1/money/payments/challenge)'
 
 type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }
@@ -186,7 +193,9 @@ export class PayeeDesk {
   private readonly testMoneyKeys = new Set<string>()
   private readonly payments = new Map<string, Payment[]>()
   /** B48.27 — each workspace's wallet ledger lines, newest first, and the addresses its owner proved they hold. */
-  private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string }[]>()
+  private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string; entry_id?: string }[]>()
+  /** B56.28 — each invoice's payment by an agent account, by `${invoice id}\n${account id}`: a retry answers it. */
+  private readonly invoicePaidBy = new Map<string, unknown>()
   private readonly proved = new Set<string>()
   private readonly cases: Case[] = []
   /** B30.130 — each agent account's payment reference, by account id; and every invoice issued, found by its pay token. */
@@ -282,6 +291,8 @@ export class PayeeDesk {
     if (funded !== null && req.method === 'POST') return this.testMoney(req, res, ws, funded[1]), true
     const moved = /^\/v1\/money\/accounts\/([^/]+)\/funding$/.exec(path)
     if (moved !== null && req.method === 'POST') return this.agentFunding(req, res, ws, moved[1]), true
+    const stated = /^\/v1\/money\/accounts\/([^/]+)\/statement$/.exec(path)
+    if (stated !== null && req.method === 'GET') return this.statement(res, ws, stated[1]), true
     if (await this.invoiceRoute(req, res, ws, path)) return true
     if (await this.mandateRoute(req, res, ws, path, list)) return true
     if (await this.payoutRoute(req, res, ws, path, list)) return true
@@ -839,9 +850,18 @@ export class PayeeDesk {
   }
 
   /** B48.27 — a line on `account`'s wallet ledger, as Lens's wallet activity reads its postings. */
-  private line(ws: string, account: Account, kind: string, amount: number): void {
+  private line(ws: string, account: Account, kind: string, amount: number, entryID?: string): void {
     this.lines.set(ws, [{ account_id: account.id, ...(account.agent_id === undefined ? {} : { agent_id: account.agent_id }), currency: account.currency, kind,
-      amount_minor: amount, at: new Date().toISOString() }, ...(this.lines.get(ws) ?? [])])
+      amount_minor: amount, at: new Date().toISOString(), ...(entryID === undefined ? {} : { entry_id: entryID }) }, ...(this.lines.get(ws) ?? [])])
+  }
+
+  /** B56.28 — GET /v1/money/accounts/{id}/statement: `id`'s postings, oldest first, all test money. */
+  private statement(res: ServerResponse, ws: string, id: string): void {
+    const account = (this.accounts.get(ws) ?? []).find((a) => a.id === id)
+    if (account === undefined) return this.json(res, 404, { error: 'economy: no such money account' })
+    const lines = (this.lines.get(ws) ?? []).filter((l) => l.account_id === id).reverse()
+      .map((l, i) => ({ entry_id: l.entry_id ?? `me_line_${i}`, line: 1, at: l.at, kind: l.kind, amount_minor: l.amount_minor, funding: 'test', state: 'completed' }))
+    return this.json(res, 200, { workspace_id: ws, account_id: id, currency: account.currency, lines })
   }
 
   /** B48.27 — GET …/agents/{id}/wallet/activity: `agentID`'s wallet lines, newest first. */
@@ -1234,24 +1254,46 @@ export class PayeeDesk {
     if (agentID === '') return this.json(res, 400, { error: 'agent_id names the agent that pays' }), true
     const from = accounts.find((a) => a.purpose === 'agent' && a.agent_id === agentID && a.currency === inv.currency && a.status === 'open')
     if (from === undefined) return this.json(res, 404, { error: `economy: no such money account: the agent has no open ${inv.currency} account to pay from` }), true
+    const to = [...this.accounts.values()].flat().find((a) => a.id === inv.account_id)
+    const chargeFee = (amount: number): number => {
+      const fee = Math.min(Math.floor((amount * A2A_FEE_BPS + 5000) / 10_000), amount)
+      if (to !== undefined && fee > 0) {
+        to.test_minor -= fee
+        to.balance_minor -= fee
+        this.line(inv.workspace_id, to, 'acceptance_fee', -fee, `me_${randomUUID()}`)
+      }
+      return fee
+    }
+    const madeKey = `${inv.id}\n${from.id}`
+    const made = this.invoicePaidBy.get(madeKey)
+    if (made !== undefined) {
+      // STUB_BREAK=acceptance-fee-twice — the retry moves no money again, but charges the fee again.
+      if (this.broken('acceptance-fee-twice')) chargeFee(inv.total_minor)
+      return this.json(res, 200, { invoice: this.invoice(inv), entry: made }), true
+    }
     if (inv.status === 'paid' || inv.status === 'void') return this.json(res, 409, { error: `economy: the invoice's state does not allow this: it is ${inv.status}` }), true
+    const now = new Date().toISOString()
+    const entry = { id: `me_${randomUUID()}`, workspace_id: ws, kind: 'invoice_payment', funding: 'test', amount_minor: inv.due_minor, currency: inv.currency, created_at: now }
+    let fee: number | undefined
     // STUB_BREAK=invoice-paid-unmoved — the invoice is marked paid without asking what the payer holds, and no account moves.
     if (!this.broken('invoice-paid-unmoved')) {
       if (from.test_minor < inv.due_minor) {
         return this.json(res, 409, { error: `economy: the account does not hold enough to pay this invoice: it holds ${money(from.test_minor, inv.currency)} of test money, ` +
           `and ${money(inv.due_minor, inv.currency)} is due` }), true
       }
-      const to = [...this.accounts.values()].flat().find((a) => a.id === inv.account_id)
       from.test_minor -= inv.due_minor
       from.balance_minor -= inv.due_minor
+      this.line(ws, from, 'invoice_payment', -inv.due_minor, entry.id)
       if (to !== undefined) {
         to.test_minor += inv.due_minor
         to.balance_minor += inv.due_minor
+        this.line(inv.workspace_id, to, 'invoice_payment', inv.due_minor, entry.id)
       }
+      // STUB_BREAK=acceptance-fee-uncharged — a Lens without B56.21 charges no fee and its payments carry no fee_minor.
+      if (!this.broken('acceptance-fee-uncharged')) fee = chargeFee(inv.due_minor)
     }
-    const now = new Date().toISOString()
-    const entry = { id: `me_${randomUUID()}`, workspace_id: ws, kind: 'invoice_payment', funding: 'test', amount_minor: inv.due_minor, currency: inv.currency, created_at: now }
-    inv.payments.push({ entry_id: entry.id, method: 'agent', amount_minor: inv.due_minor, paid_at: now })
+    inv.payments.push({ entry_id: entry.id, method: 'agent', amount_minor: inv.due_minor, ...(fee === undefined ? {} : { fee_minor: fee }), paid_at: now })
+    this.invoicePaidBy.set(madeKey, entry)
     Object.assign(inv, { paid_minor: inv.total_minor, due_minor: 0, status: 'paid', paid_at: now })
     return this.json(res, 200, { invoice: this.invoice(inv), entry }), true
   }

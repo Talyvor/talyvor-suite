@@ -787,6 +787,8 @@ export interface Fees {
   platform_fee_bps: Record<string, number>
   /** B17.518 — the margin on a currency conversion, by plan, on the part above the plan's free conversions. */
   fx_margin_bps?: Record<string, number>
+  /** B56.21 — Talyvor's fee for accepting a payment of an invoice from an account or by transfer. */
+  merchant_a2a_fee_bps?: number
 }
 
 /** B32.15 — Lens's refusal of what a plan does not unlock (402): a plain sentence naming both plans (B55.29), and its setting beside. */
