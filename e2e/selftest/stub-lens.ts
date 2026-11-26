@@ -1125,7 +1125,10 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   res.writeHead(200, { 'Content-Type': 'text/event-stream', ...headers })
   const pieces = answer.match(/.{1,12}/gs) ?? ['']
   // B28.79 — a long answer streams for LONG_STREAM_MS; STUB_BREAK=stream-cut-30s ends any stream 30 s after its request.
-  const pace = IN_WORDS.test(text(messages[messages.length - 1] ?? { role: 'user', content: '' })) ? LONG_STREAM_MS / pieces.length : 30
+  const long = IN_WORDS.test(text(messages[messages.length - 1] ?? { role: 'user', content: '' }))
+  const begun = Date.now()
+  // The nth piece waits 30 ms, or for a long answer until its share of LONG_STREAM_MS has passed, however fast timers fire.
+  const after = (n: number) => new Promise((r) => setTimeout(r, long ? Math.max(0, begun + ((n + 1) * LONG_STREAM_MS) / pieces.length - Date.now()) : 30))
   const cutAt = broke('stream-cut-30s') ? setTimeout(() => res.destroy(), 30_000 - (Date.now() - started)) : undefined
   res.on('close', () => clearTimeout(cutAt))
   const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
@@ -1138,19 +1141,19 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   }
   if (provider === 'anthropic') {
     send('message_start', { type: 'message_start', message: { ...named, usage: { input_tokens: shownIn, output_tokens: 0 } } })
-    for (const p of pieces) {
+    for (const [n, p] of pieces.entries()) {
       if (res.destroyed) return
       send('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: p } })
-      await new Promise((r) => setTimeout(r, pace))
+      await after(n)
     }
     send('message_delta', { type: 'message_delta', delta: { stop_reason: cut ? 'max_tokens' : 'end_turn' }, usage: { output_tokens: outTok } })
     sayCharged()
     send('message_stop', { type: 'message_stop' })
   } else {
-    for (const p of pieces) {
+    for (const [n, p] of pieces.entries()) {
       if (res.destroyed) return
       res.write(`data: ${JSON.stringify({ ...named, choices: [{ index: 0, delta: { content: p } }] })}\n\n`)
-      await new Promise((r) => setTimeout(r, pace))
+      await after(n)
     }
     res.write(`data: ${JSON.stringify({ ...named, choices: [{ index: 0, delta: {}, finish_reason: cut ? 'length' : 'stop' }] })}\n\n`)
     res.write(`data: ${JSON.stringify({ ...named, choices: [], usage: { prompt_tokens: shownIn, completion_tokens: outTok } })}\n\n`)
