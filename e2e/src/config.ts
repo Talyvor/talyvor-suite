@@ -26,6 +26,11 @@ export interface RunConfig {
    */
   webhookSecret: string
   /**
+   * B30.133 — LENS_MONEY_SANDBOX_WEBHOOK_SECRET: the secret the money layer's sandbox signs its webhooks with, the same value
+   * Lens boots with, so invoice-pay-link can fund its payer through a payment in; '' funds it with test money instead
+   */
+  moneyWebhookSecret: string
+  /**
    * B30.123 — LENS_OPERATOR_READ_KEY: the narrow operator READ credential Lens boots with, for the daily reconciliation and
    * the safeguarding view; '' leaves daily-reconciliation a SKIP
    */
@@ -194,6 +199,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     moderatorKey: env.LENS_MODERATOR_KEY ?? '',
     adminKey: env.LENS_API_KEY ?? '',
     webhookSecret: env.LENS_STRIPE_TEST_WEBHOOK_SECRET ?? '',
+    moneyWebhookSecret: env.LENS_MONEY_SANDBOX_WEBHOOK_SECRET ?? '',
     operatorReadKey: env.LENS_OPERATOR_READ_KEY ?? '',
     provisionSecret: env.LENS_PROVISION_SECRET ?? '',
     connectMintKey: env.LENS_CONNECT_MINT_KEY ?? '',

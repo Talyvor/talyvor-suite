@@ -9,7 +9,9 @@ import { invoicePayLink } from '../src/invoices.ts'
 // only when it holds what is due: it passes when the unfunded payer is refused 409 and nothing moves, and FAILs when Lens
 // marks the invoice paid without moving the money. B56.28: funded, the payer pays twice, and the issuer is charged its fee
 // for accepting the payment once — the scenario FAILs on a Lens without B56.21, which charges none, and on one that
-// charges it again on the retry.
+// charges it again on the retry. B30.133: the payer's agent is funded through a signed payment in quoting its payment
+// reference; the scenario FAILs when the money lands in the company's account instead, and when Lens marks the invoice
+// paid by a funded agent without moving the money.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -26,10 +28,12 @@ afterEach(() => {
   stub = undefined
 })
 
-async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
+const MONEY_SECRET = 'invoice-money-secret'
+
+async function runAgainstStub(broken: string, moneyWebhookSecret = MONEY_SECRET): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
   const port = await freePort()
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
-    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'invoice-key', STUB_BREAK: broken },
+    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'invoice-key', STUB_BREAK: broken, STUB_MONEY_WEBHOOK_SECRET: MONEY_SECRET },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   await new Promise<void>((resolve, reject) => {
@@ -39,7 +43,7 @@ async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evide
   const lens = new LensClient(`http://127.0.0.1:${port}`, 'invoice-key')
   const evidence: Evidence[] = []
   // The rate stub-lens.ts states at /v1/public/fees, as the run reads it once (B35.7).
-  const ctx = { env: { lens, fees: { merchant_a2a_fee_bps: 100 } }, evidence } as unknown as ScenarioCtx
+  const ctx = { env: { lens, fees: { merchant_a2a_fee_bps: 100 }, moneyWebhookSecret }, evidence } as unknown as ScenarioCtx
   return { verdict: await invoicePayLink().run(ctx), evidence }
 }
 
@@ -49,12 +53,25 @@ describe('invoice-pay-link (B30.130, B56.28)', () => {
     expect(verdict.detail).toBe("a GBP invoice of £145.00 (two lines, 20% VAT on one) issued from the agent's account and sent, with a number, a reference and a pay link; " +
       "its pay page read with no credential, with no notice and no transfer to the Test partner's details, naming no issuer id; " +
       "another company's agent holding £0.00 refused 409; the invoice still sent with £145.00 due and no payment, both agents' accounts still 0; " +
-      'funded with £145.00, the agent paid it twice and was taken once; the issuer charged one acceptance_fee of 145 minor (1%), ' +
-      "shown as the payment's fee_minor, its agent account holding 14355")
+      'funded with £145.00 through a payment in quoting its payment reference, the agent paid it twice and was taken once; ' +
+      "the issuer charged one acceptance_fee of 145 minor (1%), shown as the payment's fee_minor, its agent account holding 14355")
     expect(verdict.pass).toBe(true)
+    expect(evidence.find((e) => e.note?.includes('payment in of 14500'))?.answer).toBe('200 ')
     expect(evidence.find((e) => e.note?.includes('issues and sends'))?.answer).toMatch(/^201 .*"number":"INV-000001"/)
     expect(evidence.find((e) => e.note?.includes('no credential'))?.answer).toMatch(/^200 \{"card":/)
     expect(evidence.find((e) => e.note?.includes('empty GBP account'))?.answer).toMatch(/^refused 409: .*holds GBP 0\.00/)
+  })
+
+  it('without the sandbox webhook secret, funds the payer with test money and says so', async () => {
+    const { verdict } = await runAgainstStub('', '')
+    expect(verdict.pass).toBe(true)
+    expect(verdict.detail).toContain('funded with £145.00 of test money (LENS_MONEY_SANDBOX_WEBHOOK_SECRET not given, so not through a payment in)')
+  })
+
+  it("FAILs when a payment in quoting an agent's payment reference lands in the company's account", async () => {
+    const { verdict } = await runAgainstStub('payment-in-unrouted')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toContain("the agent's must hold 14500 and the company's 0; they hold 0 and 14500")
   })
 
   it('FAILs on a Lens without B56.21, which charges the issuer no fee for accepting the payment', async () => {
@@ -70,9 +87,10 @@ describe('invoice-pay-link (B30.130, B56.28)', () => {
     expect(verdict.detail).toMatch(/exactly one acceptance_fee line of -145 .*; it holds \[.*"amount_minor":-145.*"amount_minor":-145/)
   })
 
-  it('FAILs when Lens marks an invoice paid without moving the money', async () => {
+  it('FAILs when Lens marks an invoice paid by a funded agent without moving the money', async () => {
     const { verdict } = await runAgainstStub('invoice-paid-unmoved')
     expect(verdict).toMatchObject({ pass: false })
-    expect(verdict.detail).toMatch(/^paying an invoice from an account holding 0 must be refused 409; Lens answered 200 /)
+    expect(verdict.detail).toContain("the issuer's agent account holds the total less the fee, 14355; it holds 0")
+    expect(verdict.detail).toContain("the payer's agent account paid all it held and holds 0; it holds 14500")
   })
 }, 60_000)

@@ -401,6 +401,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
       trackSrc: cfg.trackSrc,
       docsSrc: cfg.docsSrc,
       webhookSecret: cfg.webhookSecret,
+      moneyWebhookSecret: cfg.moneyWebhookSecret,
       operatorReadKey: cfg.operatorReadKey,
       provisionSecret: cfg.provisionSecret,
       connectMintKey: cfg.connectMintKey,
