@@ -1228,6 +1228,10 @@ async function stripeWebhook(req: IncomingMessage, res: ServerResponse, secret: 
     return void res.writeHead(400, { 'Content-Type': 'text/plain' }).end('invalid signature\n')
   }
   const sess = event.data?.object ?? {}
+  // B30.139 — an agent card's capture, settled on the account its purchase was held on.
+  if (event.type === 'issuing_transaction.created' && bank.settleCardCapture(event.id ?? '', sess as { type?: string; amount?: number; card?: string; authorization?: string })) {
+    return void res.writeHead(200).end()
+  }
   const paying = event.type === 'checkout.session.async_payment_succeeded' || (event.type === 'checkout.session.completed' && sess.payment_status === 'paid')
   const ws = workspaces.get(sess.metadata?.workspace_id ?? '')
   const cents = sess.amount_total ?? 0

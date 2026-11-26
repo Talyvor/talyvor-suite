@@ -1115,6 +1115,18 @@ export class PayeeDesk {
   onLine: (accountID: string, l: { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string }) => void = () => {}
 
   /** B48.27 — a line on `account`'s wallet ledger, as Lens's wallet activity reads its postings. */
+  /** B30.139 — the agent's open account in `currency`, which its card may draw on (Lens B30.30). */
+  agentAccount(ws: string, agentID: string, currency: string): Account | undefined {
+    return (this.accounts.get(ws) ?? []).find((x) => x.purpose === 'agent' && x.agent_id === agentID && x.currency === currency.toUpperCase() && x.status === 'open')
+  }
+
+  /** B30.139 — `amount` onto agent account `account` as a card's money entry of `kind` (card_hold, card_charge), its line on the statement. */
+  cardPosting(ws: string, account: Account, kind: string, amount: number): void {
+    account.test_minor += amount
+    account.balance_minor += amount
+    this.line(ws, account, kind, amount, `me_${randomUUID()}`)
+  }
+
   private line(ws: string, account: Account, kind: string, amount: number, entryID?: string): void {
     const at = new Date().toISOString()
     this.lines.set(ws, [{ account_id: account.id, ...(account.agent_id === undefined ? {} : { agent_id: account.agent_id }), currency: account.currency, kind,
