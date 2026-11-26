@@ -311,50 +311,81 @@ h1, h2, h3, h4 { font-family: var(--display); }
 }
 
 /* ── B61.70: THE BACKGROUND (Pocket Live, DESIGN.md section 6) ───────────────────────────────────────────────
-   PageBackground.tsx draws it at the top of every page: the logo's streams on one canvas over a satin glass of the page's
-   two colours (--h1, --h2, set by the component). The glass reaches 70% of the window, full to 52% of that and gone by
-   its foot; the streams are 380 px tall, full to 152 px and gone by 380. Only transforms and opacity move, nothing takes
-   a press, and with reduced motion the washes and the sheen stand at their first frame. */
+   PageBackground.tsx draws it: the logo's streams on one canvas over a satin glass of the page's two colours (--h1, --h2,
+   set by the component). B61.125 (section 6.0, Nick 26 Nov: "the background should be across the whole app") — the glass
+   fills the whole window, edge to edge and top to bottom with no fade: it is fixed, so it does not scroll, and the Shell
+   draws it once, behind the sidebar, the top bar and every page. Five washes, from the top to the foot. The streams stay
+   at the top of the page, 380 px tall, full to 152 px and gone by 380, and only they fade and lift as the page scrolls.
+   Only transforms and opacity move, nothing takes a press, and with reduced motion the washes and the sheen stand at
+   their first frame. */
 :root,
 [data-theme='light'] {
-  --bg-wash: 40%;
-  --bg-veil: 22%;
+  --bg-wash: 46%;
+  --bg-veil: 16%;
   --bg-sheen: rgba(255, 255, 255, .5);
   --bg-grain: .38;
   --bg-streams: .5;
+  /* B61.125 — on the glass: cards at the page colour 66% (dark 68%), the third ink one step stronger. */
+  --frost: 66%;
+  --ink-3-glass: #586070;
 }
 
 [data-theme='dark'] {
-  --bg-wash: 34%;
+  --bg-wash: 32%;
   --bg-veil: 12%;
   --bg-sheen: rgba(255, 255, 255, .08);
   --bg-grain: .26;
   --bg-streams: .9;
+  --frost: 68%;
+  --ink-3-glass: #989EAD;
 }
 
+/* B61.125 — the hairlines and the tint, in ink, so they follow the theme of the element they are declared on. */
+:root,
+[data-theme] {
+  --hair: color-mix(in srgb, var(--ink) 6%, transparent);
+  --hair-frost: color-mix(in srgb, var(--ink) 8%, transparent);
+  --hair-side: color-mix(in srgb, var(--ink) 9%, transparent);
+  --tint: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+/* B61.125 — the window's two colours turn to the next page's over 900 ms: registered, so they can be eased. */
+@property --h1 { syntax: "<color>"; inherits: true; initial-value: #FF7A1A; }
+@property --h2 { syntax: "<color>"; inherits: true; initial-value: #2F5BFF; }
+
 .pk-bg {
-  position: absolute; left: 0; right: 0; top: 0; z-index: 0; height: max(70vh, 380px);
+  position: absolute; left: 0; right: 0; top: 0; z-index: 0; height: 380px;
   overflow: hidden; pointer-events: none; user-select: none;
-  /* The Shell's scroll: over the first 80 px the background fades to 45% and lifts 24 px. */
-  opacity: calc(1 - var(--bg-scroll, 0) * .55); transform: translateY(calc(var(--bg-scroll, 0) * -24px));
+  transition: --h1 900ms cubic-bezier(.2, 0, 0, 1), --h2 900ms cubic-bezier(.2, 0, 0, 1);
 }
 .pk-bg-glass {
   /* B61.98 — its own ground of the page colour, as Pocket Live's .glass: the grain's soft-light then blends with the page
-     and the washes. Without it the masked layer blends the grain with nothing, and draws it as grey noise over the page. */
-  position: absolute; left: 0; right: 0; top: 0; height: 70vh; overflow: hidden; background-color: var(--page);
-  -webkit-mask-image: linear-gradient(#000 0, #000 52%, rgba(0, 0, 0, .55) 76%, transparent 100%);
-  mask-image: linear-gradient(#000 0, #000 52%, rgba(0, 0, 0, .55) 76%, transparent 100%);
+     and the washes. B61.125 — the whole window: fixed, so neither the page's scroll nor .pk-bg's 380 px holds it. */
+  position: fixed; inset: 0; overflow: hidden; background-color: var(--page);
 }
-.pk-bg-tint { position: absolute; inset: -14% -6% -8%; overflow: hidden; }
+/* The five washes are parts of a box 112% of the window's width and 126% of its height, from 6% left and 16% above. */
+.pk-bg-tint { position: absolute; inset: -16% -6% -10%; overflow: hidden; }
 .pk-bg-tint i {
   position: absolute; width: 54%; aspect-ratio: 1; border-radius: 50%; will-change: transform, opacity;
   background: radial-gradient(closest-side, color-mix(in srgb, var(--hc) var(--bg-wash), transparent),
     color-mix(in srgb, var(--hc) calc(var(--bg-wash) * .45), transparent) 55%, transparent);
   animation: pk-bg-a 15s ease-in-out infinite alternate;
 }
-.pk-bg-tint .pk-bg-b1 { --hc: var(--h1); left: 50%; top: -30%; }
-.pk-bg-tint .pk-bg-b2 { --hc: var(--h2); left: -2%; top: 2%; opacity: .6; animation-name: pk-bg-b; animation-duration: 19s; }
-.pk-bg-tint .pk-bg-b3 { --hc: color-mix(in srgb, var(--h1) 50%, var(--h2)); left: 30%; top: 30%; width: 48%; opacity: .25; animation-name: pk-bg-c; animation-duration: 24s; }
+.pk-bg-tint .pk-bg-b1 { --hc: var(--h1); left: 54%; top: -34%; }
+.pk-bg-tint .pk-bg-b2 { --hc: var(--h2); left: -12%; top: -22%; opacity: .6; animation-name: pk-bg-b; animation-duration: 19s; }
+.pk-bg-tint .pk-bg-b3 { --hc: color-mix(in srgb, var(--h1) 50%, var(--h2)); left: 22%; top: 10%; width: 50%; opacity: .25; animation-name: pk-bg-c; animation-duration: 24s; }
+.pk-bg-tint .pk-bg-b4 { --hc: var(--h1); left: 58%; top: 42%; opacity: .6; animation-name: pk-bg-b; animation-duration: 21s; animation-delay: -6s; }
+.pk-bg-tint .pk-bg-b5 { --hc: var(--h2); left: -10%; top: 44%; opacity: .25; animation-name: pk-bg-c; animation-duration: 17s; animation-delay: -9s; }
+/* Below 840 the web is laid out as the phone is, and the window's box would leave the narrow screen mostly plain: there
+   the washes take the phone's places (section 6.0), parts of a box 148% of the width and 114% of the height. */
+@media (max-width: 839.98px) {
+  .pk-bg-tint { inset: -8% -24% -6%; }
+  .pk-bg-tint .pk-bg-b1 { width: 72%; left: 44%; top: -8%; }
+  .pk-bg-tint .pk-bg-b2 { width: 74%; left: -12%; top: 12%; }
+  .pk-bg-tint .pk-bg-b3 { width: 70%; left: 30%; top: 34%; }
+  .pk-bg-tint .pk-bg-b4 { width: 76%; left: -14%; top: 54%; }
+  .pk-bg-tint .pk-bg-b5 { width: 74%; left: 36%; top: 70%; }
+}
 @keyframes pk-bg-a { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 50% { transform: translate(-24%, 12%) scale(1.18); opacity: .4; } 100% { transform: translate(8%, -6%) scale(.92); opacity: .95; } }
 @keyframes pk-bg-b { 0% { transform: translate(0, 0) scale(1.05); opacity: .6; } 50% { transform: translate(20%, 14%) scale(.9); opacity: 1; } 100% { transform: translate(34%, -4%) scale(1.12); opacity: .5; } }
 @keyframes pk-bg-c { 0% { transform: translate(0, 0) scale(.9); opacity: .25; } 50% { transform: translate(24%, -12%) scale(1.16); opacity: 1; } 100% { transform: translate(-14%, 8%) scale(1); opacity: .45; } }
@@ -367,11 +398,58 @@ h1, h2, h3, h4 { font-family: var(--display); }
 @keyframes pk-bg-sheen { from { transform: translateX(-10%); } to { transform: translateX(90%); } }
 .pk-bg-grain { position: absolute; inset: 0; background-repeat: repeat; background-size: 128px 128px; opacity: var(--bg-grain); mix-blend-mode: soft-light; }
 .pk-bg-streams {
-  position: absolute; left: 0; right: 0; top: 0; display: block; width: 100%; height: 380px; opacity: var(--bg-streams);
+  /* The Shell's scroll (--bg-scroll, 0 to 1 over the first 80 px): the streams fade to 40% and lift 24 px. */
+  position: absolute; left: 0; right: 0; top: 0; display: block; width: 100%; height: 380px;
+  opacity: calc(var(--bg-streams) * (1 - var(--bg-scroll, 0) * .6)); transform: translateY(calc(var(--bg-scroll, 0) * -24px));
   -webkit-mask-image: linear-gradient(#000 40%, transparent); mask-image: linear-gradient(#000 40%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
   .pk-bg-tint i, .pk-bg-satin::before { animation: none !important; }
+  .pk-bg { transition: none; }
+}
+
+/* B61.125 — glass in place of solid grey, on the window's glass: in the Shell (.pk-glass) and on a page that draws the
+   background itself (sign-in, sign-up, welcome). What was cloud is the page colour at 66% (dark 68%), what was cloud-2
+   the page colour at 50%, and the third ink is one step stronger so small text keeps 4.5 to 1 on colour. Panels, dialogs
+   and the Help box open on the body, outside it, so they keep the solid tokens. Today's names that alias these are
+   declared again here, as a custom property inherits its computed value. */
+:is(.pk-glass, :has(> .pk-bg)) {
+  --cloud: color-mix(in srgb, var(--page) var(--frost), transparent);
+  --cloud-2: color-mix(in srgb, var(--page) 50%, transparent);
+  --ink-3: var(--ink-3-glass);
+  --sidebar: var(--cloud);
+  --faint: var(--ink-3);
+  --label: var(--ink-3);
+  --accent-tint: var(--cloud-2);
+}
+/* Cards, facts and notes: a hairline of ink at 6%, on the glass and in a panel. In a panel they are the page colour at
+   66% too, over its washes. Second-level controls (the grey button, chips, the search, round icon buttons, the account
+   pill, tabs not chosen) a hairline at 8%. :where() keeps these at no weight, so a control's own shadow (a chosen pick's
+   ring) still wins. */
+:where(.pk-glass, :has(> .pk-bg), [data-layer]) :where(.bg-cloud):where(.rounded-card, .rounded-card-tight, .rounded-inset) {
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+[data-layer] :where(.bg-cloud):where(.rounded-card, .rounded-card-tight, .rounded-inset) {
+  --cloud: color-mix(in srgb, var(--page) var(--frost), transparent);
+}
+:where(.pk-glass, :has(> .pk-bg)) :where(.bg-cloud, .bg-cloud-2):where(.rounded-pill, .rounded-control, .rounded-tile) {
+  box-shadow: inset 0 0 0 1px var(--hair-frost);
+}
+/* The web's sidebar beside the page: glass, the page colour at 30% over a 26 px blur, a hairline of ink at 9% on its
+   right edge. As a drawer over the page (below 840, and Chat's) it stays a solid panel. */
+@media (min-width: 840px) {
+  aside.pk-side-glass {
+    background-color: color-mix(in srgb, var(--page) 30%, transparent);
+    -webkit-backdrop-filter: blur(26px) saturate(1.15); backdrop-filter: blur(26px) saturate(1.15);
+    border-right-color: var(--hair-side);
+  }
+}
+/* Panels, dialogs, sheets and the Help box: solid page to read a form on, with a soft wash of the window's first colour
+   from the top right (15%) and its second from the bottom left (13%). */
+[data-layer] > [role='dialog'] > .bg-page,
+[data-layer] > [role='dialog'].bg-page {
+  background-image: radial-gradient(120% 70% at 100% 0%, color-mix(in srgb, var(--h1) 15%, transparent), transparent 62%),
+    radial-gradient(120% 70% at 0% 100%, color-mix(in srgb, var(--h2) 13%, transparent), transparent 62%);
 }
 
 /* B61.98 — small text that sits straight on the background, with no card under it (a page's line under its title,

@@ -6,7 +6,8 @@ import { faceFill, faceOf } from './Face'
 // B61.70 — Pocket Live's background (~/talyvor-queue/design/pocket-live/DESIGN.md section 6): the logo's payment streams
 // flowing into one point at the top right, over a satin glass of the page's two colours. Drawn once, by the Shell and the
 // sign-in frame, so no page can miss it; never on a panel, a dialog or the search, which sit over a page that has it.
-// The glass (three drifting washes, a veil, a sheen and grain) is theme.css's .pk-bg; the streams are one canvas here.
+// The glass (drifting washes, a veil, a sheen and grain) is theme.css's .pk-bg; the streams are one canvas here.
+// B61.125 (section 6.0) — the glass fills the whole window with five washes and stays put; the streams scroll with the page.
 
 /** A page's two colours: Personal tangerine and cobalt, Business cobalt and mint, an agent's page its own colour twice. */
 export type BackgroundHues = readonly [string, string]
@@ -147,13 +148,31 @@ function useStreams(ref: React.RefObject<HTMLCanvasElement | null>, hues: Backgr
 }
 
 /**
- * The background at the top of a page: absolutely placed in its frame, under everything in it. It is aria-hidden and
- * never takes a press (pointer-events: none), so a top-bar button over it answers as it did. With reduced motion the
- * washes and the sheen stand at their first frame and the streams are still.
+ * B61.125 — the window's two colours, on the document too: a panel, a dialog or the Help box opens on the body, outside
+ * the page, and washes itself in them (theme.css [data-layer]).
+ */
+function useWindowHues(hues: BackgroundHues) {
+  const [h1, h2] = hues
+  useEffect(() => {
+    const root = document.documentElement.style
+    root.setProperty('--h1', h1)
+    root.setProperty('--h2', h2)
+    return () => {
+      root.removeProperty('--h1')
+      root.removeProperty('--h2')
+    }
+  }, [h1, h2])
+}
+
+/**
+ * The background: the glass across the whole window (fixed, data-glass) and the streams at the top of the page, under
+ * everything in its frame. It is aria-hidden and never takes a press (pointer-events: none), so a top-bar button over it
+ * answers as it did. With reduced motion the washes and the sheen stand at their first frame and the streams are still.
  */
 export function PageBackground({ hues, className }: PageBackgroundProps) {
   const canvas = useRef<HTMLCanvasElement | null>(null)
   useStreams(canvas, hues)
+  useWindowHues(hues)
   return (
     <div
       aria-hidden="true"
@@ -161,11 +180,13 @@ export function PageBackground({ hues, className }: PageBackgroundProps) {
       className={cn('pk-bg', className)}
       style={{ '--h1': hues[0], '--h2': hues[1] } as React.CSSProperties}
     >
-      <div className="pk-bg-glass">
+      <div className="pk-bg-glass" data-glass="">
         <div className="pk-bg-tint">
           <i className="pk-bg-b1" />
           <i className="pk-bg-b2" />
           <i className="pk-bg-b3" />
+          <i className="pk-bg-b4" />
+          <i className="pk-bg-b5" />
         </div>
         <div className="pk-bg-satin" />
         <i className="pk-bg-grain" style={{ backgroundImage: `url(${GRAIN})` }} />

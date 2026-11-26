@@ -1,0 +1,245 @@
+[
+ {
+  "route": "/"
+ },
+ {
+  "route": "/agents"
+ },
+ {
+  "route": "/cards"
+ },
+ {
+  "route": "/money/pay"
+ },
+ {
+  "route": "/approvals"
+ },
+ {
+  "route": "/activity"
+ },
+ {
+  "route": "/settings"
+ },
+ {
+  "route": "/signin",
+  "answers": {
+   "/auth/me": {
+    "authenticated": false
+   }
+  }
+ },
+ {
+  "route": "/signup",
+  "answers": {
+   "/auth/me": {
+    "authenticated": false
+   }
+  }
+ },
+ {
+  "route": "/welcome",
+  "answers": {
+   "/api/workspace/name": {
+    "id": "ws_nicks_team",
+    "name": ""
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_research?colour=cobalt",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "colour": "cobalt",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_research?colour=orchid",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "colour": "orchid",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_research?colour=sky",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "colour": "sky",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_research?colour=mint",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "colour": "mint",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_research?colour=lemon",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "colour": "lemon",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_research?colour=rose",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "colour": "rose",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_research?colour=lime",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "colour": "lime",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/approvals",
+  "steps": [
+   "Review"
+  ]
+ },
+ {
+  "route": "/?accounts=open"
+ },
+ {
+  "route": "/money/wallets",
+  "steps": [
+   "Add money"
+  ]
+ }
+]

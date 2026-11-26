@@ -5,7 +5,7 @@
   "src/__tests__/invariant.test.ts": 452,
   "src/__tests__/money-roll.test.tsx": 2,
   "src/__tests__/no-arbitrary-value.test.ts": 1,
-  "src/__tests__/page-background.test.tsx": 5,
+  "src/__tests__/page-background.test.tsx": 7,
   "src/__tests__/pocket-identity.test.tsx": 13,
   "src/__tests__/pocket-panel.test.tsx": 4,
   "src/__tests__/pocket.test.tsx": 34,
