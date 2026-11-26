@@ -1367,6 +1367,16 @@ export class PayeeDesk {
       const b: StubBatch = { id: `mpob_${randomUUID()}`, workspace_id: ws, funding: 'test', idempotency_key: key, status: 'awaiting_approval', rows, rows_total: rows.length,
         rows_valid: valid, rows_invalid: rows.length - valid, totals_minor: totals, created_at: now, updated_at: now }
       this.batches.set(ws, [b, ...list])
+      // B30.136 — STUB_BREAK=payout-upload-moved takes the valid rows' total off the account at upload, before any approval.
+      if (this.broken('payout-upload-moved')) {
+        for (const [c, t] of Object.entries(totals)) {
+          const a = accounts.find((x) => x.currency === c && x.purpose === 'company' && x.status === 'open')
+          if (a === undefined) continue
+          a.test_minor -= t
+          a.balance_minor -= t
+          this.line(ws, a, 'payment_out_hold', -t)
+        }
+      }
       return this.json(res, 201, shown(b, true)), true
     }
     const one = /^\/v1\/money\/payouts\/([^/]+)(\/approve)?$/.exec(path)
@@ -1375,11 +1385,14 @@ export class PayeeDesk {
     if (b === undefined) return this.json(res, 404, { error: 'economy: no such payout batch' }), true
     if (one[2] === undefined) return req.method === 'GET' ? (this.json(res, 200, shown(b, true)), true) : false
     if (req.method !== 'POST') return false
-    if (b.status === 'awaiting_approval') {
+    // B30.136 — STUB_BREAK=payout-approved-twice pays a batch already approved again, each row under a key of its own.
+    const twice = b.status !== 'awaiting_approval' && this.broken('payout-approved-twice')
+    if (b.status === 'awaiting_approval' || twice) {
       const now = new Date().toISOString()
       for (const r of b.rows) {
-        if (r.status !== 'valid') continue
-        const p = this.pay(ws, payees, { payee_id: r.payee_id, amount_minor: r.amount_minor, currency: r.currency, reference: r.reference, idempotency_key: `payout:${b.id}:${r.line}` })
+        if (r.status === 'invalid' || r.status === 'failed') continue
+        const p = this.pay(ws, payees, { payee_id: r.payee_id, amount_minor: r.amount_minor, currency: r.currency, reference: r.reference,
+          idempotency_key: `payout:${b.id}:${r.line}${twice ? `:${randomUUID()}` : ''}` })
         if ('error' in p) Object.assign(r, { status: 'failed', detail: p.error })
         else Object.assign(r, { status: p.status, payment_id: p.id })
       }
