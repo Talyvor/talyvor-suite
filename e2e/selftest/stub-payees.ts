@@ -135,6 +135,12 @@
 // one, what arrives through the route's conversion and payments accounts in the payee's currency — and the sums per currency; 409
 // while the payment is not posted. Its defect:
 //   intl-fee-unposted      — the entry takes the amount and the partner's cost out of the hold but leaves the fee there, nothing to revenue
+// B30.138 — and agents' monthly allowances (Lens B30.27): PUT /v1/money/allowances sets one per agent and currency, GET lists them
+// (?agent_id=), GET …/{id}/runs reads each month's run and DELETE …/{id} stops it. tickAllowances, from the Bank's tick as Lens's
+// minute tick runs them, pays each due on its day once a month: with sweep_back, what the agent's account holds goes back to the
+// company's first (allowance_sweep), then the company's account pays the agent's the amount (allowance). Its defects:
+//   allowance-twice        — a month that already ran is paid again when the allowance is stopped and set again
+//   allowance-unfunded     — the agent's account is paid the allowance and the company's is never debited
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createHmac, createPublicKey, randomBytes, randomUUID, timingSafeEqual, verify } from 'node:crypto'
@@ -149,6 +155,24 @@ interface Case { id: string; workspace_id: string; kind: string; subject_kind: s
 /** B30.119 — an alert transaction monitoring raised (monitoring.Alert). */
 interface MonitoringAlert { id: string; case_id: string; workspace_id: string; rule: string; entry_id: string; currency: string; funding: string
   summary: string; entries: string[]; raised_by: string; raised_at: string }
+/** B30.138 — an agent's monthly allowance (economy.MoneyAllowance) and one month of it (economy.MoneyAllowanceRun). */
+interface StubAllowanceRun { allowance_id: string; period: string; swept_minor: number; funded_minor: number; sweep_entry_id?: string; fund_entry_id?: string
+  status: 'funded' | 'refused'; detail?: string; created_at: string }
+interface StubAllowance { id: string; workspace_id: string; agent_id: string; currency: string; amount_minor: number; day_of_month: number; sweep_back: boolean
+  funding: string; next_run_at: string; stopped_at?: string; created_at: string }
+/** B30.138 — the first midnight UTC on `day` of the month that is not before today (Lens's nextAllowanceDay). */
+const nextAllowanceDay = (now: number, day: number): Date => {
+  const n = new Date(now)
+  const t = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), day))
+  if (n.getUTCDate() > day) t.setUTCMonth(t.getUTCMonth() + 1)
+  return t
+}
+/** B30.138 — the same moment a calendar month on (an allowance's day is never past the 28th). */
+const monthOn = (d: Date): Date => {
+  const n = new Date(d)
+  n.setUTCMonth(n.getUTCMonth() + 1)
+  return n
+}
 /** A currency account (economy.CurrencyAccount). */
 interface Account { id: string; workspace_id: string; agent_id?: string; parent_account_id?: string; currency: string; purpose: string; status: string
   name: string; balance_minor: number; test_minor: number; live_minor: number; created_at: string; partner_account_ref?: string }
@@ -289,6 +313,9 @@ export class PayeeDesk {
   private readonly incomes = new Map<string, { payday: number; amount_minor: number; currency: string; payer: string; set_at: string }>()
   private readonly noticeSettings = new Map<string, unknown>()
   private readonly planNotices = new Map<string, Map<string, Record<string, unknown>>>()
+  /** B30.138 — each workspace's agents' allowances, and each allowance's months, the latest first. */
+  private readonly allowances = new Map<string, StubAllowance[]>()
+  private readonly allowanceRuns = new Map<string, StubAllowanceRun[]>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -392,6 +419,7 @@ export class PayeeDesk {
     if (moved !== null && req.method === 'POST') return this.agentFunding(req, res, ws, moved[1]), true
     const stated = /^\/v1\/money\/accounts\/([^/]+)\/statement$/.exec(path)
     if (stated !== null && req.method === 'GET') return this.statement(res, ws, stated[1]), true
+    if (await this.allowanceRoute(req, res, ws, path)) return true
     if (await this.invoiceRoute(req, res, ws, path)) return true
     if (await this.mandateRoute(req, res, ws, path, list)) return true
     if (await this.payoutRoute(req, res, ws, path, list)) return true
@@ -989,6 +1017,98 @@ export class PayeeDesk {
       this.line(ws, a, b.direction === 'to_agent' ? 'agent_funding' : 'agent_funding_back', by)
     }
     return this.json(res, 201, out())
+  }
+
+  /** B30.138 — the allowance routes (Lens B30.27's money_allowances_handler.go), on the owner's key: true when `path` was one of them. */
+  private async allowanceRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const list = this.allowances.get(ws) ?? []
+    if (path === '/v1/money/allowances' && req.method === 'GET') {
+      const agent = new URL(req.url ?? '/', 'http://stub').searchParams.get('agent_id') ?? ''
+      return this.json(res, 200, { allowances: list.filter((a) => agent === '' || a.agent_id === agent) }), true
+    }
+    if (path === '/v1/money/allowances' && req.method === 'PUT') {
+      const b = await this.body<Partial<StubAllowance>>(req)
+      const currency = (b.currency ?? '').trim().toUpperCase()
+      const funding = b.funding || 'test'
+      const amount = b.amount_minor ?? 0
+      const day = b.day_of_month ?? 0
+      if (!['GBP', 'EUR', 'USD'].includes(currency)) return this.json(res, 400, { error: `economy: invalid allowance: an allowance is in GBP, EUR or USD, not "${currency}"` }), true
+      if (!Number.isInteger(amount) || amount <= 0) return this.json(res, 400, { error: 'economy: invalid allowance: the amount must be above zero' }), true
+      if (!Number.isInteger(day) || day < 1 || day > 28) return this.json(res, 400, { error: `economy: invalid allowance: the day of the month is 1 to 28, not ${day}` }), true
+      if (funding !== 'test') return this.json(res, 403, { error: 'economy: Accounts in pounds, euros, dollars and USDC is not cleared for live money' }), true
+      const accounts = this.accounts.get(ws) ?? []
+      const open = (purpose: string) => accounts.some((a) => a.currency === currency && a.purpose === purpose && a.status === 'open' && (purpose === 'company' || a.agent_id === b.agent_id))
+      if (!open('company') || !open('agent')) return this.json(res, 409, { error: `economy: no such money account: open the company's and the agent's ${currency} accounts first` }), true
+      const next = nextAllowanceDay(lensNow(), day).toISOString()
+      let a = list.find((x) => x.agent_id === b.agent_id && x.currency === currency)
+      if (a === undefined) {
+        a = { id: `mal_${randomUUID()}`, workspace_id: ws, agent_id: b.agent_id ?? '', currency, amount_minor: amount, day_of_month: day, sweep_back: b.sweep_back === true,
+          funding, next_run_at: next, created_at: new Date().toISOString() }
+        this.allowances.set(ws, [...list, a])
+      } else {
+        if (a.day_of_month !== day || a.stopped_at !== undefined) a.next_run_at = next
+        Object.assign(a, { amount_minor: amount, day_of_month: day, sweep_back: b.sweep_back === true, funding })
+        delete a.stopped_at
+      }
+      return this.json(res, 200, a), true
+    }
+    const m = /^\/v1\/money\/allowances\/([^/]+)(\/runs)?$/.exec(path)
+    if (m === null) return false
+    const a = list.find((x) => x.id === m[1])
+    if (m[2] === '/runs' && req.method === 'GET') {
+      return a === undefined ? this.json(res, 404, { error: 'economy: no such allowance' }) : this.json(res, 200, { runs: this.allowanceRuns.get(a.id) ?? [] }), true
+    }
+    if (m[2] !== undefined || req.method !== 'DELETE') return false
+    if (a === undefined) return this.json(res, 404, { error: 'economy: no such allowance' }), true
+    a.stopped_at ??= new Date().toISOString()
+    return res.writeHead(204).end(), true
+  }
+
+  /**
+   * B30.138 — Lens's RunMoneyAllowances at `now`: each allowance due runs its latest month due once (a month that has a run is not run
+   * again), sweeping back what the agent's account holds when sweep_back is on, then paying the agent's account the amount from the
+   * company's, or refusing the month when the company's holds less; either way it next runs a month on.
+   */
+  tickAllowances(now = lensNow()): void {
+    for (const [ws, list] of this.allowances) {
+      for (const a of list) {
+        if (a.stopped_at !== undefined || Date.parse(a.next_run_at) > now) continue
+        let due = new Date(a.next_run_at)
+        while (monthOn(due).getTime() <= now) due = monthOn(due)
+        const period = due.toISOString().slice(0, 7)
+        const runs = this.allowanceRuns.get(a.id) ?? []
+        if (!runs.some((r) => r.period === period) || this.broken('allowance-twice')) this.allowanceRuns.set(a.id, [this.payAllowance(ws, a, period), ...runs])
+        a.next_run_at = monthOn(due).toISOString()
+      }
+    }
+  }
+
+  /** B30.138 — one month of allowance `a` (Lens's payMoneyAllowance): the sweep back, then the allowance paid in, each an entry on both accounts. */
+  private payAllowance(ws: string, a: StubAllowance, period: string): StubAllowanceRun {
+    const run: StubAllowanceRun = { allowance_id: a.id, period, swept_minor: 0, funded_minor: 0, status: 'refused', created_at: new Date().toISOString() }
+    const accounts = this.accounts.get(ws) ?? []
+    const company = accounts.find((x) => x.currency === a.currency && x.purpose === 'company' && x.status === 'open')
+    const agent = accounts.find((x) => x.currency === a.currency && x.purpose === 'agent' && x.agent_id === a.agent_id && x.status === 'open')
+    if (company === undefined || agent === undefined) return { ...run, detail: `the company's or the agent's ${a.currency} account is not open` }
+    const move = (from: Account | undefined, to: Account, amount: number, kind: string): string => {
+      const entry = `me_${randomUUID()}`
+      for (const [x, by] of [[from, -amount], [to, amount]] as const) {
+        if (x === undefined) continue
+        x.test_minor += by
+        x.balance_minor += by
+        this.line(ws, x, kind, by, entry)
+      }
+      return entry
+    }
+    if (a.sweep_back && agent.test_minor > 0) {
+      run.swept_minor = agent.test_minor
+      run.sweep_entry_id = move(agent, company, agent.test_minor, 'allowance_sweep')
+    }
+    if (company.test_minor < a.amount_minor) {
+      return { ...run, detail: `the company's ${a.currency} account holds ${money(company.test_minor, a.currency)}, less than the allowance of ${money(a.amount_minor, a.currency)}` }
+    }
+    run.fund_entry_id = move(this.broken('allowance-unfunded') ? undefined : company, agent, a.amount_minor, 'allowance')
+    return { ...run, status: 'funded', funded_minor: a.amount_minor }
   }
 
   /** B56.28 — each posting as a statement line, for an account statement kept elsewhere (stub-launch.ts). */

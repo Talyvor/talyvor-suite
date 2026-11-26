@@ -177,6 +177,7 @@ import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from '
 import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
 import { decidedLaddersVerdict, planChange, pricingApproved } from './planLadders.ts'
 import { standingOrders } from './standingOrders.ts'
+import { allowances } from './allowances.ts'
 
 export interface Evidence {
   note?: string
@@ -5510,6 +5511,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B30.132 — a weekly £20.00 standing order from an agent's own account to a saved payee, once a run, on a workspace of its own:
   // Lens's minute ticker pays its due tick once as a payment out on the ledger, a skipped tick moves nothing, then it is cancelled.
   if (i === 3) list.push(standingOrders())
+  // B30.138 — an agent's £20.00 monthly allowance with sweep-back, once a run, on a workspace of its own: Lens's minute tick pays
+  // it on today's day once, the agent's own £7.50 swept back first, on both accounts' statements; set again after it was stopped,
+  // the month pays nothing twice. A SKIP on the 29th to the 31st, when no allowance is due.
+  if (i === 3) list.push(allowances())
   // B30.130 — invoices and pay links, once a run, on two workspaces of its own: an agent issues and sends a GBP invoice with VAT; its
   // pay page reads with no credential, test money only, quoting the agent's payment reference and naming no issuer id; another
   // company's unfunded agent is refused 409 through the link and nothing moves.
