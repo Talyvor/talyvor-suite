@@ -950,6 +950,11 @@ export class Bank {
     return this.payees.payPage(req, res, path)
   }
 
+  /** B30.133 — a payment in through the money layer sandbox's signed webhook, which carries no credential (stub-payees.ts). */
+  moneyWebhook(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
+    return this.payees.moneyWebhook(req, res, path)
+  }
+
   async kyaPublic(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
     return this.kya.route(req, res, path)
   }

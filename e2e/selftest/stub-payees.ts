@@ -13,11 +13,16 @@
 // /v1/money/accounts/{id}/details, Lens B30.14), the invoices it issues (POST and GET /v1/money/invoices, Lens B30.20), the pay
 // page anyone with the link reads (GET /v1/pay/{token}) and another agent paying it from its account in the currency (POST
 // /v1/pay/{token}/agent), which moves test money from the payer's account into the issuer's. Its defect:
-//   invoice-paid-unmoved   — an agent's payment marks the invoice paid without asking what the payer holds or moving money
+//   invoice-paid-unmoved   — an agent holding what is due pays, and the invoice is marked paid but no account moves
 // B56.28 — and Talyvor's fee for accepting it (Lens B56.21): the agent's payment charges the issuer's account
 // merchant_a2a_fee_bps of it once, as an acceptance_fee posting and as the payment's fee_minor; a retry answers the payment
 // made and moves nothing again; GET /v1/money/accounts/{id}/statement reads the account's postings. Its defects:
 //   acceptance-fee-uncharged — a Lens without B56.21: no fee is charged and the payment carries no fee_minor
+// B30.133 — and money in through the money layer sandbox's webhook (POST /v1/money/webhooks/sandbox, Lens B46.3 and B30.15),
+// signed in Talyvor-Sandbox-Signature with STUB_MONEY_WEBHOOK_SECRET: to the company account at the partner it names
+// (partner_account_ref), into the agent account under it whose payment reference the payer quoted. 401 unsigned, 409 an id
+// already taken, 422 no account at that ref. Its defect:
+//   payment-in-unrouted    — the quoted payment reference is ignored and the money lands in the company's account
 //   acceptance-fee-twice     — a retry pays nothing again but charges the fee again
 // B30.97 adds the pay page's card (POST /v1/pay/{token}/card: a checkout URL, served here as /stub-invoice-checkout/{token} with
 // Stripe's field ids; the 4242 card posts what is due into the issuer's account and sends the browser back to the pay link with
@@ -120,7 +125,7 @@
 //   intl-fee-off-ledger    — the payment takes only its amount from the account, not the partner's cost and the fee
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
+import { createHash, createHmac, createPublicKey, randomBytes, randomUUID, timingSafeEqual, verify } from 'node:crypto'
 import { FLAGGED_ADDRESS, VASP_ADDRESS, proofMessage, signerOf } from '../src/screeningTravelRule.ts'
 
 interface Payee { id: string; workspace_id: string; name: string; country: string; check: string; suggested_name?: string; checked_by: string
@@ -134,7 +139,7 @@ interface MonitoringAlert { id: string; case_id: string; workspace_id: string; r
   summary: string; entries: string[]; raised_by: string; raised_at: string }
 /** A currency account (economy.CurrencyAccount). */
 interface Account { id: string; workspace_id: string; agent_id?: string; parent_account_id?: string; currency: string; purpose: string; status: string
-  name: string; balance_minor: number; test_minor: number; live_minor: number; created_at: string }
+  name: string; balance_minor: number; test_minor: number; live_minor: number; created_at: string; partner_account_ref?: string }
 /** One line of an invoice and its VAT (economy.InvoiceLine). */
 interface Line { description: string; quantity: number; unit_amount_minor: number; vat_rate_bps: number; net_minor: number; vat_minor: number }
 /** An invoice as its issuer reads it (economy.Invoice). */
@@ -190,6 +195,8 @@ const DETAILS_NOTICE = 'Call them on a number you already know — not one from 
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
 /** B56.28 — Talyvor's fee for accepting a payment from an account, as stub-lens.ts states it at /v1/public/fees. */
 const A2A_FEE_BPS = 100
+/** B30.133 — the secret the money layer sandbox signs its webhooks with (Lens LENS_MONEY_SANDBOX_WEBHOOK_SECRET); the self-test gives the harness it too. */
+const MONEY_WEBHOOK_SECRET = process.env.STUB_MONEY_WEBHOOK_SECRET ?? 'selftest-money'
 /** B30.127 — what a minor unit is worth in µLXC at the Test rate, as the agent's rules count a payment out: £100.00 is 1,250 LXC. */
 const ULXC_PER_MINOR: Record<string, number> = { GBP: 125_000 }
 /** B30.135 — Talyvor's fee for an international payment by sending currency, as stub-lens.ts states it at /v1/public/fees (Lens's fees.go). */
@@ -229,6 +236,8 @@ export class PayeeDesk {
   private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string; entry_id?: string }[]>()
   /** B56.28 — each invoice's payment by an agent account, by `${invoice id}\n${account id}`: a retry answers it. */
   private readonly invoicePaidBy = new Map<string, unknown>()
+  /** B30.133 — the sandbox webhook ids taken. */
+  private readonly moneyEvents = new Set<string>()
   private readonly proved = new Set<string>()
   private readonly cases: Case[] = []
   /** B30.119 — each workspace's payments out through the partner, as monitoring judges them, and the alerts it raised. */
@@ -848,7 +857,8 @@ export class PayeeDesk {
         return this.json(res, 409, { error: `economy: an agent's account is a sub-account of its company's: open the company's account in this currency first (${currency})` })
       }
       const a: Account = { id: `macc_${randomUUID()}`, workspace_id: ws, ...(agentID === '' ? {} : { agent_id: agentID, parent_account_id: company?.id }), currency,
-        purpose: agentID === '' ? 'company' : 'agent', status: 'open', name: `${currency} account`, balance_minor: 0, test_minor: 0, live_minor: 0, created_at: new Date().toISOString() }
+        purpose: agentID === '' ? 'company' : 'agent', status: 'open', name: `${currency} account`, balance_minor: 0, test_minor: 0, live_minor: 0, created_at: new Date().toISOString(),
+        ...(agentID === '' ? { partner_account_ref: `test_acct_${randomBytes(8).toString('hex')}` } : {}) }
       if (agentID !== '') this.references.set(a.id, 'TLV' + randomBytes(6).toString('hex').toUpperCase())
       this.accounts.set(ws, [...accounts, a])
       return this.json(res, 201, a)
@@ -1465,12 +1475,12 @@ export class PayeeDesk {
     const now = new Date().toISOString()
     const entry = { id: `me_${randomUUID()}`, workspace_id: ws, kind: 'invoice_payment', funding: 'test', amount_minor: inv.due_minor, currency: inv.currency, created_at: now }
     let fee: number | undefined
-    // STUB_BREAK=invoice-paid-unmoved — the invoice is marked paid without asking what the payer holds, and no account moves.
+    if (from.test_minor < inv.due_minor) {
+      return this.json(res, 409, { error: `economy: the account does not hold enough to pay this invoice: it holds ${money(from.test_minor, inv.currency)} of test money, ` +
+        `and ${money(inv.due_minor, inv.currency)} is due` }), true
+    }
+    // STUB_BREAK=invoice-paid-unmoved — the payer holds what is due, and the invoice is marked paid, but no account moves.
     if (!this.broken('invoice-paid-unmoved')) {
-      if (from.test_minor < inv.due_minor) {
-        return this.json(res, 409, { error: `economy: the account does not hold enough to pay this invoice: it holds ${money(from.test_minor, inv.currency)} of test money, ` +
-          `and ${money(inv.due_minor, inv.currency)} is due` }), true
-      }
       from.test_minor -= inv.due_minor
       from.balance_minor -= inv.due_minor
       this.line(ws, from, 'invoice_payment', -inv.due_minor, entry.id)
@@ -1486,6 +1496,36 @@ export class PayeeDesk {
     this.invoicePaidBy.set(madeKey, entry)
     Object.assign(inv, { paid_minor: inv.total_minor, due_minor: 0, status: 'paid', paid_at: now })
     return this.json(res, 200, { invoice: this.invoice(inv), entry }), true
+  }
+
+  /** B30.133 — POST /v1/money/webhooks/sandbox: a payment in the money layer's sandbox signed, with no credential (Lens money.ServeWebhook). */
+  async moneyWebhook(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
+    if (path !== '/v1/money/webhooks/sandbox' || req.method !== 'POST') return false
+    const chunks: Buffer[] = []
+    for await (const c of req) chunks.push(c as Buffer)
+    const body = Buffer.concat(chunks).toString('utf8')
+    const parts = Object.fromEntries(String(req.headers['talyvor-sandbox-signature'] ?? '').split(',').map((x) => x.trim().split('=', 2)))
+    const want = createHmac('sha256', MONEY_WEBHOOK_SECRET).update(`${parts.t ?? ''}.${body}`).digest()
+    const got = Buffer.from(String(parts.v1 ?? ''), 'hex')
+    if (Math.abs(Date.now() / 1000 - Number(parts.t)) > 300 || got.length !== want.length || !timingSafeEqual(got, want)) {
+      return res.writeHead(401).end('signature does not verify'), true
+    }
+    const e = JSON.parse(body) as { id?: string; to?: string; amount?: { amount_minor?: number; asset?: string }; partner_ref?: string; payer?: string; reference?: string }
+    const amount = e.amount?.amount_minor ?? 0
+    if (!e.id || !e.partner_ref || !e.to || !Number.isInteger(amount) || amount <= 0 || !e.amount?.asset) return res.writeHead(400).end('the notification is incomplete'), true
+    if (this.moneyEvents.has(e.id)) return res.writeHead(409).end('this notification was already taken'), true
+    const company = [...this.accounts.values()].flat().find((a) => a.purpose === 'company' && a.partner_account_ref === e.to && a.currency === e.amount?.asset)
+    if (company === undefined) return res.writeHead(422).end('not posted'), true
+    const quoted = /TLV[0-9A-F]{12}/.exec((e.reference ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''))?.[0]
+    const agent = quoted === undefined ? undefined
+      : (this.accounts.get(company.workspace_id) ?? []).find((a) => a.parent_account_id === company.id && this.references.get(a.id) === quoted)
+    // STUB_BREAK=payment-in-unrouted — the payment reference the payer quoted is ignored: the money lands in the company's account.
+    const to = agent !== undefined && !this.broken('payment-in-unrouted') ? agent : company
+    this.moneyEvents.add(e.id)
+    to.test_minor += amount
+    to.balance_minor += amount
+    this.line(company.workspace_id, to, 'payment_in', amount)
+    return res.writeHead(200).end(), true
   }
 
   /** B30.20 — the pay page behind an invoice's link, read with no credential: the invoice without the issuer's ids, how to pay it.

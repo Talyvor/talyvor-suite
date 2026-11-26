@@ -12,8 +12,13 @@
 // agent account's statement holds the payment in and exactly one acceptance_fee line of merchant_a2a_fee_bps of the
 // total, as Lens states the rate (GET /v1/public/fees), the invoice reads paid with that fee_minor on its one payment,
 // and the issuer's agent account holds the total less the fee, the payer's nothing.
+//
+// B30.133 — the payer's agent is funded through payments in (Lens B30.15): a payment of the total, signed as the money
+// layer's sandbox signs its webhooks (LENS_MONEY_SANDBOX_WEBHOOK_SECRET), arrives at the payer company's account at the
+// partner quoting the agent account's payment reference, and must land in the agent's account, not the company's. Without
+// the secret the payer's company puts the total in with test money and gives it to its agent, and the detail says so.
 
-import { randomBytes } from 'node:crypto'
+import { createHmac, randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
 import { BPS, percent } from './fees.ts'
 import type { Answered, SyntheticUser, WorkspaceTerms } from './lens.ts'
@@ -21,7 +26,8 @@ import { said } from './routes.ts'
 import type { Scenario } from './scenarios.ts'
 
 /** A currency account as Lens answers it (economy.CurrencyAccount). */
-interface Account { id: string; agent_id?: string; currency: string; purpose: string; balance_minor: number; test_minor: number; live_minor: number }
+interface Account { id: string; agent_id?: string; currency: string; purpose: string; balance_minor: number; test_minor: number; live_minor: number
+  partner_account_ref?: string }
 /** An invoice as its issuer reads it (economy.Invoice); the pay page shows it without the issuer's ids. */
 interface Invoice { id: string; workspace_id?: string; agent_id?: string; account_id?: string; number: string; reference: string; pay_token?: string; pay_url?: string
   currency: string; subtotal_minor: number; vat_minor: number; total_minor: number; paid_minor: number; due_minor: number; status: string; payments?: InvoicePayment[] | null }
@@ -43,6 +49,14 @@ const VAT = 2000
 const TOTAL = SUBTOTAL + VAT
 /** An agent account's payment reference (talyvor-lens economy.paymentReference). */
 const PAYMENT_REFERENCE = /TLV[0-9A-F]{12}/
+/** B30.133 — the money layer sandbox's webhook (talyvor-lens money.ServeWebhook) and the header it is signed in. */
+const SANDBOX_WEBHOOK = '/v1/money/webhooks/sandbox'
+const SANDBOX_SIGNATURE = 'Talyvor-Sandbox-Signature'
+
+/** B30.133 — the Talyvor-Sandbox-Signature of `body` at `seconds`, as talyvor-lens money.SignSandbox makes it. */
+export function signSandbox(secret: string, body: string, seconds = Math.floor(Date.now() / 1000)): string {
+  return `t=${seconds},v1=${createHmac('sha256', secret).update(`${seconds}.${body}`).digest('hex')}`
+}
 
 /** Talyvor's fee for accepting a payment of `amountMinor` from an account at `bps`, as Lens charges it (economy.partOf):
  * to the nearest minor unit, a half up, and never more than the payment. */
@@ -89,10 +103,10 @@ export function invoicePayLink(): Scenario {
     owner: 'talyvor-lens',
     own: true,
     feature: 'Agent Wallets',
-    items: ['B30.20', 'B56.21', 'B56.28'],
+    items: ['B30.20', 'B56.21', 'B56.28', 'B30.133'],
     title: 'invoices and pay links: an agent issues and sends a GBP invoice with VAT; its pay page reads with no credential, ' +
       "with no notice and no transfer to the Test partner's details, naming no issuer id; another company's unfunded agent is refused 409 and nothing moves; " +
-      'funded, it pays, and the issuer is charged its fee for accepting the payment once, on its statement and on the payment',
+      'funded through a payment in quoting its payment reference, it pays, and the issuer is charged its fee for accepting the payment once, on its statement and on the payment',
     run: async (ctx) => {
       const { lens, fees } = ctx.env
       const [issuer, payer] = await lens.createUsers(2)
@@ -181,13 +195,41 @@ export function invoicePayLink(): Scenario {
         }
       }
 
-      // B56.28 — the payer's company puts the total in and gives it to its agent, which pays, then pays again (a retry).
-      const topped = await call(payer, 'POST', `/v1/money/accounts/${paying.company.id}/test-money`, { amount_minor: TOTAL, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` },
-        `the payer puts ${TOTAL} minor of Sandbox money in the company's GBP account`)
-      if (topped.status !== 201) return fail(`putting ${TOTAL} minor in the payer's company GBP account must answer 201; Lens answered ${said(topped)}`)
-      const given = await call(payer, 'POST', `/v1/money/accounts/${paying.account.id}/funding`, { direction: 'to_agent', amount_minor: TOTAL, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` },
-        `the payer gives its agent ${TOTAL} minor from the company's account`)
-      if (given.status !== 201) return fail(`giving the payer's agent ${TOTAL} minor must answer 201; Lens answered ${said(given)}`)
+      // B30.133 — the payer's agent is funded through payments in, quoting its payment reference; without the sandbox's
+      // webhook secret, B56.28's way: the payer's company puts the total in and gives it to its agent.
+      const secret = ctx.env.moneyWebhookSecret ?? ''
+      let funded: string
+      if (secret !== '') {
+        const quoted = await call<{ payment_reference?: string }>(payer, 'GET', `/v1/money/accounts/${paying.account.id}/details`, undefined,
+          "the payer reads its agent account's details")
+        const reference = quoted.ok ? quoted.value.payment_reference ?? '' : ''
+        if (!PAYMENT_REFERENCE.test(reference)) return fail(`the payer's agent account's details carry a TLV payment reference; Lens answered ${said(quoted)}`)
+        const at = paying.company.partner_account_ref ?? ''
+        if (at === '') return fail(`a company's GBP account names its account at the partner (partner_account_ref); Lens opened ${JSON.stringify(paying.company)}`)
+        const id = randomBytes(8).toString('hex')
+        const body = JSON.stringify({ id: `e2e-evt-${id}`, to: at, amount: { amount_minor: TOTAL, asset: 'GBP' }, partner_ref: `e2e-pay-${id}`,
+          payer: 'Nightly Payer Ltd', reference: `Funding ${reference}` })
+        const got = await lens.webhook(SANDBOX_WEBHOOK, body, signSandbox(secret, body), SANDBOX_SIGNATURE)
+        ctx.evidence.push({ note: `a payment in of ${TOTAL} minor arrives at the payer company's account quoting its agent's payment reference`, answer: `${got.status} ${got.text}` })
+        if (got.status !== 200) return fail(`a signed payment in to the payer company's account must answer 200; Lens answered ${got.status}: ${got.text}`)
+        const accounts = await call<{ accounts: Account[] | null }>(payer, 'GET', '/v1/money/accounts', undefined, 'the payer lists the accounts once the payment is in')
+        const list = accounts.ok ? accounts.value.accounts ?? [] : []
+        const agentHolds = list.find((x) => x.id === paying.account.id)?.test_minor
+        const companyHolds = list.find((x) => x.id === paying.company.id)?.test_minor
+        if (agentHolds !== TOTAL || companyHolds !== 0) {
+          return fail(`a payment in quoting an agent account's payment reference lands in that agent's account: the agent's must hold ${TOTAL} and the company's 0; ` +
+            `they hold ${agentHolds} and ${companyHolds}`)
+        }
+        funded = `funded with £145.00 through a payment in quoting its payment reference`
+      } else {
+        const topped = await call(payer, 'POST', `/v1/money/accounts/${paying.company.id}/test-money`, { amount_minor: TOTAL, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` },
+          `the payer puts ${TOTAL} minor of Sandbox money in the company's GBP account`)
+        if (topped.status !== 201) return fail(`putting ${TOTAL} minor in the payer's company GBP account must answer 201; Lens answered ${said(topped)}`)
+        const given = await call(payer, 'POST', `/v1/money/accounts/${paying.account.id}/funding`, { direction: 'to_agent', amount_minor: TOTAL, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` },
+          `the payer gives its agent ${TOTAL} minor from the company's account`)
+        if (given.status !== 201) return fail(`giving the payer's agent ${TOTAL} minor must answer 201; Lens answered ${said(given)}`)
+        funded = 'funded with £145.00 of test money (LENS_MONEY_SANDBOX_WEBHOOK_SECRET not given, so not through a payment in)'
+      }
       for (const attempt of ['pays the invoice', 'pays it again, a retry']) {
         const ok = await call<{ invoice: Invoice }>(payer, 'POST', `/v1/pay/${token}/agent`, { agent_id: paying.agent }, `the payer's agent ${attempt}`)
         if (ok.status !== 200 || !ok.ok) return fail(`the payer's agent holding ${TOTAL} ${attempt}: Lens must answer 200; it answered ${said(ok)}`)
@@ -216,7 +258,7 @@ export function invoicePayLink(): Scenario {
         detail: "a GBP invoice of £145.00 (two lines, 20% VAT on one) issued from the agent's account and sent, with a number, a reference and a pay link; " +
           "its pay page read with no credential, with no notice and no transfer to the Test partner's details, naming no issuer id; " +
           "another company's agent holding £0.00 refused 409; the invoice still sent with £145.00 due and no payment, both agents' accounts still 0; " +
-          `funded with £145.00, the agent paid it twice and was taken once; the issuer charged one acceptance_fee of ${fee} minor (${percent(bps ?? 0)}), ` +
+          `${funded}, the agent paid it twice and was taken once; the issuer charged one acceptance_fee of ${fee} minor (${percent(bps ?? 0)}), ` +
           `shown as the payment's fee_minor, its agent account holding ${TOTAL - fee}`,
       }
     },

@@ -223,6 +223,8 @@ export interface RunEnv {
   docsSrc: string
   /** B28.280 — the signing secret of Lens's test-mode Stripe webhook (LENS_STRIPE_TEST_WEBHOOK_SECRET); '' when not given. */
   webhookSecret: string
+  /** B30.133 — the money layer sandbox's webhook secret (LENS_MONEY_SANDBOX_WEBHOOK_SECRET); '' when not given. */
+  moneyWebhookSecret: string
   /** B30.123 — Lens's operator read key (LENS_OPERATOR_READ_KEY), for the reconciliation and safeguarding reads; '' when not given. */
   operatorReadKey: string
   /** B45.36 — the BFF's provisioning secret (LENS_PROVISION_SECRET), for a fresh identity's first sign-in; '' when not given. */
