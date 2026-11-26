@@ -976,6 +976,33 @@ export class PayeeDesk {
     return 'error' in p ? this.json(res, p.status, { error: p.error }) : this.json(res, 201, p)
   }
 
+  /**
+   * B30.132 — one tick of a standing order (Lens B30.18): a payment out from agent `agentID`'s own account in the currency, judged
+   * by its rules as agentPay judges one, under the tick's key, so a tick run twice pays once. STUB_BREAK=standing-order-unrecorded
+   * takes the amount from the account and makes no payment, answering a payment id nothing has.
+   */
+  standingOrderTick(ws: string, agentID: string, b: { payee_id: string; amount_minor: number; currency: string; reference: string; idempotency_key: string }): Payment | { status: number; error: string } {
+    const account = (this.accounts.get(ws) ?? []).find((a) => a.agent_id === agentID && a.currency === b.currency)
+    if (account === undefined) return { status: 404, error: `economy: no such money account: no ${b.currency} account to pay from` }
+    const again = (this.payments.get(ws) ?? []).find((p) => p.idempotency_key === b.idempotency_key)
+    if (again !== undefined) return again
+    const perMinor = ULXC_PER_MINOR[b.currency]
+    if (perMinor !== undefined) {
+      const fingerprint = ['payment_out', agentID, account.id, b.payee_id, b.amount_minor, b.currency, 'test', b.reference].join('\0')
+      const payee = (this.payees.get(ws) ?? []).find((x) => x.id === b.payee_id)
+      const refused = this.judgeAgentPayment(ws, agentID, b.amount_minor * perMinor, fingerprint, `${money(b.amount_minor, b.currency)} to ${payee?.name ?? 'a payee'} (test money) — ${b.reference}`)
+      if (refused !== undefined) return refused
+    }
+    if (this.broken('standing-order-unrecorded')) {
+      account.test_minor -= b.amount_minor
+      account.balance_minor -= b.amount_minor
+      this.line(ws, account, 'payment_out_hold', -b.amount_minor)
+      return { id: `mpay_${randomUUID()}`, workspace_id: ws, account_id: account.id, payee_id: b.payee_id, payee_name: '', amount_minor: b.amount_minor, currency: b.currency,
+        funding: 'test', reference: b.reference, idempotency_key: b.idempotency_key, status: 'completed', created_at: new Date().toISOString() }
+    }
+    return this.pay(ws, this.payees.get(ws) ?? [], { ...b, account_id: account.id })
+  }
+
   /** B30.127 — payment `p` as the Test partner has it now: a completed one whose minor units end in 14 came back, its money in the account again. */
   private refresh(ws: string, p: Payment): void {
     if (p.status !== 'completed' || p.amount_minor % 100 !== 14) return

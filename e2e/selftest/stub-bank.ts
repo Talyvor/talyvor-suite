@@ -21,6 +21,8 @@
 //   escrow-dispute-pays — disputing an escrow pays the payee anyway
 //   pot-out-lost        — moving credits out of a pot empties it into nothing
 //   schedule-twice      — each run of a recurring transfer pays twice
+//   standing-order-twice — B30.132: a standing order's tick to an outside payee pays twice, the second under another key
+//   standing-order-skip-pays — B30.132: a skipped tick of a standing order is paid anyway
 //   cash-out-free       — a cash-out is paid without holding the credits from the agent
 //   cash-out-unsigned   — B28.67: in a workspace with a passkey, a cash-out with no signature is held and paid anyway
 //   lockdown-keeps-key  — B28.68: a lost phone's lockdown leaves the phone's key signing
@@ -398,8 +400,8 @@ interface Escrow {
 interface Pot { id: string; agent_id: string; name: string; kind: string; target_ulxc?: number; locked_until?: string; created_at: string }
 interface Schedule {
   id: string; ws: string; from_agent_id: string; to_agent_id: string; amount_ulxc: number; memo: string; every: string; next_run_at: string; active: boolean
-  created_at: string; runs: { tick_at: string; outcome: 'paid' | 'refused'; entry_id?: string; detail?: string; created_at: string }[]
-  /** B30.96 — a standing order to a saved outside payee (Lens B30.18): amount_minor of currency a tick until end_at. Its ticks are not run here. */
+  created_at: string; runs: { tick_at: string; outcome: 'paid' | 'refused' | 'skipped'; entry_id?: string; payment_id?: string; detail?: string; created_at: string }[]
+  /** B30.96 — a standing order to a saved outside payee (Lens B30.18): amount_minor of currency a tick until end_at. B30.132: tick() pays each tick as a payment out. */
   to_payee_id?: string; amount_minor?: number; currency?: string; end_at?: string
 }
 interface CashOut {
@@ -1691,6 +1693,28 @@ export class Bank {
   }
 
   /** Lens's minute tick (cmd/lens): every recurring transfer due, every loan instalment due, then every cash-out's next step. */
+  /**
+   * B30.132 — one tick of standing order `sc` (Lens B30.18's runScheduleTick): a payment out from its agent's own account under
+   * the tick's key schedule:<id>:<tick>, its run naming the payment, then (`advance`) the order moved on a period, ended past end_at.
+   */
+  private standingOrderTick(sc: Schedule, now: number, advance = true): void {
+    const at = new Date(Date.parse(sc.next_run_at)).toISOString().replace('.000Z', 'Z')
+    for (let n = this.broken('standing-order-twice') ? 2 : 1; n > 0; n--) {
+      const p = this.payees.standingOrderTick(sc.ws, sc.from_agent_id, { payee_id: sc.to_payee_id ?? '', amount_minor: sc.amount_minor ?? 0, currency: sc.currency ?? '',
+        reference: sc.memo, idempotency_key: `schedule:${sc.id}:${at}${n === 2 ? ':again' : ''}` })
+      if (!advance) continue
+      sc.runs.unshift('id' in p ? { tick_at: sc.next_run_at, outcome: 'paid', payment_id: p.id, detail: p.status, created_at: new Date(now).toISOString() }
+        : { tick_at: sc.next_run_at, outcome: 'refused', detail: p.error, created_at: new Date(now).toISOString() })
+    }
+    if (advance) this.advance(sc)
+  }
+
+  /** B30.132 — schedule `sc` on to its next tick; for a standing order, one past end_at ends it (Lens's advanceSchedule). */
+  private advance(sc: Schedule): void {
+    sc.next_run_at = new Date(Date.parse(sc.next_run_at) + (PERIOD_MS[sc.every] ?? PERIOD_MS.month)).toISOString()
+    if (sc.end_at !== undefined && Date.parse(sc.next_run_at) > Date.parse(sc.end_at)) sc.active = false
+  }
+
   tick(now = Date.now()): void {
     // B32.75 — every paid use's share, due at once (a test bill is paid a holdback ago), released from the journal's holdback.
     for (const u of this.uses) if (u.cleared_at !== undefined && u.released_at === undefined) u.released_at = new Date(now).toISOString()
@@ -1724,7 +1748,10 @@ export class Bank {
       }
     }
     for (const sc of this.schedules) {
-      if (sc.to_payee_id !== undefined) continue
+      if (sc.to_payee_id !== undefined) {
+        while (sc.active && Date.parse(sc.next_run_at) <= now) this.standingOrderTick(sc, now)
+        continue
+      }
       while (sc.active && Date.parse(sc.next_run_at) <= now) {
         const from = this.agents.get(sc.from_agent_id)
         const to = this.agents.get(sc.to_agent_id)
@@ -2311,10 +2338,19 @@ export class Bank {
       return json(res, 200, e), true
     }
     if (rest === '/cash-outs' && method === 'GET') return json(res, 200, { cash_outs: this.cashOuts.filter((c) => c.workspace_id === ws.id) }), true
-    if ((m = /^\/agents\/schedules\/([^/]+)(\/runs)?$/.exec(rest)) !== null) {
+    if ((m = /^\/agents\/schedules\/([^/]+)(\/runs|\/skip)?$/.exec(rest)) !== null) {
       const sc = this.schedules.find((x) => x.id === m?.[1] && x.ws === ws.id)
       if (sc === undefined) return json(res, 404, { error: 'economy: no such schedule in this workspace' }), true
       if (m[2] === '/runs') return json(res, 200, { runs: sc.runs }), true
+      // B30.132 — Lens B30.18's skip: the next tick recorded skipped, the order moved on a period; STUB_BREAK=standing-order-skip-pays pays it too.
+      if (m[2] === '/skip' && method === 'POST') {
+        if (!sc.active) return json(res, 404, { error: 'economy: no such payment schedule in this workspace' }), true
+        if (sc.to_payee_id !== undefined && this.broken('standing-order-skip-pays')) this.standingOrderTick(sc, Date.now(), false)
+        sc.runs.unshift({ tick_at: sc.next_run_at, outcome: 'skipped', detail: 'skipped by the owner', created_at: now })
+        this.advance(sc)
+        const { ws: _w, runs: _r, ...out } = sc
+        return json(res, 200, out), true
+      }
       if (method === 'DELETE') {
         sc.active = false
         return json(res, 200, { active: false }), true
