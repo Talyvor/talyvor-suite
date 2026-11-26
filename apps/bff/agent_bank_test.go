@@ -527,6 +527,36 @@ func TestAgentStatementDownloadsAsPDF(t *testing.T) {
 	}
 }
 
+// B61.136 — a statement asked for as Excel (Lens B61.132) comes back as Lens wrote it: the workbook, under the xlsx
+// type, with Lens's filename, byte for byte, on a currency account's statement and an agent's.
+func TestStatementDownloadsAsXLSX(t *testing.T) {
+	xlsx := "PK\x03\x04\x14\x00\x00\x00\x08\x00[Content_Types].xml\x00\xff\xfePK\x05\x06\x00\x00"
+	const xlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "xlsx" {
+			http.Error(w, "not asked for a workbook", http.StatusTeapot)
+			return
+		}
+		w.Header().Set("Content-Type", xlsxType)
+		w.Header().Set("Content-Disposition", `attachment; filename="statement-2026-10-01-2026-11-01.xlsx"`)
+		_, _ = w.Write([]byte(xlsx))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/money/accounts/acct_usd/statement", "/api/agents/agt_1/statement"} {
+		rec := doJSON(a, http.MethodGet, path+"?from=2026-10-01&to=2026-11-01&format=xlsx", "")
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != xlsxType ||
+			rec.Header().Get("Content-Disposition") != `attachment; filename="statement-2026-10-01-2026-11-01.xlsx"` || rec.Body.String() != xlsx {
+			t.Fatalf("%s = %d %v %q", path, rec.Code, rec.Header(), rec.Body.String())
+		}
+	}
+}
+
 // B28.56 — a period statement asked for as a journal (Lens B28.329) comes back as Lens wrote it: the journal CSV,
 // under text/csv, with Lens's filename, byte for byte.
 func TestAgentStatementDownloadsAsJournal(t *testing.T) {

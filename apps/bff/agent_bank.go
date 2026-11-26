@@ -35,10 +35,10 @@ import (
 //	GET  /api/agents/{id}/wallets                      B48.18: every wallet it owns, one of each kind it is (Lens B48.1)
 //	GET  /api/agents/{id}/summary                      B57.20: its page in one read (Lens B57.12), every figure from one moment
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
-//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks)
+//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal|xlsx   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks; B61.136: Excel)
 //	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
 //	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
-//	GET  /api/agents/statement?from=&to=&format=json|csv|pdf|journal        B19.22: every account in the bank, for a period
+//	GET  /api/agents/statement?from=&to=&format=json|csv|pdf|journal|xlsx   B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
 //	PATCH /api/agents/{id}              {"name"?, "description"?, "colour"?, "face"?, "picture"?}   B28.21: rename it, describe it; B57.124: its helper; B57.22: its face; B61.102: its picture
 //	POST /api/agents/{id}/archive                      B28.21: retire it — its balance back to the workspace, its keys revoked
@@ -716,7 +716,8 @@ func (a *app) statementRelay(w http.ResponseWriter, r *http.Request, t tenant, p
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatementBytes+1))
-	asFile := map[string]string{"csv": "text/csv; charset=utf-8", "journal": "text/csv; charset=utf-8", "pdf": "application/pdf"}[up.Get("format")]
+	asFile := map[string]string{"csv": "text/csv; charset=utf-8", "journal": "text/csv; charset=utf-8", "pdf": "application/pdf",
+		"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}[up.Get("format")]
 	switch {
 	case err != nil:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
@@ -728,7 +729,7 @@ func (a *app) statementRelay(w http.ResponseWriter, r *http.Request, t tenant, p
 			w.Header().Set("Content-Disposition", cd)
 		}
 		w.WriteHeader(resp.StatusCode)
-		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv or PDF under application/pdf, and every response carries nosniff (setSecurityHeaders)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv, PDF under application/pdf or workbook under the xlsx type, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Valid(raw):
 		w.Header().Set("Content-Type", "application/json")
