@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn, inlineLink } from '@talyvor/ui'
+import { inlineLink } from '@talyvor/ui'
 import { Button, Card, Chip, Field, Icon, Input, Select, type ChipTone } from '@talyvor/ui/pocket'
 import { isSessionExpired } from '../../lib/productState'
 import { useAuthMeReader } from '../../lib/authMe'
@@ -241,7 +241,8 @@ export function IdentityChecks({
   if (next?.status === 'pending' && next.link) waited.current = true
   const partnerLink = next?.status === 'pending' ? next.link : undefined
   const again = next?.subject === 'person' && (next.status === 'failed' || next.status === 'returned')
-  const shownSaid = said ?? (again && !tried ? failedText(next) : null)
+  // B57.194 — why the check must start again is said on the step itself, until the person tries again
+  const stepSaid = again && !tried ? failedText(next) : null
   const personName = level >= 2 ? latest(v.data, 2)?.verified_name ?? '' : d.name
 
   async function run() {
@@ -361,6 +362,8 @@ export function IdentityChecks({
                   </Card>
                 </section>
               ) : null}
+              {/* B57.194 — the step sits in the form's column, in the form's place while it waits for the person */}
+              <DocumentStep link={partnerLink} said={stepSaid} />
             </>
           )}
         </div>
@@ -369,10 +372,9 @@ export function IdentityChecks({
         <>
           {/* the company form is as wide as the page, as in Settings: its people's rows need the room */}
           {type === 'business' ? <CompanyDetailsSection titled /> : null}
-          <DocumentStep link={partnerLink} />
-          {shownSaid ? (
+          {said ? (
             <div role="alert">
-              <FieldError>{shownSaid}</FieldError>
+              <FieldError>{said}</FieldError>
             </div>
           ) : null}
           {partnerLink ? null : (
@@ -387,7 +389,8 @@ export function IdentityChecks({
             // B57.192 — drawn as Home's one sentence is (IdentityGate): a white card, the line, then the way on.
             <Card tone="white" data-testid="identity-way-in" role="status" className="flex flex-wrap items-center justify-between gap-3">
               <p className="max-w-2xl text-reading text-ink">{wayIn}</p>
-              {done}
+              {/* B57.194 — while Verify your ID waits, it is the page's one primary and the way in steps back */}
+              <WayInStepsBack.Provider value={Boolean(partnerLink)}>{done}</WayInStepsBack.Provider>
             </Card>
           ) : null}
         </>
@@ -396,11 +399,25 @@ export function IdentityChecks({
   )
 }
 
-/** B65.2 — the identity partner's step: what it checks, our privacy notice, and once the check waits for the person,
- *  the one button that opens the partner's page in this tab. Nothing is collected on our pages. */
-function DocumentStep({ link }: { link?: string }) {
+/** B57.194 — whether the way into the app steps back for the step's own button. */
+const WayInStepsBack = createContext(false)
+
+/** The way into the app at the end of sign-up's identity step: the page's one primary, unless Verify your ID waits. */
+export function OpenTheApp() {
+  const stepsBack = useContext(WayInStepsBack)
   return (
-    <section aria-labelledby="identity-document" className={cn('grid gap-3 rounded-card bg-cloud p-5')}>
+    <Button asChild variant={stepsBack ? 'outline' : 'primary'}>
+      <a href="/">{IDENTITY_WORDS.open}</a>
+    </Button>
+  )
+}
+
+/** B65.2 — the identity partner's step: what it checks, our privacy notice, and once the check waits for the person,
+ *  the one button that opens the partner's page in this tab. Nothing is collected on our pages. B57.194: a white Pocket
+ *  card like the form's, and after a check that failed or expired, why it must start again. */
+function DocumentStep({ link, said }: { link?: string; said: string | null }) {
+  return (
+    <Card tone="white" role="region" aria-labelledby="identity-document" className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 id="identity-document" className="font-display text-reading font-bold text-ink">
           {IDENTITY_WORDS.documentTitle}
@@ -413,6 +430,11 @@ function DocumentStep({ link }: { link?: string }) {
           {IDENTITY_WORDS.privacy}
         </Link>
       </p>
+      {said ? (
+        <div role="alert">
+          <FieldError>{said}</FieldError>
+        </div>
+      ) : null}
       {link ? (
         <div className="grid wide:flex wide:justify-end">
           <Button asChild>
@@ -420,7 +442,7 @@ function DocumentStep({ link }: { link?: string }) {
           </Button>
         </div>
       ) : null}
-    </section>
+    </Card>
   )
 }
 
