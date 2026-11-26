@@ -1517,6 +1517,8 @@ createServer(async (req, res) => {
     if (await bank.invoicePayPage(req, res, p)) return
     // B30.133 — money in through the money layer sandbox's webhook, signed, with no credential (stub-payees.ts).
     if (await bank.moneyWebhook(req, res, p)) return
+    // B30.128 — an outside business's mandate pull, on its mandate's key and no workspace credential (stub-payees.ts).
+    if (await bank.mandatePull(req, res, p)) return
     // B32.81 — the market_* MCP tools on an agent's own key.
     if (await bank.connect(req, res, bearer, p)) return // B52.34: Connect tokens and their mint
     if (await bank.agentMCP(req, res, bearer, p)) return

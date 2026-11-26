@@ -43,6 +43,9 @@
 //   monitoring-unwatched   — no payment is judged: round amounts open no case
 //   monitoring-hit-moves   — a hit takes the payment's amount from the account again
 //   bill-details-unflagged — B40.22: an invoice printing other bank details than its supplier's saved payee reads matched
+// B30.128 — and an outside business's pulls on its mandate's key (Lens B30.19, B30.129): each within both maxima moves the
+// agent's account into the mandate's hold and pays it out to the saved payee; over one is 403, revoked 409. Its defect:
+//   mandate-month-ignored  — the monthly maximum is not asked: a pull over it is posted
 // B30.96 — and the Pay screen's other desks: a payment names the account it pays from (account_id); mandates (POST and GET
 // /v1/money/mandates, POST …/{id}/revoke, Lens B30.19: an outside business's grant answers its pull_key once); and bulk
 // payouts (POST /v1/money/payouts as text/csv or JSON rows, GET …, GET …/{id}, POST …/{id}/approve, Lens B30.21): every row
@@ -158,8 +161,8 @@ interface StubInvoice { id: string; workspace_id: string; agent_id: string; acco
   payments: { entry_id: string; method: string; amount_minor: number; fee_minor?: number; paid_at: string }[] }
 /** A mandate (economy.Mandate). */
 interface StubMandate { id: string; workspace_id: string; agent_id: string; account_id: string; currency: string; payee_workspace_id?: string; payee_business_id?: string
-  payee_name: string; payee_id?: string; max_per_pull_minor: number; max_per_month_minor: number; pulled_this_month_minor: number; expires_at: string; status: string
-  revoked_at?: string; created_at: string }
+  payee_name: string; payee_id?: string; hold_account_id?: string; max_per_pull_minor: number; max_per_month_minor: number; pulled_this_month_minor: number
+  expires_at: string; status: string; revoked_at?: string; created_at: string }
 /** One row of a payout batch and the batch (economy.PayoutRow, economy.PayoutBatch). */
 interface StubRow { line: number; payee_id: string; payee_name?: string; amount_minor: number; currency: string; reference: string; status: string; payment_id?: string; detail?: string }
 interface StubBatch { id: string; workspace_id: string; funding: string; idempotency_key: string; status: string; rows: StubRow[]; rows_total: number; rows_valid: number
@@ -261,6 +264,9 @@ export class PayeeDesk {
   private readonly invoices: StubInvoice[] = []
   /** B30.96 — the mandates granted and the payout batches uploaded, by workspace. */
   private readonly mandates = new Map<string, StubMandate[]>()
+  /** B30.128 — an outside business's pull key, by its mandate's id, and each pull answered, by mandate and idempotency key. */
+  private readonly pullKeys = new Map<string, string>()
+  private readonly pulls = new Map<string, { amount: number; answer: unknown }>()
   private readonly batches = new Map<string, StubBatch[]>()
   /** B41.1 — the bills each workspace received, each with the digest of its document. */
   private readonly bills = new Map<string, (Record<string, unknown> & { id: string; digest: string })[]>()
@@ -1254,10 +1260,14 @@ export class PayeeDesk {
       if (business !== '' && payee === undefined) return this.json(res, 404, { error: 'economy: no such payee' }), true
       const m: StubMandate = { id: `mdt_${randomUUID()}`, workspace_id: ws, agent_id: account.agent_id ?? '', account_id: account.id, currency: account.currency,
         ...(company === '' ? { payee_business_id: business, payee_id: g.payee_id } : { payee_workspace_id: company }),
+        ...(company === '' ? { hold_account_id: `macc_hold_${randomUUID()}` } : {}),
         payee_name: (g.payee_name ?? '').trim() || payee?.name || company, max_per_pull_minor: pull, max_per_month_minor: month, pulled_this_month_minor: 0,
         expires_at: new Date(g.expires_at ?? '').toISOString(), status: 'active', created_at: new Date().toISOString() }
       this.mandates.set(ws, [m, ...list])
-      return this.json(res, 201, business === '' ? m : { ...m, pull_key: `tlvm_${randomBytes(16).toString('hex')}` }), true
+      if (business === '') return this.json(res, 201, m), true
+      const key = `tlvm_${randomBytes(16).toString('hex')}`
+      this.pullKeys.set(m.id, key)
+      return this.json(res, 201, { ...m, pull_key: key }), true
     }
     const revoke = /^\/v1\/money\/mandates\/([^/]+)\/revoke$/.exec(path)
     if (revoke === null || req.method !== 'POST') return false
@@ -1559,6 +1569,62 @@ export class PayeeDesk {
     this.invoicePaidBy.set(madeKey, entry)
     Object.assign(inv, { paid_minor: inv.total_minor, due_minor: 0, status: 'paid', paid_at: now })
     return this.json(res, 200, { invoice: this.invoice(inv), entry }), true
+  }
+
+  /**
+   * B30.128 — POST /v1/money/mandates/{id}/pull {amount_minor, idempotency_key, funding, memo} by an outside business, on the
+   * X-Talyvor-Mandate-Key its grant answered (Lens B30.19): one entry, the agent's account to the mandate's hold account, then
+   * paid out of the hold to the business's saved payee (B30.129) — completed, or failed back to the agent's account when the
+   * minor units end in 13. Over either maximum it is 403 naming it, revoked or short 409, not this key's 404, each moving
+   * nothing; a retry under the same key answers the same pull. A company's pull, on its own key, is not served here.
+   */
+  async mandatePull(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
+    const pulled = /^\/v1\/money\/mandates\/([^/]+)\/pull$/.exec(path)
+    const key = req.headers['x-talyvor-mandate-key']
+    if (pulled === null || req.method !== 'POST' || typeof key !== 'string' || key === '') return false
+    const m = [...this.mandates.values()].flat().find((x) => x.id === pulled[1])
+    if (m === undefined || this.pullKeys.get(m.id) !== key) return this.json(res, 404, { error: 'economy: no such mandate' }), true
+    const b = await this.body<{ amount_minor?: number; idempotency_key?: string; memo?: string }>(req)
+    const amount = b.amount_minor ?? 0
+    if (!Number.isInteger(amount) || amount <= 0) return this.json(res, 400, { error: `economy: invalid mandate: a pull takes some money, not ${amount}` }), true
+    if (!b.idempotency_key) return this.json(res, 400, { error: 'economy: invalid mandate: a pull needs an idempotency key of up to 200 characters' }), true
+    const seen = this.pulls.get(`${m.id}\n${b.idempotency_key}`)
+    if (seen !== undefined) {
+      if (seen.amount !== amount) return this.json(res, 409, { error: 'economy: idempotency key reused with a different request' }), true
+      return this.json(res, 201, seen.answer), true
+    }
+    if (m.status === 'revoked') return this.json(res, 409, { error: 'economy: the mandate was revoked' }), true
+    if (Date.parse(m.expires_at) <= Date.now()) return this.json(res, 409, { error: 'economy: the mandate has expired' }), true
+    if (amount > m.max_per_pull_minor) {
+      return this.json(res, 403, { error: `economy: the pull is over the mandate's limit: ${amount} is over the maximum per pull of ${m.max_per_pull_minor} ${m.currency}` }), true
+    }
+    // STUB_BREAK=mandate-month-ignored — the monthly maximum is not asked, so a pull over it is posted.
+    if (m.pulled_this_month_minor + amount > m.max_per_month_minor && !this.broken('mandate-month-ignored')) {
+      return this.json(res, 403, { error: `economy: the pull is over the mandate's limit: ${amount} more would take this month's pulls to ` +
+        `${m.pulled_this_month_minor + amount}, over the maximum per month of ${m.max_per_month_minor} ${m.currency}` }), true
+    }
+    const from = (this.accounts.get(m.workspace_id) ?? []).find((a) => a.id === m.account_id)
+    if (from === undefined) return this.json(res, 404, { error: 'economy: no such money account' }), true
+    if (from.test_minor < amount) return this.json(res, 409, { error: `economy: the account does not hold enough to pay this pull: it holds ${from.test_minor} test ${m.currency}` }), true
+    const entry = { id: `me_${randomUUID()}`, workspace_id: m.workspace_id, capability: 'payments_out', kind: 'mandate_pull', idempotency_key: `mandate_pull:${m.id}:${b.idempotency_key}`,
+      funding: 'test', memo: (b.memo ?? '').trim() || `Pulled by ${m.payee_name} under mandate ${m.id}`, created_at: new Date().toISOString(),
+      postings: [{ account_id: from.id, amount_minor: -amount, currency: m.currency, funding: 'test' }, { account_id: m.hold_account_id ?? '', amount_minor: amount, currency: m.currency, funding: 'test' }] }
+    from.test_minor -= amount
+    from.balance_minor -= amount
+    this.line(m.workspace_id, from, 'mandate_pull', -amount, entry.id)
+    m.pulled_this_month_minor += amount
+    // The Test partner pays it out of the hold to the saved payee, or refuses one ending in 13 and it comes back.
+    const failed = amount % 100 === 13
+    if (failed) {
+      from.test_minor += amount
+      from.balance_minor += amount
+      this.line(m.workspace_id, from, 'payment_out_failed', amount)
+    }
+    const payment = { id: `mpo_${randomUUID()}`, account_id: m.hold_account_id, payee_id: m.payee_id, amount_minor: amount, currency: m.currency,
+      reference: (b.memo ?? '').trim() || m.id, status: failed ? 'failed' : 'completed', ...(failed ? {} : { partner_ref: `test_${randomBytes(6).toString('hex')}` }) }
+    const answer = { mandate_id: m.id, amount_minor: amount, currency: m.currency, pulled_this_month_minor: m.pulled_this_month_minor, entry, payment }
+    this.pulls.set(`${m.id}\n${b.idempotency_key}`, { amount, answer })
+    return this.json(res, 201, answer), true
   }
 
   /** B30.133 — POST /v1/money/webhooks/sandbox: a payment in the money layer's sandbox signed, with no credential (Lens money.ServeWebhook). */
