@@ -87,6 +87,7 @@ import { OperatorCompliance } from './areas/lens/OperatorCompliance'
 import { VerificationScreen } from './areas/lens/Verification'
 import { DevicesScreen } from './areas/lens/Devices'
 import { SecurityScreen } from './areas/lens/Security'
+import { ProfileScreen } from './areas/lens/FindMe'
 import { PayoutDetailsScreen } from './areas/lens/PayoutDetails'
 import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
 import { ConnectAI } from './areas/lens/ConnectAI'
@@ -267,6 +268,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // B52.36 — a workspace's invite link opens here, signed in: Join adds the session's person to that workspace.
   { path: '/join', title: 'Join a workspace', element: <JoinWorkspace /> },
   { path: '/settings', title: 'Settings', element: <Settings /> },
+  // B57.196 — your Talyvor name and who can find you, to pay you (B61.93's Privacy, moved here).
+  { path: '/settings/profile', title: 'Profile', element: <ProfileScreen />, panel: '/settings' },
   // B57.43 — every passkey and the phone's key by name, added and removed, the waiting phone and Stop everything.
   { path: '/settings/devices', title: 'Approvals and devices', element: <DevicesScreen />, panel: '/settings' },
   // B61.106 — how a person signs in: their passkeys, their passcode and their phone number, each changed here.

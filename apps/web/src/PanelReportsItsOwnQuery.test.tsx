@@ -184,7 +184,8 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
   '/members': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/member-invites', '/api/workspace/members', '/api/workspace/name'],
   // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
   // B57.171 — Settings' Plan row says what the page holds, so /settings no longer reads the plan itself.
-  '/settings': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/people/finding', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  // B57.196 — Privacy moved to /settings/profile, so /settings no longer reads /api/people/finding.
+  '/settings': ['/api/agents', '/api/agents/agt_1/crypto-sends', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
@@ -292,7 +293,8 @@ describe('the swept set', () => {
     // 131 → 130 at B57.171: /settings' Plan row is Pocket Live's line, and the plan's name is on Settings, Plan.
     // 130 → 131 at B61.93: /settings' Privacy reads how the person is found.
     // 133 → 144 at B57.202: and each agent's sends to a new address, which its Approvals badge counts, on every address.
-    expect(pairs).toBe(144) // 131 → 133 at B52.36: /members reads its invite links and who joined by one.
+    // 144 → 143 at B57.196: Privacy moved to /settings/profile, so /settings no longer reads how the person is found.
+    expect(pairs).toBe(143) // 131 → 133 at B52.36: /members reads its invite links and who joined by one.
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

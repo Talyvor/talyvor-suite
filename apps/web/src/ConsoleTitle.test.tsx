@@ -138,6 +138,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings': 'Settings',
   '/settings/devices': 'Approvals and devices',
   '/settings/security': 'Security',
+  '/settings/profile': 'Profile',
   '/settings/verification': 'Verification',
   '/settings/payout-details': 'Payout details',
   '/settings/terms': 'Capability terms',
