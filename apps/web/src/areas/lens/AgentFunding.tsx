@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn, inlineLink, playSound } from '@talyvor/ui'
-import { Button, Dialog, Field, Icon, Input, Money, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Dialog, Field, Icon, Input, Money, Select, pocketFocusRing, showSnack, moneyMoved, useDoneTick } from '@talyvor/ui/pocket'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
 import { BOOK_KEY } from './AgentBank'
@@ -96,16 +96,19 @@ export function AgentFundingDialog({
   // The reference's words: "the company account" for a business, "your account" for a person's own.
   const ours = shows?.owner === 'Your account' ? 'your account' : 'the company account'
   const title = toAgent ? `Add money to ${agent.name}` : `Take back from ${agent.name}`
+  // B61.129 — a small job: once Lens has answered, the button ticks, then the panel closes.
+  const tick = useDoneTick()
   const move = useMutation({
     mutationFn: () => agentBankApi.agentFunding(agentAccount?.id ?? '', direction, minor ?? 0, key),
     onSuccess: (f) => {
       playSound('moved')
+      moneyMoved('inside')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       void qc.invalidateQueries({ queryKey: BOOK_KEY })
       setKey(newMoveKey())
       const moved = <Money minor={f.amount_minor} currency={f.currency} />
       showSnack({ title: toAgent ? <>{moved} moved to {agent.name}</> : <>{moved} back from {agent.name}</> })
-      onClose()
+      tick.finish(onClose)
     },
     onError: () => playSound('refused'),
   })
@@ -127,7 +130,7 @@ export function AgentFundingDialog({
             <Button type="button" variant="secondary" disabled={move.isPending} onClick={() => setConfirming(false)}>
               Back
             </Button>
-            <Button type="button" disabled={move.isPending} onClick={() => move.mutate()}>
+            <Button type="button" disabled={move.isPending} done={tick.done} onClick={() => move.mutate()}>
               {move.isPending ? (
                 'Moving…'
               ) : (

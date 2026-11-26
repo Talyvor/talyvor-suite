@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Dialog, EmptyState, Field, Icon, Input, Money, Pick, PickRow, RoomBadge, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Card, Dialog, EmptyState, Field, Icon, Input, Money, Pick, PickRow, RoomBadge, pocketFocusRing, burst } from '@talyvor/ui/pocket'
 import { cn, inlineLink, playSound } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
 import { IfArea } from '../../lib/workspaceAreas'
@@ -275,6 +275,7 @@ function Details({
     },
     onSuccess: ({ a, unsaved }) => {
       playSound('celebrate')
+      burst()
       if (unsaved.length > 0) return
       navigate(`/agents/${encodeURIComponent(a.id)}`)
     },

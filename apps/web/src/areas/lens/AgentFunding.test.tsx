@@ -148,3 +148,41 @@ describe('Add money and Take back on an agent’s page (B61.84)', () => {
     expect(within(dialog).getByLabelText('Currency')).toHaveValue('USD')
   })
 })
+
+// B61.129 — Add money to an agent is a small job: the move is sent on the press, and once Lens has answered the button
+// turns green and draws a tick, then the panel closes.
+describe('the tick follows Lens’s answer (B61.129)', () => {
+  it('sends the move on the press, ticks after the answer, then closes the panel', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }))
+    const fetched = globalThis.fetch as unknown as { getMockImplementation: () => typeof fetch }
+    const lens = fetched.getMockImplementation()
+    let answer!: () => void
+    const held = new Promise<void>((r) => (answer = r))
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/funding')) {
+        const reply = lens(input, init)
+        await held
+        return reply
+      }
+      return lens(input, init)
+    })
+    try {
+      const page = await openAgentPage()
+      fireEvent.click(within(page).getByRole('button', { name: 'Add money to Research' }))
+      const dialog = await screen.findByRole('dialog', { name: /^Add money to Research/ })
+      fireEvent.change(await within(dialog).findByLabelText('Amount'), { target: { value: '10' } })
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Move $10.00' }))
+      // The move is out on the press, while nothing has ticked.
+      await waitFor(() => expect(posts.map((p) => p.path)).toEqual(['/api/money/accounts/macc_research/funding']))
+      expect(dialog.querySelector('[data-done-tick]')).toBeNull()
+      answer()
+      await waitFor(() => expect(dialog.querySelector('[data-done-tick]')).not.toBeNull())
+      expect(screen.getByRole('dialog', { name: /^Add money to Research/ })).toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Add money to Research/ })).toBeNull())
+      expect(posts).toHaveLength(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})

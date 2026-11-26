@@ -41,6 +41,12 @@ beforeEach(() => {
         bezierCurveTo() {},
         stroke() {},
         fillRect() {},
+        // B61.129 — the opening clips the streams as they draw in, and a pulse runs along them.
+        save() {},
+        restore() {},
+        rect() {},
+        clip() {},
+        lineTo() {},
       }) as never,
   )
 })

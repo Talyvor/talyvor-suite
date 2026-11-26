@@ -42,6 +42,14 @@ const nbsp = (s: string) => s.replace(/ /g, ' ')
 
 const ROLL_MS = parseFloat(motion.duration.roll)
 
+/** B61.129 — the web app's opening: a figure first drawn inside counts up from nothing (section 15, Special openings). */
+const CountUpContext = createContext(false)
+
+/** Home wraps its figures in this on the first Home of a visit (useOpening): each counts up from 0 as it first appears. */
+export function MoneyCountUp({ on, children }: { on: boolean; children: React.ReactNode }) {
+  return <CountUpContext.Provider value={on}>{children}</CountUpContext.Provider>
+}
+
 function reducedMotion(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
@@ -52,8 +60,10 @@ function reducedMotion(): boolean {
  * of currency and reduced motion draw at once. Returns the value to draw now; the roll ends on the value itself.
  */
 function useRolled(amount: number, unit: string): number {
-  const [drawn, setDrawn] = useState(amount)
-  const at = useRef({ drawn: amount, unit })
+  // B61.129 — inside MoneyCountUp the first value rolls up from 0, as a new value rolls from the one drawn.
+  const countUp = useContext(CountUpContext) && amount !== 0 && !reducedMotion()
+  const [drawn, setDrawn] = useState(countUp ? 0 : amount)
+  const at = useRef({ drawn: countUp ? 0 : amount, unit })
   useEffect(() => {
     const from = at.current.drawn
     const sameUnit = at.current.unit === unit

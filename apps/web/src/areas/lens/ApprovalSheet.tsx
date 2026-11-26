@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { Link, useLocation, useNavigate, type To } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink, playSound } from '@talyvor/ui'
-import { Button, Dialog, Face, Field, Input, Layer, Money, SheetFrame, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Dialog, Face, Field, Input, Layer, Money, SheetFrame, pocketFocusRing, showSnack, moneyMoved } from '@talyvor/ui/pocket'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, rulesKey, useKeys } from './AgentBank'
@@ -140,6 +140,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
       agentBankApi.decide(a.id, decision, keys.signed ? await signApproval(a.id) : undefined, undefined, reason),
     onSuccess: (got, { decision }) => {
       playSound(decision === 'approve' ? 'approved' : 'declined')
+      if (decision === 'approve') moneyMoved('in')
       onClose()
       showSnack(
         decision === 'approve' && got?.waiting_for_second_approver

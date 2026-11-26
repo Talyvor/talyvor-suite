@@ -15,6 +15,8 @@ import {
   Money,
   Row,
   Select as PocketSelect,
+  moneyMoved,
+  useDoneTick,
 } from '@talyvor/ui/pocket'
 import { BOOK_KEY } from './AgentBank'
 import { PAYEES_KEY, AddPayee } from './Pay'
@@ -341,13 +343,16 @@ function TopUp({ open, onClose, shows }: { open: boolean; onClose: () => void; s
     top.reset()
     onClose()
   }
+  // B61.129 — a small job: once Lens has answered, Add money ticks, then the panel closes.
+  const tick = useDoneTick()
   const top = useMutation({
     mutationFn: () => agentBankApi.walletTopUp(account?.id ?? '', minor ?? 0, key),
     onSuccess: () => {
       playSound('moneyin')
+      moneyMoved('in')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       setKey(newMoveKey())
-      close()
+      tick.finish(close)
     },
     onError: () => playSound('refused'),
   })
@@ -363,7 +368,7 @@ function TopUp({ open, onClose, shows }: { open: boolean; onClose: () => void; s
             <PocketButton type="button" variant="secondary" disabled={top.isPending} onClick={() => setConfirming(false)}>
               Back
             </PocketButton>
-            <PocketButton type="button" disabled={top.isPending} onClick={() => top.mutate()}>
+            <PocketButton type="button" disabled={top.isPending} done={tick.done} onClick={() => top.mutate()}>
               {top.isPending ? 'Adding…' : 'Add money'}
             </PocketButton>
           </>
@@ -437,6 +442,7 @@ function Withdraw({ open, onClose, shows }: { open: boolean; onClose: () => void
     },
     onSuccess: () => {
       playSound('sent')
+      moneyMoved('out')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       setKey(newMoveKey())
       close()
@@ -565,6 +571,7 @@ function Convert({ open, onClose, shows }: { open: boolean; onClose: () => void;
     },
     onSuccess: () => {
       playSound('moved')
+      moneyMoved('inside')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       setKey(newMoveKey())
       close()

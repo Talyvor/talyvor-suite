@@ -1,0 +1,6 @@
+[
+  { "route": "/", "screen": "w-home" },
+  { "route": "/", "screen": "w-home", "dark": true },
+  { "route": "/cards", "screen": "w-card" },
+  { "route": "/cards", "screen": "w-card", "dark": true }
+]

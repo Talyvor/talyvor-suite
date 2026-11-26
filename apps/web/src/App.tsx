@@ -695,8 +695,20 @@ function Background({ pathname }: { pathname: string }) {
     enabled: agentId !== undefined,
     select: (b) => b.agents.find((a) => a.id === agentId),
   }).data
+  // B61.129 — the streams stop and turn grey while every agent is paused, or on an agent's page while that agent is.
+  // The book is the top bar's own read (EveryAgentSwitch), so this asks for nothing more.
+  const still = useQuery({
+    queryKey: BOOK_KEY,
+    queryFn: agentBankApi.book,
+    select: (b) => {
+      if (b.all_paused_at) return true
+      if (agentId !== undefined) return Boolean(b.agents.find((a) => a.id === agentId)?.paused_at)
+      const working = b.agents.filter((a) => !a.archived_at)
+      return working.length > 0 && working.every((a) => a.paused_at)
+    },
+  }).data
   const hues = agentId ? agentHues(agent ?? { id: agentId }) : personal ? personalHues : businessHues
-  return <PageBackground hues={hues} />
+  return <PageBackground hues={hues} still={still === true} />
 }
 
 /** B57.50 — behind the gate: a new workspace's first page in its own layout, and every other address in the console's shell. */

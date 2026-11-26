@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { type UseQueryResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink, playSound } from '@talyvor/ui'
-import { Button, Card, Chip, Crumb, Dialog, Icon, Input, Money, PageHeading, Pick, PickRow, Select, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Crumb, Dialog, Icon, Input, Money, PageHeading, Pick, PickRow, Select, Switch, pocketFocusRing, showSnack, useDoneTick } from '@talyvor/ui/pocket'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, changedBy, rulesHistoryKey, rulesKey, useKeys, useRulesChange } from './AgentBank'
 import { AgentFace } from './AgentFace'
 import { CATALOG_KEY } from '../marketplace/parts'
@@ -409,6 +409,8 @@ function RulesEditor({
   const change = useRulesChange(agent.id)
   const judged = change.judgedFor({ rules: body })
   const history = useQuery({ queryKey: rulesHistoryKey(agent.id), queryFn: () => agentBankApi.rulesHistory(agent.id) })
+  // B61.129 — a save that asked for no passkey is a small job: Save rules ticks, then the page goes back to the agent.
+  const tick = useDoneTick()
   const save = useMutation({
     // signed: this save is the second press, after Lens said it loosens the rules and the passkey signs it.
     mutationFn: (_signed: boolean) => change.run({ rules: body }, (assertion) => agentBankApi.setRules(agent.id, body, assertion)),
@@ -422,7 +424,9 @@ function RulesEditor({
         title: version ? `${agent.name}’s rules are saved as version ${version}` : `${agent.name}’s rules are saved`,
         line: signed ? 'Your passkey was asked first, because the change loosens them.' : 'Tightening is saved at once.',
       })
-      navigate(`/agents/${encodeURIComponent(agent.id)}`)
+      const back = () => navigate(`/agents/${encodeURIComponent(agent.id)}`)
+      if (signed) back()
+      else tick.finish(back)
     },
   })
   const submit = () => {
@@ -462,7 +466,7 @@ function RulesEditor({
             <Link to={`/agents/${encodeURIComponent(agent.id)}`}>Cancel</Link>
           </Button>
           {judged?.phone ? null : (
-            <Button disabled={bad || save.isPending} onClick={submit}>
+            <Button disabled={bad || save.isPending} done={tick.done} onClick={submit}>
               {save.isPending ? 'Saving…' : judged?.signs ? 'Save with your passkey' : 'Save rules'}
             </Button>
           )}
