@@ -1,0 +1,6 @@
+[
+  { "route": "/settings" },
+  { "route": "/settings", "dark": true },
+  { "route": "/settings", "steps": ["Look and sound"] },
+  { "route": "/settings", "steps": ["Look and sound"], "dark": true }
+]
