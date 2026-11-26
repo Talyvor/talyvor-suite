@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
+import { SnackHost } from '@talyvor/ui/pocket'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { AppMoney } from './money'
@@ -48,6 +49,7 @@ function mockBff() {
         <MemoryRouter>
           <div data-design="pocket">
             <AgentMoneyWalletCard agent={AGENT} />
+            <SnackHost view="/agents/agt_1" />
           </div>
         </MemoryRouter>
       </AppMoney>
@@ -76,8 +78,7 @@ describe('an agent’s Limits and permissions', () => {
     const card = await screen.findByTestId('agent-money-wallet')
     fireEvent.click(await within(card).findByRole('button', { name: 'Limits and permissions' }))
     const panel = await within(card).findByTestId('agent-wallet-limits')
-    expect(await within(panel).findByText('50.00 USDC a week')).toBeTruthy()
-    expect(within(panel).getByText(BLOCKED)).toBeTruthy()
+    expect(await within(panel).findByText('At most 50.00 USDC a week')).toBeTruthy()
     fireEvent.change(within(panel).getByRole('textbox', { name: 'Allowance in USDC' }), { target: { value: '75' } })
     fireEvent.change(within(panel).getByRole('combobox', { name: 'Each' }), { target: { value: 'month' } })
     fireEvent.click(within(panel).getByRole('button', { name: 'Sign new limits' }))
@@ -89,13 +90,36 @@ describe('an agent’s Limits and permissions', () => {
     expect(sent(calls, 'PUT', '/spend-permission')).toEqual([{ canonical: 'C2', assertion: SIGNED }])
   })
 
-  it('freezes the agent by signing a permission with no tokens', async () => {
+  // B57.217 — the permission in force as the agent page's Rules card says its rules: a tick, the rule, its line.
+  it('reads the permission in force as rules, each with its line', async () => {
+    mockBff()
+    const card = await screen.findByTestId('agent-money-wallet')
+    fireEvent.click(await within(card).findByRole('button', { name: 'Limits and permissions' }))
+    const rules = within(await within(card).findByTestId('agent-wallet-limits')).getByRole('list', { name: 'Researcher’s limits' })
+    const said = within(rules).getAllByRole('listitem').map((li) => li.textContent)
+    expect(said).toEqual([
+      'At most 50.00 USDC a weekUSDC on Base',
+      'At most 10.00 USDC in one paymentAnything larger is refused',
+      `Never pays ${BLOCKED}A payment to it is refused`,
+      'Ends 30 Jun 2027Signed 20 Nov 2026, 09:00',
+    ])
+  })
+
+  // B57.217 — Freeze as the Freeze card switch draws it, and its snack: pressed, it signs a permission with no tokens.
+  it('freezes the agent with its switch, signing a permission with no tokens', async () => {
     const { calls, get } = mockBff()
     const card = await screen.findByTestId('agent-money-wallet')
     fireEvent.click(await within(card).findByRole('button', { name: 'Limits and permissions' }))
     const panel = await within(card).findByTestId('agent-wallet-limits')
-    fireEvent.click(await within(panel).findByRole('button', { name: 'Freeze Researcher' }))
-    await within(panel).findByText(/Researcher’s wallet is frozen\./)
+    const freeze = await within(panel).findByRole('switch', { name: 'Freeze Researcher’s wallet' })
+    expect(freeze.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(freeze)
+    expect(await screen.findByText('Every payment from it is refused until you sign new limits.')).toBeTruthy()
+    expect(screen.getByText('Researcher’s wallet is frozen')).toBeTruthy()
+    const frozen = within(panel).getByRole('switch', { name: 'Unfreeze Researcher’s wallet' })
+    expect(frozen.getAttribute('aria-checked')).toBe('true')
+    expect(frozen.hasAttribute('disabled')).toBe(true)
+    expect(within(panel).getByText('Sign new limits to unfreeze it')).toBeTruthy()
     expect(sent(calls, 'POST', '/spend-permission/prepare')).toEqual([{ tokens: [], allowed: [], blocked: [BLOCKED], expires: '2027-06-30T23:59:59Z' }])
     expect(get).toHaveBeenCalledTimes(1)
     expect(sent(calls, 'PUT', '/spend-permission')).toEqual([{ canonical: 'C2', assertion: SIGNED }])
