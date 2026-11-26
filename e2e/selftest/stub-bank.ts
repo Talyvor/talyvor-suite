@@ -950,6 +950,11 @@ export class Bank {
     return this.payees.payPage(req, res, path)
   }
 
+  /** B30.128 — an outside business's pull on its mandate's key, which carries no workspace credential (stub-payees.ts). */
+  mandatePull(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
+    return this.payees.mandatePull(req, res, path)
+  }
+
   /** B30.133 — a payment in through the money layer sandbox's signed webhook, which carries no credential (stub-payees.ts). */
   moneyWebhook(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
     return this.payees.moneyWebhook(req, res, path)
