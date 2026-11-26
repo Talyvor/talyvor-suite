@@ -28,7 +28,7 @@ const ACCOUNT_WORDS: Record<string, string> = { USD: 'US dollar account', GBP: '
 const accountWords = (currency: string) => ACCOUNT_WORDS[currency] ?? `${currency} account`
 
 /** The reference's three amounts, in major units of the account's currency. */
-const PRESETS = [50, 100, 200] as const
+export const PRESETS = [50, 100, 200] as const
 const majorMinor = (major: number, currency: string) => major * 10 ** (currency === 'USDC' ? 6 : 2)
 
 /** "12.50" → 1250, or for USDC (six places) 12500000; null when it is not a positive amount. */
@@ -250,7 +250,7 @@ function Line({
 }
 
 /** pocket.css .seg in the fund and take panels: 50, 100 and 200, the one the amount is now in ink. */
-function Presets({ currency, minor, onPick }: { currency: string; minor: number | null; onPick: (major: number) => void }) {
+export function Presets({ currency, minor, onPick }: { currency: string; minor: number | null; onPick: (major: number) => void }) {
   return (
     <div role="radiogroup" aria-label="Amount to move" className="flex gap-1.5" data-testid="agent-funding-presets">
       {PRESETS.map((major) => {
