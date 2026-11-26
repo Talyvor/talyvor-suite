@@ -23,7 +23,8 @@
 //   POST …/agents/{id}/money/convert {quote_id} and an Idempotency-Key   one fx_conversion entry: the agent's account in the
 //        currency sold down by sell_minor, its account in the currency bought up by buy_minor; more than it holds refused 409;
 //        the same key again answers the same conversion and moves nothing
-//   GET  /v1/money/accounts/{id}/statement   the lines the conversions posted to the account
+//   GET  /v1/money/accounts/{id}/statement   the lines the conversions posted to the account, and (B30.107) the month's
+//        opening, in, out and closing
 //
 // B61.51 — the company details (Lens B59.30): GET and PUT /v1/workspaces/{ws}/business {company_name, registration_number,
 // country, people}, the PUT 400 without a name, a registration number and a country.
@@ -226,7 +227,12 @@ export class LaunchDesk {
     if (m === null || req.method !== 'GET' || this.broken('fx-absent')) return false
     const a = this.accounts(ws).find((x) => x.id === m[1])
     if (a === undefined) return this.json(res, 404, { error: 'economy: no such money account' }), true
-    return this.json(res, 200, { workspace_id: ws, account_id: a.id, agent_id: a.agent_id ?? '', currency: a.currency, lines: this.statementLines.get(a.id) ?? [] }), true
+    // B30.107 — this month's totals as Lens's MoneyStatement gives them: Opening + In − Out = Closing (every stub account opened this month).
+    const lines = this.statementLines.get(a.id) ?? []
+    const inMinor = lines.reduce((n, l) => n + Math.max(l.amount_minor, 0), 0)
+    const outMinor = lines.reduce((n, l) => n - Math.min(l.amount_minor, 0), 0)
+    return this.json(res, 200, { workspace_id: ws, account_id: a.id, agent_id: a.agent_id ?? '', currency: a.currency, opening_minor: 0, in_minor: inMinor,
+      out_minor: outMinor, closing_minor: inMinor - outMinor, lines }), true
   }
 
   /** B56.28 — a posting made elsewhere (stub-payees.ts: money in, funding, invoice payments and their fees) on account `id`'s

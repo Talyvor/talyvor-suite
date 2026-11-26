@@ -12,6 +12,7 @@ import { type AppUser, type Attachment, type ChargeBook, NetworkDropped, type Tu
 import type { SpendCap } from './budget.ts'
 import { CapReached, worstInputTokens } from './budget.ts'
 import { currencyConvertMargin } from './currencyConvert.ts'
+import { moneyAccounts } from './moneyAccounts.ts'
 import type { Fees, LedgerRow, LensClient, SyntheticUser } from './lens.ts'
 import { percent, platformFeeBPS } from './fees.ts'
 import {
@@ -5683,6 +5684,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B56.29 (for talyvor-lens B56.23) — a currency conversion, once a run, on a workspace of its own: £100.00 above the month's free
   // part converts GBP to USD as one fx_conversion entry, charged the plan's FX margin in GBP, and the same key again converts nothing.
   if (i === 4) list.push(currencyConvertMargin())
+  // B30.107 — accounts, payments and FX, once a run, on a workspace of its own: the company's and an agent's GBP and EUR accounts
+  // open at zero, £50.00 comes in, £20.00 pays a saved payee, £10.00 goes to the agent and converts to EUR, and every statement
+  // holds exactly those postings and closes on what its account holds.
+  if (i === 4) list.push(moneyAccounts())
   if (i === 3) list.push(helpRequest(), helpComplaint(), yourDataRequest(), helpNoDeadControl())
   if (i === 2) list.push(sandboxLabelEveryScreen())
   return list
