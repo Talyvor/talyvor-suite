@@ -1,0 +1,34 @@
+# gitleaks config (B28.467, as talyvor-lens B28.259). The maintained default ruleset, plus an allowlist
+# that names each fixture value exactly. A value is listed here only after it was read and found to be a
+# made-up test string or a public value; a path is never allowlisted, so a real key pasted into any file,
+# a test included, still fails the secret-scan job. A new fixture that trips a rule is added here by its value.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Named test fixtures and public values"
+regexes = [
+  # made-up provider and workspace keys in tests
+  '''^sk-test-0123456789wxyz$''',
+  '''^sk-proj-test-0123456789wxyz$''',
+  '''^sk-proj-0123456789abcdefghijKLMN$''',
+  '''^tlv_ak_1234secret$''',
+  # key prefixes (the shown part of a key, never the key) in tests and the pocket sample
+  '''^tlv_ws_(9f21c4a0|0b7e11aa|1a2b3c4d|7f3a5b12|c21d7e90)$''',
+  # share, session and invoice tokens built from counters and plain words
+  '''^foobarbazqux1234567890ab$''',
+  '''^Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MGFi$''',
+  '''^s1_0123456789abcdef0123456789abcdef\.c2lnbmF0dXJl$''',
+  '''^eyJhbGciOiJFZERTQSJ9\.eyJzdWIiOiJhZ3RfMSJ9\.c2ln$''',
+  '''^0123456789abcdef0123456789abcdef0123456789abcdef$''',
+  # the WebSocket handshake key from RFC 6455's own example
+  '''^dGhlIHNhbXBsZSBub25jZQ==$''',
+  # the Standard Webhooks spec's published example secret, used as its test vector
+  '''^whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw$''',
+  # public values, not secrets: ERC-20 contract addresses, a storage key name, an image tag in a CI log
+  '''^0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913$''',
+  '''^0x808456652fdb597867f38412077a9182bf77359f$''',
+  '''^talyvor\.consent\.v1$''',
+  '''^talyvor\.e2e-keychain\.$''',
+  '''^608373ac9acc3dafc036da69cb2ef7251182db6d-amd64$''',
+]
