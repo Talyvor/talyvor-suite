@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router-dom'
-import { cn, focusRing, inlineLink, useTheme, type ThemeChoice } from '@talyvor/ui'
+import { cn, focusRing, inlineLink, useSounds, useTheme, type ThemeChoice } from '@talyvor/ui'
 import { Card, Switch, Tabs } from '@talyvor/ui/pocket'
 import { ApiError } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
@@ -137,27 +137,37 @@ function SharedAnswersCard() {
 
 const n = (v: number) => <span className="font-figure">{v.toLocaleString('en-US')}</span>
 
-/** B57.42 — Appearance, moved here from the top bar: Light, Dark or Same as this device. */
+/** B57.42 — the theme, moved here from the top bar: Light, Dark or Same as this device. */
 const APPEARANCE: Record<string, ThemeChoice> = {
   Light: 'light',
   Dark: 'dark',
   'Same as this device': 'device',
 }
 
-function AppearanceCard() {
+/** B61.128 — "Look and sound" (it was "Appearance", Pocket Live section 15): the theme, and a Sounds switch under it, on
+ * by default. */
+function LookAndSoundCard() {
   const choice = useTheme((s) => s.choice)
   const choose = useTheme((s) => s.choose)
+  const soundsOn = useSounds((s) => s.on)
+  const setSoundsOn = useSounds((s) => s.setOn)
   const tabs = Object.keys(APPEARANCE)
   return (
-    <Card tone="white">
-      <h2 className="font-display text-reading font-bold text-ink">Appearance</h2>
+    <Card tone="white" data-testid="settings-look-and-sound">
+      <h2 className="font-display text-reading font-bold text-ink">Look and sound</h2>
       <Tabs
-        label="Appearance"
+        label="Look and sound"
         className="mt-2"
         tabs={tabs}
         value={tabs.find((t) => APPEARANCE[t] === choice) ?? 'Same as this device'}
         onChange={(t) => choose(APPEARANCE[t])}
       />
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span id="settings-sounds" className="text-body font-semibold text-ink">
+          Sounds
+        </span>
+        <Switch aria-labelledby="settings-sounds" checked={soundsOn} onCheckedChange={setSoundsOn} />
+      </div>
     </Card>
   )
 }
@@ -261,7 +271,7 @@ export function Settings() {
           <IfArea area="gateway">
             <SharedAnswersCard />
           </IfArea>
-          <AppearanceCard />
+          <LookAndSoundCard />
           <ShowAmountsCard />
           {/* B27.27 — BYOK's keys: added, replaced and removed here, only their last four ever shown. */}
           <ProviderKeysCard />

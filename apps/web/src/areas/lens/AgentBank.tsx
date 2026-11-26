@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
+import { Button, CardHeader, Input, Pill, Row, focusRing, inlineLink, type PillStatus, playSound } from '@talyvor/ui'
 import {
   Chip,
   CodeBox,
@@ -150,7 +150,10 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
   const [reason, setReason] = useState('')
   const change = useMutation({
     mutationFn: (pause: boolean) => (pause ? agentBankApi.pauseAll(reason.trim()) : resumeEveryAgent()),
-    onSuccess: () => setReason(''),
+    onSuccess: (_got, pause) => {
+      playSound(pause ? 'pause' : 'resume')
+      setReason('')
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
   return (
@@ -2362,11 +2365,15 @@ export function Approvals({
       ok: true,
       text: await decideOne(a, decision, allow, reason),
     }),
-    onSuccess: (o) => {
+    onSuccess: (o, { decision }) => {
+      playSound(decision === 'approve' ? 'approved' : 'declined')
       setOutcome(o)
       setDeclining(null)
     },
-    onError: (err) => setOutcome({ ok: false, text: refusalText(err) }),
+    onError: (err) => {
+      playSound('refused')
+      setOutcome({ ok: false, text: refusalText(err) })
+    },
     onSettled: settled,
   })
   // Several at once only while the workspace signs nothing: one passkey over many approvals needs Lens B41.204.
@@ -2379,11 +2386,15 @@ export function Approvals({
         text: decision === 'approve' ? `Approved ${n}. Each agent’s next identical request goes through, once.` : `Declined ${n}. Those requests are refused, and the same requests are refused without asking you for 24 hours.`,
       }
     },
-    onSuccess: (o) => {
+    onSuccess: (o, { decision }) => {
+      playSound(decision === 'approve' ? 'approved' : 'declined')
       setOutcome(o)
       setPicked(new Set())
     },
-    onError: (err) => setOutcome({ ok: false, text: refusalText(err) }),
+    onError: (err) => {
+      playSound('refused')
+      setOutcome({ ok: false, text: refusalText(err) })
+    },
     onSettled: settled,
   })
   const busy = decide.isPending || bulk.isPending

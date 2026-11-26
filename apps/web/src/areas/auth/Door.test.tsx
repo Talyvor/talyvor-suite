@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { doorNav } from './doorApi'
+import { listenForSounds } from '../../soundsAsked'
 
 // Door.test.tsx — B61.26: the web's door. The phone number, the code, the passcode (a known number) or a passcode
 // chosen twice (a new one), "Sign in with a passkey", "Sign in faster next time", and each refusal in Lens's words.
@@ -266,8 +267,11 @@ describe('the passkey', () => {
     expect(key.compareDocumentPosition(screen.getByLabelText('Your phone number')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(key).toHaveClass('bg-primary')
     expect(screen.getByRole('button', { name: 'Continue' })).not.toHaveClass('bg-primary')
+    const sounds = listenForSounds()
     fireEvent.click(key)
     await waitFor(() => expect(window.location.pathname).toBe('/'))
+    // B61.128 — the app opens: unlock, once.
+    expect(sounds()).toEqual(['unlock'])
     expect(get).toHaveBeenCalledWith({ publicKey: expect.objectContaining({ rpId: 'app.talyvor.com', userVerification: 'required' }) })
     expect(sent.map((s) => s.url)).toEqual(['/auth/passkey/challenge', '/auth/passkey/finish'])
     expect(sent[1].body).toEqual({ credential_id: 'AQEB', client_data_json: 'AgIC', authenticator_data: 'AwMD', signature: 'BAQE' })

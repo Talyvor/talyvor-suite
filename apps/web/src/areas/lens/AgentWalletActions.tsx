@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { inlineLink } from '@talyvor/ui'
+import { inlineLink, playSound } from '@talyvor/ui'
 import { Button, Card, Chip, Facts, Field, Icon, Input, Money, Row, Select, type ChipTone } from '@talyvor/ui/pocket'
 import { kindWords } from './AccountStatement'
 import { DownloadFailed, lineWhen } from './AgentStatement'
@@ -134,7 +134,13 @@ function MoveQuote({
       const assertion = (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined
       return agentWalletApi.confirm(agent.id, m.id, assertion)
     },
-    onSuccess: onDone,
+    onSuccess: (done) => {
+      // B61.128 — section 15: a cash-out is money going (sent), a card or bank top-up is money added, and a move from
+      // the account or another agent, or a conversion, is money moving inside the account.
+      playSound(m.route === 'cash_out' ? 'sent' : m.route === 'card' || m.route === 'bank_transfer' ? 'moneyin' : 'moved')
+      onDone(done)
+    },
+    onError: () => playSound('refused'),
     onSettled: () => {
       sent.current = false
       return Promise.all([

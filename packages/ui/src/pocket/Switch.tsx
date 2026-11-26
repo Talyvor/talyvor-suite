@@ -2,6 +2,7 @@ import { forwardRef, useId } from 'react'
 import * as SwitchPrimitive from '@radix-ui/react-switch'
 import { cn } from '../lib/cn'
 import { pocketFocusRing } from './focus'
+import { playSound } from '../lib/sound'
 
 export interface SwitchProps extends React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root> {
   /** Disables the switch and says why, in words beside it that a screen reader hears as its description. */
@@ -11,7 +12,7 @@ export interface SwitchProps extends React.ComponentPropsWithoutRef<typeof Switc
 // pocket.css .toggle: 44 by 26, the control grey off and ink on. The thumb is white off in both themes (the knob colour)
 // and on-primary on: white in the light theme, ink in the dark, as .pk-dark .toggle.on::after (B57.58). Radix supplies role="switch", aria-checked and Space.
 export const Switch = forwardRef<React.ElementRef<typeof SwitchPrimitive.Root>, SwitchProps>(function Switch(
-  { disabledReason, disabled, className, ...props },
+  { disabledReason, disabled, className, onCheckedChange, ...props },
   ref,
 ) {
   const reasonId = useId()
@@ -20,6 +21,11 @@ export const Switch = forwardRef<React.ElementRef<typeof SwitchPrimitive.Root>, 
       ref={ref}
       disabled={disabled || !!disabledReason}
       aria-describedby={disabledReason ? reasonId : undefined}
+      // B61.128 — section 15: a switch flipping plays tick.wav.
+      onCheckedChange={(checked) => {
+        playSound('tick')
+        onCheckedChange?.(checked)
+      }}
       className={cn(
         'inline-flex h-6.5 w-11 shrink-0 cursor-pointer items-center rounded-pill bg-control transition-colors duration-200',
         'data-[state=checked]:bg-ink disabled:cursor-not-allowed disabled:opacity-50',

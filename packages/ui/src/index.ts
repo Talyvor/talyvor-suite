@@ -7,6 +7,8 @@ export { focusRing } from './lib/focus'
 export { inlineLink } from './lib/link'
 export { useTheme } from './lib/theme'
 export type { Theme, ThemeChoice } from './lib/theme'
+export { playSound, useSounds, SOUND_NAMES, WEB_SOUND_VOLUME, resetSoundsForTest } from './lib/sound'
+export type { SoundName } from './lib/sound'
 export { tokens } from './tokens'
 export type { TokenName } from './tokens'
 export {

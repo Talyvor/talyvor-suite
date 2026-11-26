@@ -1,3 +1,4 @@
+import { playSound } from '@talyvor/ui'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -33,8 +34,10 @@ export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
   const waiting = (approvals.data?.approvals ?? []).some((p) => p.status === 'pending' && p.agent_id === agent.id)
   const pause = useMutation({
     mutationFn: () => agentBankApi.pause(agent.id, 'paused from its card'),
-    onSuccess: () =>
-      showSnack({ title: `${agent.name} is paused`, line: 'Talyvor refuses its next request or payment until you resume it.' }),
+    onSuccess: () => {
+      playSound('pause')
+      showSnack({ title: `${agent.name} is paused`, line: 'Talyvor refuses its next request or payment until you resume it.' })
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
 
@@ -127,6 +130,7 @@ export function ResumeAgent({ agent, allPaused, open, onClose }: { agent: Agent;
   const resume = useMutation({
     mutationFn: () => resumeAgent(agent.id),
     onSuccess: () => {
+      playSound('resume')
       onClose()
       showSnack(
         allPaused
@@ -169,6 +173,7 @@ export function StartEveryAgent({ open, onClose }: { open: boolean; onClose: () 
   const start = useMutation({
     mutationFn: resumeEveryAgent,
     onSuccess: () => {
+      playSound('resume')
       onClose()
       showSnack({ title: 'Your agents can work again', line: 'An agent paused on its own stays paused.' })
     },

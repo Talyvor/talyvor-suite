@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from './App'
+import { listenForSounds } from './soundsAsked'
 
 // B57.8 — Pocket's shell around every signed-in page: the top bar's Pause every agent (instant, no passkey), the kill
 // banner on every page while every agent is paused, Start every agent again opening the killoff dialog that signs over
@@ -91,8 +92,11 @@ describe('Pause every agent, from the top bar of every page', () => {
       vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION),
     )
     const bar = await at('/')
+    const sounds = listenForSounds()
     fireEvent.click(await bar.findByRole('button', { name: 'Pause every agent' }))
     fireEvent.click(within(await screen.findByTestId('kill-banner')).getByRole('button', { name: 'Start every agent again' }))
+    // B61.128 — pause once Lens has paused them, and nothing for the cancelled passkey below.
+    expect(sounds()).toEqual(['pause'])
 
     const dialog = await screen.findByRole('dialog', { name: 'Start every agent again?' })
     // The pause's confirmation goes, so it cannot sit over the sheet's buttons below 840.
@@ -108,6 +112,7 @@ describe('Pause every agent, from the top bar of every page', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Start them with your passkey' }))
     expect(await screen.findByText('Your agents can work again')).toBeInTheDocument()
+    expect(sounds()).toEqual(['pause', 'tick', 'resume'])
     await waitFor(() => expect(screen.queryByTestId('kill-banner')).toBeNull())
     expect(await bar.findByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
 

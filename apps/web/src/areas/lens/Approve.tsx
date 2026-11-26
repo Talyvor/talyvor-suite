@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { inlineLink } from '@talyvor/ui'
+import { inlineLink, playSound } from '@talyvor/ui'
 import { Button, Card, Facts, Icon, KindTile, pocketFocusRing } from '@talyvor/ui/pocket'
 import { formatWhen } from './format'
 import { readFailure } from './WalletMoney'
@@ -209,17 +209,20 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
       return agentBankApi.approveRequest(r.id, prepared.statement, await assertOver(prepared))
     },
     onSuccess: (done) => {
+      playSound('approved')
       qc.setQueryData(paymentRequestKey(r.id), done)
       // B41.2 — a request made of bills marks each bill it paid as paid.
       void qc.invalidateQueries({ queryKey: BILLS_KEY })
       void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
       void qc.invalidateQueries({ queryKey: PREPARED_KEY })
     },
+    onError: () => playSound('refused'),
   })
   // B45.2 — declined: Lens cancels what waits, so none of that is paid (a covered item paid at prepare stays paid, B55.21).
   const decline = useMutation({
     mutationFn: () => agentBankApi.cancelRequest(r.id),
     onSuccess: (done) => {
+      playSound('declined')
       qc.setQueryData(paymentRequestKey(r.id), done)
       void qc.invalidateQueries({ queryKey: PREPARED_KEY })
     },

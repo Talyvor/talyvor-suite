@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { listenForSounds } from '../../soundsAsked'
 
 // B59.45 — Cards on the web, as the phone's Cards tab (B59.34): every agent's card in its art, Frozen, the limits its
 // purchases are judged by, Freeze card, its purchases, and its details hidden until the owner's passkey says it is them.
@@ -112,11 +113,14 @@ describe('Cards on the web', () => {
     render(<App />)
 
     const researcher = await screen.findByTestId('card-agt_1')
+    const sounds = listenForSounds()
     fireEvent.click(await within(researcher).findByRole('button', { name: 'Freeze card' }))
     expect(await within(researcher).findByText('Frozen. Every purchase on Researcher’s card is refused, and nothing leaves its wallet, until you unfreeze it.')).toBeTruthy()
     expect(within(researcher).getByText('Frozen')).toBeTruthy()
     fireEvent.click(await within(researcher).findByRole('button', { name: 'Unfreeze card' }))
     expect(await within(researcher).findByText('Unfrozen. Researcher’s card takes purchases again, each one judged by Researcher’s rules.')).toBeTruthy()
+    // B61.128 — each sound once Lens has answered.
+    expect(sounds()).toEqual(['freeze', 'unfreeze'])
     expect(sent).toEqual([
       { method: 'POST', url: '/api/agents/agt_1/card/freeze' },
       { method: 'POST', url: '/api/agents/agt_1/card/unfreeze' },

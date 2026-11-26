@@ -453,3 +453,10 @@ beforeEach(() => {
 // B61.70 — every signed-in page draws the background's canvas, and jsdom has no 2D context: answer null, as jsdom does,
 // without its "Not implemented" stack on every page. A test that needs a context stubs one (page-background.test.tsx).
 HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext
+
+// B61.128 — jsdom has no audio: its HTMLMediaElement.play reports "not implemented". The sounds (lib/sound.ts) are asked
+// for after the first click in many tests, so play answers as a browser that played does; a test reads what was asked
+// for with vi.spyOn(HTMLMediaElement.prototype, 'play').
+HTMLMediaElement.prototype.play = function play() {
+  return Promise.resolve()
+}

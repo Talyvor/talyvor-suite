@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn, inlineLink } from '@talyvor/ui'
+import { cn, inlineLink, playSound } from '@talyvor/ui'
 import {
   Button as PocketButton,
   Card as PocketCard,
@@ -439,6 +439,7 @@ function PayForm({
   const pay = useMutation({
     mutationFn: () => payOutsideSigned({ account_id: account?.id ?? '', payee_id: payeeID, amount_minor: minor ?? 0, currency, reference: reference.trim(), idempotency_key: key }),
     onSuccess: (p) => {
+      playSound('sent')
       setMade(p)
       setAmount('')
       setReference('')
@@ -449,6 +450,7 @@ function PayForm({
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       void qc.invalidateQueries({ queryKey: PLAN_KEY })
     },
+    onError: () => playSound('refused'),
   })
   const why =
     payee === undefined

@@ -276,3 +276,10 @@ afterAll(() => {
   // "Button was registered and never committed".
   flushReach(inject('reachDir'))
 })
+
+// B61.128 — jsdom has no audio: its HTMLMediaElement.play reports "not implemented". The sounds (lib/sound.ts) are asked
+// for after the first click in many tests, so play answers as a browser that played does; a test reads what was asked
+// for with vi.spyOn(HTMLMediaElement.prototype, 'play').
+HTMLMediaElement.prototype.play = function play() {
+  return Promise.resolve()
+}

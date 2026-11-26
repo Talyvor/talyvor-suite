@@ -7,4 +7,6 @@ import "mime"
 func init() {
 	_ = mime.AddExtensionType(".ico", "image/x-icon")
 	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
+	// B61.128: the sounds in /sounds; Go's table has no .wav either.
+	_ = mime.AddExtensionType(".wav", "audio/wav")
 }

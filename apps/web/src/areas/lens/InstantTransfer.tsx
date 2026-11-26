@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn, inlineLink } from '@talyvor/ui'
+import { cn, inlineLink, playSound } from '@talyvor/ui'
 import {
   Button as PocketButton,
   Card as PocketCard,
@@ -291,6 +291,7 @@ function InstantTransferForm() {
     )
   }
   const done = (t: InstantTransfer) => {
+    playSound('sent')
     qc.setQueryData(instantKey(t.id), t)
     void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
     setKey(newMoveKey())
@@ -303,6 +304,7 @@ function InstantTransferForm() {
       // A new payee, or an amount above the agent's approval amount: Lens filed an approval for the owner to sign.
       const id = approvalNamedIn(err)
       if (id) setApprovalID(id)
+      else playSound('refused')
     },
   })
   // The owner approves with a passkey once the workspace has one; then it is sent again, at a fresh quote, once.
@@ -321,6 +323,7 @@ function InstantTransferForm() {
   const decline = useMutation({
     mutationFn: () => agentBankApi.decide(approvalID ?? '', 'deny'),
     onSuccess: () => {
+      playSound('declined')
       setApprovalID(null)
       setDeclined(true)
       setKey(newMoveKey())

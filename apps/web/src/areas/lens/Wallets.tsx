@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn, inlineLink } from '@talyvor/ui'
+import { cn, inlineLink, playSound } from '@talyvor/ui'
 import {
   Button as PocketButton,
   Card as PocketCard,
@@ -344,10 +344,12 @@ function TopUp({ open, onClose, shows }: { open: boolean; onClose: () => void; s
   const top = useMutation({
     mutationFn: () => agentBankApi.walletTopUp(account?.id ?? '', minor ?? 0, key),
     onSuccess: () => {
+      playSound('moneyin')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       setKey(newMoveKey())
       close()
     },
+    onError: () => playSound('refused'),
   })
   return (
     <Dialog
@@ -434,10 +436,12 @@ function Withdraw({ open, onClose, shows }: { open: boolean; onClose: () => void
       return agentBankApi.walletWithdraw(account?.id ?? '', body, key, assertion)
     },
     onSuccess: () => {
+      playSound('sent')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       setKey(newMoveKey())
       close()
     },
+    onError: () => playSound('refused'),
   })
   const why = minor === null ? 'Add an amount first.' : !bank ? 'Add your own bank first.' : undefined
   return (
@@ -560,10 +564,12 @@ function Convert({ open, onClose, shows }: { open: boolean; onClose: () => void;
       return agentBankApi.sideConvert(id, key, assertion)
     },
     onSuccess: () => {
+      playSound('moved')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       setKey(newMoveKey())
       close()
     },
+    onError: () => playSound('refused'),
   })
   const why = read.isError ? 'We couldn’t read your accounts.' : targets.length === 0 ? 'Open an account on the other side first.' : minor === null ? 'Add an amount first.' : undefined
   return (

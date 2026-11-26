@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { type UseQueryResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { inlineLink } from '@talyvor/ui'
+import { inlineLink, playSound } from '@talyvor/ui'
 import { Button, Card, Chip, Crumb, Dialog, Icon, Input, Money, PageHeading, Pick, PickRow, Select, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, changedBy, rulesHistoryKey, rulesKey, useKeys, useRulesChange } from './AgentBank'
 import { AgentFace } from './AgentFace'
@@ -414,6 +414,7 @@ function RulesEditor({
     mutationFn: (_signed: boolean) => change.run({ rules: body }, (assertion) => agentBankApi.setRules(agent.id, body, assertion)),
     onSuccess: async (saved, signed) => {
       if (saved === null) return
+      playSound('moved')
       qc.setQueryData(rulesKey(agent.id), saved)
       await qc.invalidateQueries({ queryKey: rulesHistoryKey(agent.id) })
       const version = qc.getQueryData<{ versions: AgentRulesVersion[] | null }>(rulesHistoryKey(agent.id))?.versions?.[0]?.version

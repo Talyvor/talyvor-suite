@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { inlineLink } from '@talyvor/ui'
+import { inlineLink, playSound } from '@talyvor/ui'
 import { Button, Card, Chip, Dialog, EmptyState, Icon, KindTile, Money, Row } from '@talyvor/ui/pocket'
 import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
 import { DESIGN_ATTR } from '../../pocketPending'
@@ -200,8 +200,14 @@ function AgentCardEntry({ agent, shown, onShown }: { agent: Agent; shown: boolea
   }
   const freeze = useMutation({
     mutationFn: () => (card?.frozen ? agentBankApi.unfreezeCard(agent.id) : agentBankApi.freezeCard(agent.id)),
-    onSuccess: (got) => setSaid(frozenText(agent.name, got)),
-    onError: (err) => setSaid(refusalText(err)),
+    onSuccess: (got) => {
+      playSound(got.frozen ? 'freeze' : 'unfreeze')
+      setSaid(frozenText(agent.name, got))
+    },
+    onError: (err) => {
+      playSound('refused')
+      setSaid(refusalText(err))
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: cardKey(agent.id) }),
   })
   const [ending, setEnding] = useState<'replace' | 'cancel' | null>(null)

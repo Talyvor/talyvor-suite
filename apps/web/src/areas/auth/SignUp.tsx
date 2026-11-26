@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Logo, cn } from '@talyvor/ui'
+import { Logo, cn, playSound } from '@talyvor/ui'
 import { Button, Field, Icon, Input, KindTile, PageBackground, Select, personalHues, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
@@ -302,6 +302,7 @@ function StepKind({ type, profile, kind, setKind, onBack, onCountryRefused, anot
         ? openAccount({ type, kind: k, name, country: profile.country, ...registration })
         : signupAccount({ account_type: type, money_kind: k, name, country: profile.country, ...registration }),
     onSuccess: async () => {
+      playSound('celebrate')
       navigate(another ? ANOTHER_CONFIRM_PATH : SIGNUP_KEY_PATH)
       // The session is on the new account: nothing read for the one it left is kept.
       await qc.resetQueries()

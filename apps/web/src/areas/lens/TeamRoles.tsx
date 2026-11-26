@@ -1,3 +1,4 @@
+import { playSound } from '@talyvor/ui'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -452,6 +453,7 @@ function SharedWithYou({ span }: { span: 5 | 7 }) {
   const open = useMutation({
     mutationFn: (a: RoleAccount) => switchAccount(a.id),
     onSuccess: async () => {
+      playSound('moved')
       navigate('/', { replace: true })
       // The session is on the other account now: nothing read for the one it left is kept.
       await qc.resetQueries()

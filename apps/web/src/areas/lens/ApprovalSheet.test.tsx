@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { pressEverything } from '../../test/pressEverything'
 import { b64u } from './passkeys'
+import { listenForSounds } from '../../soundsAsked'
 
 // B57.15 — the approval sheet, over the page you are on: ?approval=<id> on any page and /approvals#approval-<id> open
 // it. It says what pays (Lens B57.11's paid_from), why it asks, the budget left after and when it expires, and each
@@ -118,8 +119,11 @@ describe('the approval sheet', () => {
     expect(sheet).toHaveTextContent('This approves this payment only. Approving or declining asks for your passkey.')
     expect(within(sheet).getByRole('link', { name: 'Open Research' })).toHaveAttribute('href', '/agents/agt_1')
 
+    const sounds = listenForSounds()
     fireEvent.click(within(sheet).getByRole('button', { name: 'Approve with your passkey' }))
     expect(await screen.findByText('Approved: Acme Hosting, $340.00')).toBeInTheDocument()
+    // B61.128 — the passkey's yes, then approved, once Lens has answered.
+    expect(sounds()).toEqual(['tick', 'approved'])
     expect(screen.getByText('It goes through the next time Research sends it, once, within 24 hours.')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(window.location.search).toBe('')
@@ -156,8 +160,10 @@ describe('the approval sheet', () => {
     const form = await screen.findByRole('dialog', { name: 'Decline Research’s payment?' })
     expect(form).toHaveTextContent('$340.00 to Acme Hosting. The same request is then refused without asking you for 24 hours.')
     fireEvent.change(within(form).getByLabelText('Why (optional, the agent sees it)'), { target: { value: 'not this month' } })
+    const sounds = listenForSounds()
     fireEvent.click(within(form).getByRole('button', { name: 'Decline' }))
     expect(await screen.findByText('Declined. Research’s payment is refused')).toBeInTheDocument()
+    expect(sounds()).toEqual(['tick', 'declined'])
     expect(screen.getByText('And the same request is refused without asking you for 24 hours.')).toBeInTheDocument()
     expect(decisions).toEqual([
       { id: 'apr_A', decision: 'deny', body: { assertion: expect.objectContaining({ signature: b64u(bytes('sig-over-challenge-apr_A')) }), reason: 'not this month' } },

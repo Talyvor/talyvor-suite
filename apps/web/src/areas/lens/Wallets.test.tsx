@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { listenForSounds } from '../../soundsAsked'
 import { WalletsScreen } from './Wallets'
 import { AppMoney } from './money'
 
@@ -133,8 +134,10 @@ describe('Wallets — each action confirms first', () => {
     expect(read(confirm)).toContain('$250.00')
     expect(read(confirm)).toContain('The company · USD')
     expect(posts).toEqual([])
+    const sounds = listenForSounds()
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add money' }))
     await waitFor(() => expect(posts.map((p) => p.path)).toEqual(['/api/money/accounts/macc_usd/top-up']))
+    await waitFor(() => expect(sounds()).toEqual(['moneyin']))
     expect(posts[0].body).toEqual({ amount_minor: 25_000 })
     expect(posts[0].key).toBeTruthy()
   })

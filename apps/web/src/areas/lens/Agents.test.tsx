@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { listenForSounds } from '../../soundsAsked'
 import { pressEverything } from '../../test/pressEverything'
 import { AGENT_PICTURES } from '../../cards/agentPictures'
 
@@ -119,8 +120,11 @@ describe('Agents (B57.19)', () => {
     fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Ops' } })
     fireEvent.change(within(dialog).getByLabelText('What it does, in your own words'), { target: { value: 'Pays the hosting bills' } })
+    const sounds = listenForSounds()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_4'))
+    // B61.128 — an agent is made: celebrate, once.
+    expect(sounds()).toEqual(['celebrate'])
     expect(sent.map((s) => `${s.method} ${s.url}`)).toEqual(['POST /api/agents', 'PATCH /api/agents/agt_4', 'PUT /api/agents/agt_4/rules'])
     expect(sent[0].body).toEqual({ name: 'Ops', fiat_currency: 'USD' })
     expect(sent[1].body).toEqual({ description: 'Pays the hosting bills' })
