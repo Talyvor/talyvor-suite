@@ -174,6 +174,7 @@ import { instantTransferOffered, instantTransferQuote, instantTransferSend } fro
 import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from './helpScreen.ts'
 import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
 import { decidedLaddersVerdict, planChange, pricingApproved } from './planLadders.ts'
+import { standingOrders } from './standingOrders.ts'
 
 export interface Evidence {
   note?: string
@@ -5491,6 +5492,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // £20.14 reads returned, each leaving the account whole; £100.00 above the agent's 1,000 LXC approval amount is refused 403 with
   // nothing moved until the owner approves it, then the same request completes; the account ends at what came in less £120.00.
   if (i === 3) list.push(paymentsOut())
+  // B30.132 — a weekly £20.00 standing order from an agent's own account to a saved payee, once a run, on a workspace of its own:
+  // Lens's minute ticker pays its due tick once as a payment out on the ledger, a skipped tick moves nothing, then it is cancelled.
+  if (i === 3) list.push(standingOrders())
   // B30.130 — invoices and pay links, once a run, on two workspaces of its own: an agent issues and sends a GBP invoice with VAT; its
   // pay page reads with no credential, test money only, quoting the agent's payment reference and naming no issuer id; another
   // company's unfunded agent is refused 409 through the link and nothing moves.
