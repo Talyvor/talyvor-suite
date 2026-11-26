@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { tokens } from '@talyvor/ui'
-import { Button, Eyebrow, Facts, Field, Icon, Input, Money, Select, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
+import { Button, Eyebrow, Facts, Field, Icon, Input, KindTile, Money, Select, pocketFocusRing, showToast, type IconName } from '@talyvor/ui/pocket'
 import { encode } from 'uqr'
 import { Note, PanelForm, readFailure } from './WalletMoney'
 import { PAYEES_KEY } from './Pay'
@@ -27,6 +27,8 @@ import { WalletLimits } from './AgentWalletLimits'
 // Cash out and Request; then its Activity and Statements.
 // B48.48 — and for the USDC wallet its Limits and permissions, each change signed with the owner's passkey
 // (AgentWalletLimits.tsx).
+// B57.216 — each of those a row as the Money card draws its own (AgentMoney.tsx): its tile, its name, the line saying what
+// it does, and the chevron; pressing it opens its panel under it, and pressing it again closes it.
 
 export const walletKey = (id: string) => ['agent-money-wallet', id]
 export const walletsKey = (id: string) => ['agent-money-wallets', id]
@@ -212,26 +214,81 @@ const ACTION_WORDS: Record<WalletAction, string> = {
   limits: 'Limits and permissions',
 }
 
-/** One wallet's actions: a button each, the one pressed open under them. */
+const ACTION_ICONS: Record<WalletAction, IconName> = {
+  'top-up': 'plus',
+  'cash-out': 'arrow',
+  request: 'coin',
+  activity: 'clock',
+  statements: 'statements',
+  limits: 'shield',
+}
+
+/** What each action does, in the line under its name. */
+function actionLine(a: WalletAction, agent: Agent, wallet: AgentMoneyWallet): string {
+  switch (a) {
+    case 'top-up':
+      return wallet.asset === 'USDC' ? 'By card, bank transfer, or from your own money or USDC' : `From your own ${wallet.asset}`
+    case 'cash-out':
+      return `Turn ${agent.name}’s USDC back into money, in your own bank account`
+    case 'request':
+      return 'Ask to be paid, with a link and a QR code, and see where each request stands'
+    case 'activity':
+      return 'Everything into and out of this wallet, newest first'
+    case 'statements':
+      return 'A month of this wallet, and its CSV or PDF'
+    case 'limits':
+      return `What ${agent.name} may pay from it, each change signed with your passkey`
+  }
+}
+
+/** One action's row: the whole row opens its panel under it; the line under the name describes it. */
+function ActionRow({ icon, title, line, open, onToggle }: { icon: IconName; title: string; line: string; open: boolean; onToggle: () => void }) {
+  const id = useId()
+  return (
+    <div className="relative flex items-center gap-3 py-2.5 text-reading">
+      <KindTile on="white" icon={<Icon name={icon} size={18} />} />
+      <span className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          aria-describedby={id}
+          className={`block rounded-control text-left font-semibold text-ink ${pocketFocusRing}`}
+        >
+          <span aria-hidden="true" className="absolute inset-0" />
+          {title}
+        </button>
+        <span id={id} className="block text-body text-ink-3">
+          {line}
+        </span>
+      </span>
+      <Icon name="chev" size={16} className={`shrink-0 text-ink-3 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+    </div>
+  )
+}
+
+/** One wallet's actions: a row each, the one pressed open under it. */
 function WalletActions({ agent, wallet, agents }: { agent: Agent; wallet: AgentMoneyWallet; agents: Agent[] }) {
   const [open, setOpen] = useState<WalletAction | null>(null)
   const usdc = wallet.asset === 'USDC'
   const actions: WalletAction[] = usdc ? ['top-up', 'cash-out', 'request', 'activity', 'statements', 'limits'] : ['top-up', 'activity', 'statements']
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap gap-2" role="group" aria-label={`What to do with the ${wallet.asset} wallet`}>
-        {actions.map((a) => (
-          <Button key={a} variant={open === a ? 'primary' : 'secondary'} size="sm" aria-expanded={open === a} onClick={() => setOpen(open === a ? null : a)}>
-            {ACTION_WORDS[a]}
-          </Button>
-        ))}
-      </div>
-      {open === 'top-up' ? <WalletTopUp agent={agent} wallet={wallet} agents={agents} /> : null}
-      {open === 'cash-out' ? <WalletCashOut agent={agent} /> : null}
-      {open === 'request' ? <WalletRequest agent={agent} /> : null}
-      {open === 'activity' ? <WalletActivity agent={agent} asset={wallet.asset} /> : null}
-      {open === 'statements' ? <WalletStatements agent={agent} asset={wallet.asset} /> : null}
-      {open === 'limits' ? <WalletLimits agent={agent} /> : null}
+    <div className="grid" role="group" aria-label={`What to do with the ${wallet.asset} wallet`}>
+      {actions.map((a) => (
+        <div key={a} className="grid border-t border-line first:border-t-0">
+          <ActionRow icon={ACTION_ICONS[a]} title={ACTION_WORDS[a]} line={actionLine(a, agent, wallet)} open={open === a} onToggle={() => setOpen(open === a ? null : a)} />
+          {open === a ? (
+            <div className="pb-3">
+              {a === 'top-up' ? <WalletTopUp agent={agent} wallet={wallet} agents={agents} /> : null}
+              {a === 'cash-out' ? <WalletCashOut agent={agent} /> : null}
+              {a === 'request' ? <WalletRequest agent={agent} /> : null}
+              {a === 'activity' ? <WalletActivity agent={agent} asset={wallet.asset} /> : null}
+              {a === 'statements' ? <WalletStatements agent={agent} asset={wallet.asset} /> : null}
+              {a === 'limits' ? <WalletLimits agent={agent} /> : null}
+            </div>
+          ) : null}
+        </div>
+      ))}
     </div>
   )
 }

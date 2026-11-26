@@ -61,7 +61,7 @@ describe('the top-up link an agent asked for', () => {
     const calls = open(move({}))
     const card = await screen.findByTestId('agent-top-up-link')
     expect(within(card).getByRole('heading', { name: 'Add money to Researcher' })).toBeTruthy()
-    expect((await within(card).findByText('You pay')).nextSibling?.textContent).toContain('100.00')
+    expect((await within(card).findByText('You send')).nextSibling?.textContent).toContain('100.00')
     expect(within(card).getByText('Fee').nextSibling?.textContent).toContain('1.50')
     expect(within(card).getByText('1 EUR = 1.0820 USDC')).toBeTruthy()
     expect(within(card).getByTestId('wallet-move-gets').textContent).toContain('106.70')
