@@ -203,11 +203,11 @@ export function connectOAuth(): Scenario {
           wrong.push(`prepare_payment on a read-only connection answered ${up.status} "${upChallenge}", not 403 insufficient_scope with the same challenge in _meta`)
         }
         await page.goto(`${origin}/settings/connect`)
-        const row = page.locator('li').filter({ hasText: name })
+        // B17.548 — since B57.45 each connection is a row of its own, and its latest tool calls a card below the rows.
+        const row = page.locator(`[data-assistant="${name}"]`)
         await row.waitFor({ timeout: 15_000 })
         const rowText = (await row.innerText()).replace(/\s+/g, ' ')
-        const trail = row.getByRole('list', { name: 'Its latest tool calls' })
-        if (await row.getByText(/What it did/).count() > 0) await row.getByText(/What it did/).click()
+        const trail = page.getByRole('region', { name: `${name}’s latest tool calls` })
         const trailText = (await trail.count()) > 0 ? (await trail.innerText()).replace(/\s+/g, ' ') : ''
         ctx.evidence.push({ note: `B52.3: get_balances answered ${audited.status}; the row's audit trail reads "${trailText}"` })
         if (!trailText.includes('get_balances')) wrong.push(`Settings does not list the get_balances call in the connection's audit trail: "${rowText}"`)
@@ -217,9 +217,11 @@ export function connectOAuth(): Scenario {
         if (!/Last used (?!never)/.test(rowText)) wrong.push(`the connected assistant's row does not show its last use: "${rowText}"`)
         // B41.15: revoked from Keys, where everything that may act for the workspace is listed.
         await page.goto(`${origin}/keys`)
-        const onKeys = page.locator('li').filter({ hasText: name })
+        // B57.94 — its row's Revoke asks first.
+        const onKeys = page.getByRole('button', { name: `Revoke ${name}`, exact: true })
         await onKeys.waitFor({ timeout: 15_000 })
-        await page.getByRole('button', { name: `Revoke ${name}` }).click()
+        await onKeys.click()
+        await page.getByRole('dialog', { name: `Revoke ${name}?` }).getByRole('button', { name: 'Revoke', exact: true }).click()
         await onKeys.waitFor({ state: 'detached', timeout: 15_000 })
         const shown = await page.getByRole('status').filter({ hasText: `${name} is disconnected` }).count()
         const toolCall = await fetch(`${origin}/mcp`, {

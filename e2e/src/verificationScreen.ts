@@ -132,7 +132,8 @@ export function verificationScreen(): Scenario {
     run: async (ctx) => {
       const page = await ctx.app.tab('/settings/verification')
       try {
-        await page.locator('main h1').filter({ hasText: 'Verification' }).waitFor({ timeout: TIMEOUT_MS })
+        // B17.548 — since B61.121 Settings' pages open in the panel over Settings, named by its heading.
+        await page.getByRole('dialog', { name: 'Verification', exact: true }).waitFor({ timeout: TIMEOUT_MS })
         const confirm = page.getByRole('button', { name: WORDS.confirm, exact: true })
         const atL0 = await reached(page, confirm, `"${WORDS.confirm}"`)
         if (atL0 !== undefined) return fail(`a new workspace on the Verification screen: ${atL0}`)

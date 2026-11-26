@@ -130,6 +130,8 @@ export function spendingScreen({ screen = true }: { screen?: boolean } = {}): Sc
       } finally {
         await page.close()
       }
+      // B17.548 — Chat is held in the launch version (launch.ts), so a launch run, which opens Home, leaves its half out.
+      if (ctx.app.home) return { pass: true, detail: `${detail}; Money → Spending shows all three; Chat's half left out, Chat is held in the launch version` }
 
       // 6. In Chat: the eating-out total is Lens's, and the question never reaches the model.
       const chat = await ctx.app.tab('/chat')
