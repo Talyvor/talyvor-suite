@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BurstAnswer } from '../src/lens.ts'
-import { raisedLimitFaults, refusalFaults } from '../src/ratelimit.ts'
+import { counterOf, raisedLimitFaults, redisDownFaults, refusalFaults } from '../src/ratelimit.ts'
 
 const served: BurstAnswer = { status: 200, retryAfter: null, remaining: '7', text: '{"id":"ws"}' }
 const refused: BurstAnswer = { status: 429, retryAfter: '1', remaining: '0', text: '{"error":"rate limit exceeded","limit_type":"second","retry_after_seconds":1}' }
@@ -27,5 +27,23 @@ describe('B39.35 workspace-limits-raised', () => {
     ])
     expect(raisedLimitFaults({ first: thousand, last: served }, { first: thousand, last: refused }))
       .toEqual(['the default workspace\'s 1,001st read was refused for the window "second", not "minute"'])
+  })
+})
+
+describe('B28.288 rate-limits-redis-down', () => {
+  const page = '# HELP lens_rate_limit_redis_errors_total x\n# TYPE lens_rate_limit_redis_errors_total counter\nlens_rate_limit_redis_errors_total 351\nlens_rate_limit_redis_errors_total_other 9\n'
+  it('reads the counter off the metrics page, and null when it is not there', () => {
+    expect(counterOf(page, 'lens_rate_limit_redis_errors_total')).toBe(351)
+    expect(counterOf('lens_up{a="b"} 1\nlens_up{a="c"} 2\n', 'lens_up')).toBe(3)
+    expect(counterOf('lens_up 1\n', 'lens_rate_limit_redis_errors_total')).toBeNull()
+  })
+  it('passes a limiter that refuses and counts with Redis gone, and names one that fails open or counts nothing', () => {
+    const burst = [...Array.from({ length: 100 }, () => served), ...Array.from({ length: 50 }, () => refused)]
+    expect(redisDownFaults(burst, 0, 351)).toEqual([])
+    expect(redisDownFaults(Array.from({ length: 150 }, () => served), 0, 0)).toEqual([
+      'with Redis gone, 150 reads of the workspace on one token were none of them refused (150 served): the limiter fails open',
+      'lens_rate_limit_redis_errors_total rose by 0 over 150 reads with Redis gone, not at least one a read: the outage would not alert',
+    ])
+    expect(redisDownFaults(burst, null, null)).toEqual(['the admin key\'s /metrics carried no lens_rate_limit_redis_errors_total before Redis went'])
   })
 })

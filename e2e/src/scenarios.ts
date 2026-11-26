@@ -159,7 +159,7 @@ import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
 import { connectApprove, connectContact, connectMCP, connectOAuth, connectRecurring } from './connect.ts'
 import { mcpPayRetried, mcpSDKAgentPay } from './mcpSDK.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
-import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
+import { rateLimitsHold, rateLimitsRedisDown, workspaceLimitsRaised } from './ratelimit.ts'
 import { marketAskScreen, marketCompareScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
 import { marketContentFilter } from './contentFilter.ts'
 import { listingAsModel } from './listingAsModel.ts'
@@ -5334,6 +5334,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.288 — Lens's rate limiter, once a run, on a workspace of its own: a burst of reads at once on one token is refused
   // past the limit, each refusal saying when to come back, and the next read once that has passed is served.
   if (i === 7) list.push(rateLimitsHold())
+  // B28.288 — the same limiter with Redis gone, once a run, on a Lens of the run's own (--lens-src, Docker): a burst is still
+  // refused past the limit, and lens_rate_limit_redis_errors_total rises for each read so the outage alerts.
+  if (i === 7) list.push(rateLimitsRedisDown())
   // B39.35 — one workspace's own request limits, once a run, on two workspaces of its own: raised on the admin key, its
   // 1,001st read in a minute is served while the other's is refused for the minute, and deleted it is back on the defaults.
   if (i === 7) list.push(workspaceLimitsRaised())
