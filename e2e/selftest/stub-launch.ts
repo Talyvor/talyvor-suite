@@ -15,6 +15,16 @@
 //        transfer and moves nothing
 //   GET  …/money/instant-transfers/{id}   the transfer
 //
+// B56.29 — currency conversion (Lens B56.23), as currency-convert-margin reads it:
+//   POST …/agents/{id}/money/convert/quote {sell_currency, buy_currency, sell_minor}   201: business_studio's margin (FX_MARGIN_BPS,
+//        here 60, as the stub's public fees state it) on what is sold above what the month still converts free (FX_FREE_MINOR,
+//        here 100000 a workspace in the currency sold), rounded up, and the rest bought at the Test partner's reference rate
+//        (£1 = $1.25, €1 = $1.10), rounded down
+//   POST …/agents/{id}/money/convert {quote_id} and an Idempotency-Key   one fx_conversion entry: the agent's account in the
+//        currency sold down by sell_minor, its account in the currency bought up by buy_minor; more than it holds refused 409;
+//        the same key again answers the same conversion and moves nothing
+//   GET  /v1/money/accounts/{id}/statement   the lines the conversions posted to the account
+//
 // B61.51 — the company details (Lens B59.30): GET and PUT /v1/workspaces/{ws}/business {company_name, registration_number,
 // country, people}, the PUT 400 without a name, a registration number and a country.
 //
@@ -29,6 +39,10 @@
 //   instant-sent-twice     — the same Idempotency-Key again sends again
 //   instant-not-credited   — the beneficiary's account is not credited
 //   instant-above-sent     — a send above the agent's approval amount, to an account it sent to before, goes through
+//   fx-absent              — no conversion routes, as a Lens before B56.23
+//   fx-margin-dropped      — a conversion takes no margin, and the partner converts all of it
+//   fx-margin-on-free      — the margin is taken on the part that converts free too
+//   fx-converted-twice     — the same Idempotency-Key again is converted again, not answered with the conversion it made
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -55,12 +69,25 @@ const KINDS = ['support', 'complaint', 'account_closure', 'data_export', 'data_d
 const FIATS = ['GBP', 'EUR', 'USD']
 /** What a cent or a penny is worth in µLXC, as the stub's other payments count it. */
 const ULXC_PER_MINOR = 10_000
+/** B56.29 — business_studio's fx_margin_bps and fx_free_minor (talyvor-lens internal/fees), and the Test partner's USD per unit. */
+const FX_MARGIN_BPS = 60
+const FX_FREE_MINOR = 100_000
+const USD_PER_UNIT: Record<string, number> = { GBP: 1.25, EUR: 1.1, USD: 1 }
+
+interface Conversion { id: string; workspace_id: string; agent_id: string; from_account_id: string; to_account_id: string; sell_minor: number; sell_currency: string
+  margin_bps: number; margin_minor: number; free_minor: number; buy_minor: number; buy_currency: string; reference_rate: string; rate: string; funding: string
+  status: string; idempotency_key?: string; entry_id?: string; expires_at: string; created_at: string }
+interface StatementLine { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string }
 
 export class LaunchDesk {
   private readonly quotes = new Map<string, Quote>()
   private readonly requests = new Map<string, FiledRequest[]>()
   private readonly companies = new Map<string, Company>()
   private readonly transfers: Transfer[] = []
+  private readonly conversions = new Map<string, Conversion>()
+  /** What each workspace converted free this month, by the currency sold. */
+  private readonly freeUsed = new Map<string, number>()
+  private readonly statementLines = new Map<string, StatementLine[]>()
   private nextRequest = 1
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
@@ -92,6 +119,8 @@ export class LaunchDesk {
     if (rest === '/money/instant-transfers/quote' && req.method === 'POST') return this.quote(req, res, ws), true
     const m = /^\/agents\/([^/]+)\/money\/instant-transfers$/.exec(rest)
     if (m !== null && req.method === 'POST') return this.send(req, res, ws, m[1]), true
+    const fx = /^\/agents\/([^/]+)\/money\/convert(\/quote)?$/.exec(rest)
+    if (fx !== null && req.method === 'POST' && !this.broken('fx-absent')) return (fx[2] ? this.convertQuote(req, res, ws, fx[1]) : this.convert(req, res, ws, fx[1])), true
     const t = /^\/money\/instant-transfers\/([^/]+)$/.exec(rest)
     if (t !== null && req.method === 'GET') {
       const found = this.transfers.find((x) => x.id === t[1] && x.workspace_id === ws)
@@ -189,5 +218,75 @@ export class LaunchDesk {
       receive_currency: q.receive_currency, rate: q.rate, status: 'received', created_at: new Date().toISOString() }
     this.transfers.push(sent)
     return this.json(res, 200, sent)
+  }
+
+  /** B56.29 — GET /v1/money/accounts/{id}/statement on `ws`'s key: the lines its conversions posted. False for any other route. */
+  moneyRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): boolean {
+    const m = /^\/v1\/money\/accounts\/([^/]+)\/statement$/.exec(path)
+    if (m === null || req.method !== 'GET' || this.broken('fx-absent')) return false
+    const a = this.accounts(ws).find((x) => x.id === m[1])
+    if (a === undefined) return this.json(res, 404, { error: 'economy: no such money account' }), true
+    return this.json(res, 200, { workspace_id: ws, account_id: a.id, agent_id: a.agent_id ?? '', currency: a.currency, lines: this.statementLines.get(a.id) ?? [] }), true
+  }
+
+  private async convertQuote(req: IncomingMessage, res: ServerResponse, ws: string, agentID: string): Promise<void> {
+    const b = await this.body<{ sell_currency?: string; buy_currency?: string; sell_minor?: number }>(req)
+    const sellCur = (b.sell_currency ?? '').toUpperCase()
+    const buyCur = (b.buy_currency ?? '').toUpperCase()
+    if (!FIATS.includes(sellCur) || !FIATS.includes(buyCur) || sellCur === buyCur) {
+      return this.json(res, 400, { error: `economy: invalid conversion: a conversion sells one of GBP, EUR or USD for another, not "${sellCur}" for "${buyCur}"` })
+    }
+    const sell = b.sell_minor ?? 0
+    if (!Number.isInteger(sell) || sell <= 0) return this.json(res, 400, { error: 'economy: invalid conversion: sell_minor is a positive number of pence or cents' })
+    const mine = this.accounts(ws)
+    const from = mine.find((a) => a.agent_id === agentID && a.purpose === 'agent' && a.currency === sellCur)
+    const to = mine.find((a) => a.agent_id === agentID && a.purpose === 'agent' && a.currency === buyCur)
+    if (from === undefined || to === undefined) {
+      return this.json(res, 404, { error: `economy: no such money account: the agent has no open ${from === undefined ? sellCur : buyCur} account to convert with` })
+    }
+    const free = Math.min(sell, Math.max(0, FX_FREE_MINOR - (this.freeUsed.get(`${ws}\n${sellCur}`) ?? 0)))
+    const margin = this.broken('fx-margin-dropped') ? 0 : Math.ceil(((this.broken('fx-margin-on-free') ? sell : sell - free) * FX_MARGIN_BPS) / 10_000)
+    const rate = USD_PER_UNIT[sellCur] / USD_PER_UNIT[buyCur]
+    const buy = Math.floor((sell - margin) * rate)
+    const now = Date.now()
+    const c: Conversion = { id: `mfx_${randomUUID()}`, workspace_id: ws, agent_id: agentID, from_account_id: from.id, to_account_id: to.id, sell_minor: sell,
+      sell_currency: sellCur, margin_bps: FX_MARGIN_BPS, margin_minor: margin, free_minor: free, buy_minor: buy, buy_currency: buyCur, reference_rate: rate.toFixed(8),
+      rate: (buy / sell).toFixed(8), funding: 'test', status: 'quoted', expires_at: new Date(now + QUOTE_LIFE_MS).toISOString(), created_at: new Date(now).toISOString() }
+    this.conversions.set(c.id, c)
+    return this.json(res, 201, c)
+  }
+
+  private async convert(req: IncomingMessage, res: ServerResponse, ws: string, agentID: string): Promise<void> {
+    const b = await this.body<{ quote_id?: string; idempotency_key?: string }>(req)
+    const key = String(req.headers['idempotency-key'] ?? b.idempotency_key ?? '').trim()
+    if (key === '') return this.json(res, 400, { error: 'economy: invalid conversion: a conversion carries an idempotency key (the Idempotency-Key header, or idempotency_key), up to 200 characters' })
+    const prior = [...this.conversions.values()].find((x) => x.workspace_id === ws && x.idempotency_key === key)
+    if (prior !== undefined && !this.broken('fx-converted-twice')) {
+      return prior.id === b.quote_id && prior.agent_id === agentID ? this.json(res, 200, prior) : this.json(res, 409, { error: 'economy: idempotency key reused for another movement' })
+    }
+    const c = this.conversions.get(b.quote_id ?? '')
+    if (c === undefined || c.workspace_id !== ws || c.agent_id !== agentID) return this.json(res, 404, { error: `economy: invalid quote: no such quote ${b.quote_id ?? ''}` })
+    if (c.status === 'converted' && !this.broken('fx-converted-twice')) return this.json(res, 409, { error: `economy: invalid quote: quote ${c.id} has converted already, under another key` })
+    if (Date.parse(c.expires_at) <= Date.now()) return this.json(res, 409, { error: `economy: invalid quote: quote ${c.id} expired at ${c.expires_at.replace(/\.\d+Z$/, 'Z')}. Ask for a new one` })
+    const mine = this.accounts(ws)
+    const from = mine.find((a) => a.id === c.from_account_id)
+    const to = mine.find((a) => a.id === c.to_account_id)
+    if (from === undefined || to === undefined) return this.json(res, 404, { error: 'economy: no such money account' })
+    if (from.test_minor < c.sell_minor) {
+      return this.json(res, 409, { error: `economy: not enough for this move: the account holds ${from.test_minor} of test money, and this conversion sells ${c.sell_minor}` })
+    }
+    from.test_minor -= c.sell_minor
+    from.balance_minor -= c.sell_minor
+    to.test_minor += c.buy_minor
+    to.balance_minor += c.buy_minor
+    const freeKey = `${ws}\n${c.sell_currency}`
+    this.freeUsed.set(freeKey, (this.freeUsed.get(freeKey) ?? 0) + c.free_minor)
+    const entry = `ment_${randomUUID()}`
+    const at = new Date().toISOString()
+    for (const [account, amount, line] of [[from.id, -c.sell_minor, 0], [to.id, c.buy_minor, 3]] as const) {
+      this.statementLines.set(account, [...(this.statementLines.get(account) ?? []), { entry_id: entry, line, at, kind: 'fx_conversion', amount_minor: amount, funding: 'test', state: 'completed' }])
+    }
+    Object.assign(c, { status: 'converted', idempotency_key: key, entry_id: entry })
+    return this.json(res, 200, c)
   }
 }

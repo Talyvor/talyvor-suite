@@ -11,6 +11,7 @@ import type { Locator, Page, Request, Response } from 'playwright'
 import { type AppUser, type Attachment, type ChargeBook, NetworkDropped, type Turn, chargeULXC } from './app.ts'
 import type { SpendCap } from './budget.ts'
 import { CapReached, worstInputTokens } from './budget.ts'
+import { currencyConvertMargin } from './currencyConvert.ts'
 import type { Fees, LedgerRow, LensClient, SyntheticUser } from './lens.ts'
 import { percent, platformFeeBPS } from './fees.ts'
 import {
@@ -5667,6 +5668,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B61.67 — and an Instant transfer sent from an agent's account the owner funded: it waits for the owner's key, arrives once on
   // both sides, sends once under one Idempotency-Key, and waits above "ask me above" with an unsigned decision refused.
   if (i === 4) list.push(instantTransferQuote(), instantTransferOffered(), instantTransferSend())
+  // B56.29 (for talyvor-lens B56.23) — a currency conversion, once a run, on a workspace of its own: £100.00 above the month's free
+  // part converts GBP to USD as one fx_conversion entry, charged the plan's FX margin in GBP, and the same key again converts nothing.
+  if (i === 4) list.push(currencyConvertMargin())
   if (i === 3) list.push(helpRequest(), helpComplaint(), yourDataRequest(), helpNoDeadControl())
   if (i === 2) list.push(sandboxLabelEveryScreen())
   return list

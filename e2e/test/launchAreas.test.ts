@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import { inventory } from '../src/coverage.ts'
+import { currencyConvertMargin } from '../src/currencyConvert.ts'
 import { type Control, type FiledRequest, deadControls, filedFaults, screenMatcher } from '../src/helpScreen.ts'
 import { instantTransferQuote, instantTransferSend, offeredFaults, quoteFaults } from '../src/instantTransfer.ts'
 import { hiddenPaths } from '../src/launch.ts'
@@ -121,6 +122,42 @@ describe('instant-transfer-send (B61.67)', () => {
     const v = await sendOnStub('instant-above-sent')
     expect(v.pass).toBe(false)
     expect(v.detail).toMatch(/^a send of USD 10\.00 above an "ask me above" of 5000000 µLXC must wait for the owner's key; Lens answered 200, sent and filed no pending approval$/)
+  })
+}, 120_000)
+
+// B56.29 — a conversion charged its plan's FX margin once (talyvor-lens B56.23): each planted defect FAILs it, and a Lens without
+// the conversion routes too.
+describe('currency-convert-margin (B56.29)', () => {
+  const convertOnStub = (broken: string) => quoteOnStub(broken, currencyConvertMargin())
+
+  it.concurrent("passes when £100.00 above the free part converts once, charged the plan's margin in GBP", async () => {
+    const v = await convertOnStub('')
+    expect(v.detail).toMatch(/^110000 pence \(100000 free this month\) converted once in entry ment_\S+: a margin of 60 pence \(60 bps of the 10000 above\) kept in GBP, 137425 cents bought at 1\.25000000; GBP 110000 → 0, USD 0 → 137425; the same key again answered mfx_\S+ and moved nothing$/)
+    expect(v.pass).toBe(true)
+  })
+
+  it.concurrent('FAILs on a Lens without currency conversion', async () => {
+    const v = await convertOnStub('fx-absent')
+    expect(v.pass).toBe(false)
+    expect(v.detail).toMatch(/^a quote to convert GBP to USD must answer 201; Lens answered 404/)
+  })
+
+  it.concurrent('FAILs when a conversion takes no margin', async () => {
+    expect(await convertOnStub('fx-margin-dropped')).toEqual({ pass: false,
+      detail: 'the margin is 60 basis points of the 10000 above the 100000 that converts free, rounded up: 60; the quote takes 0; ' +
+        'the 109940 left after the margin buys 137425 USD at 1.25000000; the quote buys 137500' })
+  })
+
+  it.concurrent('FAILs when the margin is taken on the part that converts free', async () => {
+    expect(await convertOnStub('fx-margin-on-free')).toEqual({ pass: false,
+      detail: 'the margin is 60 basis points of the 10000 above the 100000 that converts free, rounded up: 60; the quote takes 660; ' +
+        'the 109940 left after the margin buys 137425 USD at 1.25000000; the quote buys 136675' })
+  })
+
+  it.concurrent('FAILs when the same Idempotency-Key converts again', async () => {
+    const v = await convertOnStub('fx-converted-twice')
+    expect(v.pass).toBe(false)
+    expect(v.detail).toMatch(/^the same Idempotency-Key again must answer conversion mfx_\S+ of entry ment_\S+; Lens answered 409/)
   })
 }, 120_000)
 

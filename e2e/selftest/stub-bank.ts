@@ -1976,6 +1976,7 @@ export class Bank {
     if (/^\/v1\/money\/accounts\/[^/]+\/test-money$/.test(path) && req.method === 'POST' && !this.terms.accepted(viewer, 'payments_in')) {
       return json(res, 403, { error: 'Receiving money from outside Talyvor needs its terms accepted before it is used: this workspace has not accepted version 1 of them. Read them and accept them, then try again' }), true
     }
+    if (this.launch.moneyRoute(req, res, viewer, path)) return true
     if (await this.payees.route(req, res, viewer, path)) return true
     if (await this.permissionMandates.route(req, res, viewer, path)) return true
     if (await this.lockdownRoute(req, res, viewer, path)) return true
