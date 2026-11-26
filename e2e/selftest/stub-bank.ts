@@ -22,6 +22,7 @@
 //   pot-out-lost        — moving credits out of a pot empties it into nothing
 //   schedule-twice      — each run of a recurring transfer pays twice
 //   cash-out-free       — a cash-out is paid without holding the credits from the agent
+//   cash-out-unsigned   — B28.67: in a workspace with a passkey, a cash-out with no signature is held and paid anyway
 //   card-live           — an agent's card is issued in live mode
 //   review-public       — a listing held for review is in the public catalog
 //   approve-noop        — a moderator's approval answers but leaves the listing held
@@ -2361,12 +2362,25 @@ export class Bank {
       const { ws: _w, runs: _r, ...out } = sc
       return json(res, 201, out), true
     }
-    if (action === '/cash-outs' && method === 'POST') {
+    // B28.67 — Lens B28.339: once the workspace has a passkey or device key, a cash-out carries an assertion over its
+    // challenge; unsigned, it is refused and holds nothing. The stub checks who signed; Lens verifies the signature too.
+    // STUB_BREAK=cash-out-unsigned lets an unsigned one through.
+    if (action === '/cash-outs/challenge' && method === 'POST') {
       const b = await this.body<{ amount_ulxc?: number; destination?: string }>(req)
+      if (!b.destination?.trim() || !((b.amount_ulxc ?? 0) > 0)) return json(res, 400, { error: 'economy: a cash-out needs an amount and where it is paid' }), true
+      return json(res, 200, { challenge: randomBytes(32).toString('base64url'), allow_credentials: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id) }), true
+    }
+    if (action === '/cash-outs' && method === 'POST') {
+      const b = await this.body<{ amount_ulxc?: number; destination?: string; assertion?: { credential_id?: string; device_id?: string; challenge?: string; signature?: string } }>(req)
       const n = b.amount_ulxc ?? 0
       const have = this.balance(`agent:${a.id}`)
       if (!b.destination?.trim()) return json(res, 400, { error: 'economy: a cash-out needs where it is paid' }), true
       if (!(n > 0) || n > have) return json(res, 409, { error: `economy: the agent holds ${lxc(have)} LXC` }), true
+      const keys = this.passkeys.get(ws.id) ?? []
+      const signed = b.assertion?.device_id !== undefined ? this.devices.refused(ws.id, b.assertion) === undefined : keys.some((k) => k.credential_id === b.assertion?.credential_id)
+      if ((keys.length > 0 || this.devices.any(ws.id)) && !signed && !this.broken('cash-out-unsigned')) {
+        return json(res, 403, { error: 'economy: this workspace signs its cash-outs with a passkey or the phone app. Sign this cash-out\'s challenge' }), true
+      }
       const c: CashOut = { id: id('cso_'), workspace_id: ws.id, agent_id: a.id, amount_ulxc: n, amount_uusd: n / 10, test_funded_ulxc: n,
         destination: b.destination.trim(), partner: 'test', status: 'held', created_at: now }
       this.cashOuts.unshift(c)
@@ -2719,7 +2733,7 @@ export class Bank {
     }
     // B52.28 — Scan agents' watches (stub-scan.ts), before the agent routes below catch …/scan-watches.
     if (await this.scan.route(req, res, ws.id, rest, now)) return true
-    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/wallet\/activity|\/rules\/challenge|\/[a-z-]+)?$/.exec(rest)) !== null) {
+    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/wallet\/activity|\/rules\/challenge|\/cash-outs\/challenge|\/[a-z-]+)?$/.exec(rest)) !== null) {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true
       const action = m[2] ?? ''
