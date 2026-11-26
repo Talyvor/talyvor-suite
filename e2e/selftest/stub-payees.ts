@@ -59,6 +59,7 @@
 // pays only with an assertion by one of them over POST /v1/money/payments/challenge's challenge for exactly that payment;
 // unsigned or signed for another it is refused 403 and nothing moves. Its defect:
 //   payment-unsigned-paid  — the owner's payment with no signature is paid in a workspace with a passkey
+//   payment-account-unmoved — B57.87: a payment is listed and the account it was paid from holds what it held
 // B28.62 — and budgets with their limit-approach alerts (Lens B53.4, B28.335): PUT and GET /v1/money/budgets, spent from the
 // payments out of the month (or the week from Monday, UTC) in the budget's currency and wallet; GET /v1/money/budgets/alerts
 // raises each 50, 80 and 100% reached, once a period, and lists them newest first. Its defect:
@@ -920,7 +921,8 @@ export class PayeeDesk {
       return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(amount, currency)}` }
     }
     const refused = amount % 100 === 13
-    if (!refused || this.broken('refused-payment-held')) {
+    // B57.87 — STUB_BREAK=payment-account-unmoved lists the payment and takes nothing from the account.
+    if ((!refused || this.broken('refused-payment-held')) && !this.broken('payment-account-unmoved')) {
       account[funding === 'live' ? 'live_minor' : 'test_minor'] -= amount
       account.balance_minor -= amount
       this.line(ws, account, 'payment_out_hold', -amount)

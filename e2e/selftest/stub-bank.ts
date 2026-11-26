@@ -24,6 +24,9 @@
 //   cash-out-free       — a cash-out is paid without holding the credits from the agent
 //   cash-out-unsigned   — B28.67: in a workspace with a passkey, a cash-out with no signature is held and paid anyway
 //   lockdown-keeps-key  — B28.68: a lost phone's lockdown leaves the phone's key signing
+//   approval-signed-unkept — B57.87: an approval signed by the phone answers approved and stays pending
+//   pause-unkept        — B57.87: an agent's pause answers paused and leaves it running
+//   pause-all-unkept    — B57.87: pause-all answers every agent paused and pauses none
 //   card-live           — an agent's card is issued in live mode
 //   review-public       — a listing held for review is in the public catalog
 //   approve-noop        — a moderator's approval answers but leaves the listing held
@@ -2535,8 +2538,11 @@ export class Bank {
       } else if ((keys.length > 0 || this.devices.any(ws.id)) && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
         return json(res, 403, { error: 'economy: approvals in this workspace are signed: approve with a registered passkey' }), true
       }
-      a.status = m[2] === 'approve' ? 'approved' : 'denied'
-      a.decided_at = now
+      // B57.87 — STUB_BREAK=approval-signed-unkept answers a signed approve 200 and leaves the approval pending.
+      if (!(m[2] === 'approve' && this.broken('approval-signed-unkept'))) {
+        a.status = m[2] === 'approve' ? 'approved' : 'denied'
+        a.decided_at = now
+      }
       // B45.28 — the owner's signed approval is kept as an AP2 v0.2 closed Payment Mandate.
       if (m[2] === 'approve' && assertion !== undefined) {
         this.approvalProof.set(a.id, { owner_mandate: this.trustLayer.mandate({ iss: this.d.base, iat: Math.floor(Date.now() / 1000), jti: id('mnd_'), vct: 'mandate.payment.1' }, {
@@ -2728,20 +2734,24 @@ export class Bank {
       }
     }
     // B41.8 — Lens B41.108: stopping is instant, restarting is signed. Once the workspace has a passkey or device key,
-    // resume and resume-all take an assertion by one of its passkeys over the resume challenge; STUB_BREAK=resume-unsigned
-    // lets an unsigned one through. The stub checks who signed; Lens verifies the signature too.
+    // resume and resume-all take an assertion by one of its passkeys, or (B57.87) one its phone's key signed, over the resume
+    // challenge; STUB_BREAK=resume-unsigned lets an unsigned one through. The stub checks who signed a passkey's; Lens
+    // verifies the signature too.
     if ((rest === '/agents/resume-all/challenge' || /^\/agents\/[^/]+\/resume\/challenge$/.test(rest)) && method === 'POST') {
       return json(res, 200, { challenge: randomBytes(32).toString('base64url'), allow_credentials: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id),
         user_verification: 'required' }), true
     }
     if ((rest === '/agents/resume-all' || /^\/agents\/[^/]+\/resume$/.test(rest)) && method === 'POST') {
       const keys = this.passkeys.get(ws.id) ?? []
-      const { assertion } = await this.body<{ assertion?: { credential_id?: string } }>(req)
-      if ((keys.length > 0 || this.devices.any(ws.id)) && !this.broken('resume-unsigned') && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
+      const { assertion } = await this.body<{ assertion?: { credential_id?: string; device_id?: string; challenge?: string; signature?: string } }>(req)
+      const byPhone = assertion?.device_id !== undefined && this.devices.refused(ws.id, assertion) === undefined
+      if ((keys.length > 0 || this.devices.any(ws.id)) && !this.broken('resume-unsigned') && !byPhone && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
         return json(res, 403, { error: 'economy: resuming in this workspace is signed: sign its challenge with a passkey or the phone app' }), true
       }
     }
     if (rest === '/agents/pause-all' || rest === '/agents/resume-all') {
+      // B57.87 — STUB_BREAK=pause-all-unkept answers pause-all and pauses nothing.
+      if (rest === '/agents/pause-all' && this.broken('pause-all-unkept')) return json(res, 200, { all_paused: true }), true
       if (rest === '/agents/pause-all') {
         this.allPaused.set(ws.id, { at: now, reason: (await this.body<{ reason?: string }>(req)).reason ?? '' })
         for (const a of this.agents.values()) if (a.ws === ws.id) this.kya.revoke(a.id, 'frozen')
@@ -2957,6 +2967,8 @@ export class Bank {
         return json(res, c.status, c.body), true
       }
       if ((action === '/pause' || action === '/resume') && method === 'POST') {
+        // B57.87 — STUB_BREAK=pause-unkept answers an agent's pause and leaves it running.
+        if (action === '/pause' && this.broken('pause-unkept')) return json(res, 200, { agent_id: a.id, paused: true }), true
         if (action === '/pause') {
           a.paused_at = now
           a.paused_reason = (await this.body<{ reason?: string }>(req)).reason ?? ''

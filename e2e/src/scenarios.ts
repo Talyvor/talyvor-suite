@@ -90,6 +90,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
+import { phoneJourneys } from './phoneJourneys.ts'
 import { phoneKeyWeb } from './phoneKeyWeb.ts'
 import { doorScenarios } from './door.ts'
 import { trustLayer } from './trustLayer.ts'
@@ -5590,6 +5591,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.39 — budgets by category, once a run, on a workspace of its own: with a £100.00 AI and software budget, the payment that
   // crosses £80 raises one 80% alert, another category's payment counts for nothing, and Money → Budgets shows the progress.
   if (i === 7) list.push(budgetsByCategory())
+  // B57.87 — Pocket's journeys on the phone, each once a run on a workspace of its own, in the phone app's web export
+  // (E2E_MOBILE_SRC): approve from the Live Activity's link, pay a saved payee, pause from the widget and resume, stop everything.
+  if (i === 7) list.push(...phoneJourneys())
   // B52.28 — Scan in the app, once a run, on a workspace of its own: a watch keeps the owner's measure of unusual and stops when
   // told, the public track record scores a hit only inside its range, and Scan agents and Track record show both.
   if (i === 7) list.push(scanAgents())

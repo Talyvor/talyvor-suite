@@ -2,7 +2,8 @@
 // POST /v1/money/devices/challenge, POST and GET /v1/money/devices, POST …/{id}/revoke. A key registers only as platform
 // "test" with its signature over "talyvor-device-v1:<challenge>"; an approval's {"device_id", "challenge", "signature"}
 // assertion is checked against it as Lens's devicekey.Verify does, and refused once the key is revoked. B28.68: the
-// workspace's first key answers its recovery code, and a lost phone's lockdown revokes the keys it names. Its defect:
+// workspace's first key answers its recovery code, and a lost phone's lockdown revokes the keys it names. B57.87:
+// STUB_TEST_KEYS=off refuses the "test" platform in Lens's words, as production does. Its defect:
 //   device-revoked-accepted — a revoked device's signature is still accepted
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -69,6 +70,8 @@ export class DeviceKeyDesk {
     if (path === '/v1/money/devices' && req.method === 'POST') {
       const { platform = '', name = '', public_key = '', challenge = '', signature = '' } = await this.body<Record<string, string>>(req)
       if (platform !== 'test') return this.json(res, 400, { error: 'devicekey: invalid device key: platform must be ios or android' }), true
+      // B57.87 — STUB_TEST_KEYS=off is a Lens without LENS_DEVICE_TEST_ATTESTATION=true, as production: the "test" platform is refused.
+      if (process.env.STUB_TEST_KEYS === 'off') return this.json(res, 400, { error: 'devicekey: invalid device key: test device keys are not accepted on this server' }), true
       if (!signedBy(public_key, challenge, signature)) return this.json(res, 400, { error: 'devicekey: invalid device key: the key did not sign the registration challenge' }), true
       const d: Device = { id: `dk_${randomUUID()}`, platform, name, person: `key:${ws}`, created_at: new Date().toISOString(), public_key }
       this.devices.set(ws, [...list, d])

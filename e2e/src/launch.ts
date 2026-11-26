@@ -57,6 +57,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'agent-pause-all', 'agent-payee-daily-cap', 'agent-payee-lists', 'agent-request-rate', 'agent-resume-signed',
     'agent-rule-simulator', 'agent-rule-template', 'agent-rules-rollback', 'agent-rules-unbypassable', 'agent-wallets-empty',
     'first-agent', 'kya-credential', 'sdk-wallet-quickstart', 'pocket-02', 'pocket-09', 'pocket-10',
+    'phone-widget-pause', 'phone-stop-everything',
   ],
   wallets: [
     'agent-balance-stored', 'agent-wallet', 'agent-wallet-kinds', 'b30-capabilities', 'capability-terms', 'currency-convert-margin',
@@ -72,7 +73,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'permission-mandate', 'screening-travel-rule', 'subscriptions-view', 'trust-layer', 'wallet-give-back', 'wallet-handle-pause',
     'wallet-recurring', 'wallet-request', 'wallet-requests-answered', 'wallet-schedule-topup-pot', 'wallet-send-refund',
     'xss-shown-back', 'pocket-03', 'pocket-04', 'pocket-05', 'pocket-06', 'pocket-08', 'pocket-13', 'pocket-15', 'pocket-16',
-    'pocket-17',
+    'pocket-17', 'phone-approve', 'phone-pay-payee',
   ],
   'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote', 'instant-transfer-send'],
   activity: [
