@@ -789,6 +789,11 @@ export interface Fees {
   fx_margin_bps?: Record<string, number>
   /** B56.21 — Talyvor's fee for accepting a payment of an invoice from an account or by transfer. */
   merchant_a2a_fee_bps?: number
+  /** B30.135 — Talyvor's fee for an international payment, in minor units of the currency it is sent in. */
+  intl_payment_fee_minor?: Record<string, number>
+  /** B61.58 — the international payments a plan makes free each month (-1 is no limit), and its discount on the fee above them. */
+  intl_free_per_month?: Record<string, number>
+  intl_discount_bps?: Record<string, number>
 }
 
 /** B32.15 — Lens's refusal of what a plan does not unlock (402): a plain sentence naming both plans (B55.29), and its setting beside. */

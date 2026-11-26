@@ -123,6 +123,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { readFileSync } from 'node:fs'
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http'
 import { Bank, SIM_QUOTES } from './stub-bank.ts'
+import { INTL_FEE_MINOR } from './stub-payees.ts'
 import { DOC_CAP, auditWebhook, docxDocument, nodesAvailable, nodesRoute } from './stub-guards.ts'
 import { roomAgentTool, roomListingRoute, roomsModeratorRoute, roomsRoute, setRoomWallets } from './stub-rooms.ts'
 import { lensOpenAPI, lensPage } from './stub-openapi.ts'
@@ -1491,7 +1492,9 @@ createServer(async (req, res) => {
       return json(res, 200, { market_take_bps: 1500, services_take_bps: 500, compute_take_bps: 500, lending_fee_bps: 100,
         platform_fee_bps: PLATFORM_FEE_BPS, fx_margin_bps: { personal_solo: 100, personal_crew: 50, personal_fleet: 0,
           business_studio: 60, business_company: 60, business_group: 60, business_custom: 15 },
-        intl_payment_fee_minor: { GBP: 500, EUR: 600, USD: 700 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100,
+        intl_payment_fee_minor: INTL_FEE_MINOR, intl_free_per_month: { personal_solo: 0, personal_crew: 0, personal_fleet: 0, business_studio: 0,
+          business_company: 5, business_group: 25, business_custom: 0 }, intl_discount_bps: { personal_solo: 0, personal_crew: 0, personal_fleet: 2000,
+          business_studio: 0, business_company: 0, business_group: 0, business_custom: 0 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100,
         // talyvor-lens B56.8 — fees.Charged, as Lens's main has it.
         charged: { market_take_bps: true, services_take_bps: true, compute_take_bps: true, lending_fee_bps: false, platform_fee_bps: true,
           fx_margin_bps: broke('label-charged'), intl_payment_fee_minor: true, merchant_fee_bps: false, merchant_a2a_fee_bps: false } })
