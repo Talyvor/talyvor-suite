@@ -17,6 +17,7 @@ import { CURRENCY_WORDS, parseRuleAmount, ruleAmountText, useAccountCurrency } f
 // a Revoke that asks first, the others opening their steps in a dialog; the address and the Claude Code command
 // beside them; how a payment works; each connected assistant's latest tool calls below.
 // B52.9 — sign out everywhere, which ends every assistant with every other sign-in. Asks once first.
+// B57.158 — its confirm is Pocket's (as Revoke's): it stays up while it signs out, and says so when it could not.
 // B52.6 — New agents from an assistant: the most an assistant may give a new agent it creates.
 // B57.157 — its three limits drawn as rows of the agent's rules sheet (w-rules), every word B52.6 showed kept.
 // B61.19 — and typed and kept in the account's own currency, as an agent's rules are.
@@ -631,7 +632,10 @@ function SignOutEverywhere() {
       {asking ? (
         <Dialog
           open
-          onClose={() => setAsking(false)}
+          // While it signs out the dialog stays, as Cancel does: a sign-out under way cannot be hidden.
+          onClose={() => {
+            if (!out.isPending) setAsking(false)
+          }}
           title="Sign out everywhere?"
           actions={
             <>

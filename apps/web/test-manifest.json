@@ -113,7 +113,7 @@
   "src/areas/lens/CardDisputes.test.tsx": 6,
   "src/areas/lens/Cards.test.tsx": 6,
   "src/areas/lens/CompanyDetails.test.tsx": 5,
-  "src/areas/lens/connectAI.test.tsx": 8,
+  "src/areas/lens/connectAI.test.tsx": 10,
   "src/areas/lens/Convert.test.tsx": 12,
   "src/areas/lens/convertRefusal.test.tsx": 11,
   "src/areas/lens/Devices.test.tsx": 14,

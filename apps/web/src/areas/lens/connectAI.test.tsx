@@ -171,6 +171,35 @@ describe('Connect your AI', () => {
     await waitFor(() => expect(calls).toContain('POST /auth/logout-everywhere'))
   })
 
+  // B57.158 — the confirm stays up while it signs out, as Cancel is held then: Close or Escape cannot hide a sign-out
+  // that is already under way.
+  it('keeps asking while it signs out', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) =>
+      init?.method === 'POST' ? new Promise<Response>(() => {}) : new Response(JSON.stringify({ assistants: [] })),
+    )
+    renderScreen()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, sign out everywhere' }))
+    const asking = await screen.findByRole('dialog', { name: 'Sign out everywhere?' })
+    expect(within(asking).getByRole('button', { name: 'Signing out…' })).toBeDisabled()
+    expect(within(asking).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    fireEvent.click(within(asking).getByRole('button', { name: 'Close' }))
+    fireEvent.keyDown(asking, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: 'Sign out everywhere?' })).toBeInTheDocument()
+  })
+
+  it('says so when it could not sign out, and asks again', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) =>
+      init?.method === 'POST' ? new Response(null, { status: 503 }) : new Response(JSON.stringify({ assistants: [] })),
+    )
+    renderScreen()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, sign out everywhere' }))
+    const asking = screen.getByRole('dialog', { name: 'Sign out everywhere?' })
+    expect(await within(asking).findByRole('alert')).toHaveTextContent('You were not signed out anywhere. Try again.')
+    expect(within(asking).getByRole('button', { name: 'Yes, sign out everywhere' })).toBeEnabled()
+  })
+
   // B52.6 — the most an assistant may give a new agent: unset, it says assistants cannot create agents. B61.19 — set in
   // the account's own currency, it goes to the BFF in that currency's minor units and reads back in it; no µLXC.
   const POUNDS = (path: string): Response | null =>
