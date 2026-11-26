@@ -849,10 +849,15 @@ export class PayeeDesk {
     return this.json(res, 201, out())
   }
 
+  /** B56.28 — each posting as a statement line, for an account statement kept elsewhere (stub-launch.ts). */
+  onLine: (accountID: string, l: { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string }) => void = () => {}
+
   /** B48.27 — a line on `account`'s wallet ledger, as Lens's wallet activity reads its postings. */
   private line(ws: string, account: Account, kind: string, amount: number, entryID?: string): void {
+    const at = new Date().toISOString()
     this.lines.set(ws, [{ account_id: account.id, ...(account.agent_id === undefined ? {} : { agent_id: account.agent_id }), currency: account.currency, kind,
-      amount_minor: amount, at: new Date().toISOString(), ...(entryID === undefined ? {} : { entry_id: entryID }) }, ...(this.lines.get(ws) ?? [])])
+      amount_minor: amount, at, ...(entryID === undefined ? {} : { entry_id: entryID }) }, ...(this.lines.get(ws) ?? [])])
+    this.onLine(account.id, { entry_id: entryID ?? `me_${randomUUID()}`, line: 1, at, kind, amount_minor: amount, funding: 'test', state: 'completed' })
   }
 
   /** B56.28 — account `id`'s postings as statement lines, oldest first, all test money. */

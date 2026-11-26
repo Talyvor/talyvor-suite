@@ -88,8 +88,6 @@ export class LaunchDesk {
   /** What each workspace converted free this month, by the currency sold. */
   private readonly freeUsed = new Map<string, number>()
   private readonly statementLines = new Map<string, StatementLine[]>()
-  /** B56.28 — the account's other postings (stub-payees.ts: money in, funding, invoice payments and their fees), on the same statement. */
-  otherLines: (ws: string, accountID: string) => StatementLine[] = () => []
   private nextRequest = 1
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
@@ -228,8 +226,13 @@ export class LaunchDesk {
     if (m === null || req.method !== 'GET' || this.broken('fx-absent')) return false
     const a = this.accounts(ws).find((x) => x.id === m[1])
     if (a === undefined) return this.json(res, 404, { error: 'economy: no such money account' }), true
-    const lines = [...this.otherLines(ws, a.id), ...(this.statementLines.get(a.id) ?? [])].sort((x, y) => x.at.localeCompare(y.at))
-    return this.json(res, 200, { workspace_id: ws, account_id: a.id, agent_id: a.agent_id ?? '', currency: a.currency, lines }), true
+    return this.json(res, 200, { workspace_id: ws, account_id: a.id, agent_id: a.agent_id ?? '', currency: a.currency, lines: this.statementLines.get(a.id) ?? [] }), true
+  }
+
+  /** B56.28 — a posting made elsewhere (stub-payees.ts: money in, funding, invoice payments and their fees) on account `id`'s
+   * statement, beside its conversions. */
+  post(id: string, l: StatementLine): void {
+    this.statementLines.set(id, [...(this.statementLines.get(id) ?? []), l])
   }
 
   private async convertQuote(req: IncomingMessage, res: ServerResponse, ws: string, agentID: string): Promise<void> {
