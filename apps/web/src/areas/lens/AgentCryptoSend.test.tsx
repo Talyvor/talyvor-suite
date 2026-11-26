@@ -241,6 +241,31 @@ describe('Send USDC from an agent’s crypto wallet (B48.36)', () => {
     ])
   })
 
+  it('B57.223 — in Pocket: a saved address is a row with its initial, and a send by name keeps the name to the receipt and the history', async () => {
+    const TREASURY = { id: 'caddr_1', name: 'Treasury', address: TO, saved_by: 'user:u1', created_at: '2026-11-20T09:00:00Z', updated_at: '2026-11-20T09:00:00Z' }
+    fakeBff(
+      (c) => {
+        if (c.url === '/api/crypto-addresses' && c.method === 'GET') return Response.json({ addresses: [TREASURY] })
+        if (c.url.endsWith('/crypto-sends/quote')) return Response.json({ ...QUOTE, to: TO, to_kind: 'address', to_label: undefined, saved_name: 'Treasury' })
+        if (c.url.endsWith('/crypto-sends') && c.method === 'POST') return Response.json(send({ status: 'sending', to_kind: 'address', saved_name: 'Treasury' }))
+      },
+      [send({ id: 'cs_old', to_kind: 'address', ens_name: 'northwind.eth' })],
+    )
+    await mount()
+    const row = (await within(await screen.findByTestId('crypto-saved-addresses')).findByRole('button', { name: 'Treasury' })).closest('[data-crypto-address]') as HTMLElement
+    expect(within(row).getByTestId('crypto-address-initial')).toHaveTextContent('T')
+    expect(row).toHaveTextContent('0x1111…1111')
+    expect(within(screen.getByTestId('crypto-send-history')).getByText('To northwind.eth')).toBeInTheDocument()
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Treasury' }))
+    fireEvent.change(screen.getByLabelText('Amount in USDC'), { target: { value: '2.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    const quote = await screen.findByTestId('crypto-send-quote')
+    expect(quote).toHaveTextContent('Your passkey or Face ID asks before anything is sent.')
+    fireEvent.click(within(quote).getByRole('button', { name: 'Send' }))
+    expect(await screen.findByTestId('crypto-send-receipt')).toHaveTextContent('to Treasury (0x1111…1111)')
+  })
+
   it('B48.50 — the owner’s yes and their test amount are signed with the passkey', async () => {
     const calls = fakeBff((c) => {
       if (c.url.endsWith('/approve/challenge')) return Response.json({ challenge: 'Y2g', allow_credentials: ['AQ'] })
