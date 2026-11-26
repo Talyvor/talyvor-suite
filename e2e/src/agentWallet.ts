@@ -101,7 +101,9 @@ export function agentWallet(): Scenario {
         await page.getByTestId('agent-page-money').getByRole('button', { name: 'Its wallet', exact: true }).click({ timeout: TIMEOUT_MS })
         const card = page.getByTestId('agent-money-wallet')
         try {
-          await card.getByText(seen.lens.balance).waitFor({ timeout: TIMEOUT_MS })
+          // B17.549 — an agent with a fiat and a USDC wallet shows the USDC balance twice: in the line saying what it
+          // holds and in its USDC wallet's heading. Either is Lens's balance on the card.
+          await card.getByText(seen.lens.balance).first().waitFor({ timeout: TIMEOUT_MS })
         } catch (e) {
           seen.text = ((await card.textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ')
           return fail(`the wallet card never showed Lens's balance ${seen.lens.balance}: ${(e as Error).message.split('\n')[0]}; it reads "${seen.text.slice(0, 300)}"`)
