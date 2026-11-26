@@ -332,7 +332,16 @@ const preset = {
       },
       // B57.198 — Pocket's ticked choices (pocket.css .pickrow): two to a row where they fit, one where they do not, each
       // at least as wide as "Advertising" with its box; never more than two (half the row less half the 8px gap).
-      gridTemplateColumns: { picks: 'repeat(auto-fill, minmax(max(8.5rem, calc(50% - 0.25rem)), 1fr))' },
+      gridTemplateColumns: {
+        picks: 'repeat(auto-fill, minmax(max(8.5rem, calc(50% - 0.25rem)), 1fr))',
+        // B61.134 — Statements (Pocket Live DESIGN.md 16.2): the paper beside its three cards, the band of four with the
+        // closing figure a little wider, and a line's columns, Date, Details, Money out, Money in, Balance (on a phone the
+        // date, the details and the amount).
+        statements: 'minmax(0, 1.62fr) minmax(18.75rem, 1fr)',
+        'statement-band': '1fr 1fr 1fr 1.12fr',
+        'statement-line': '3.25rem minmax(0, 1fr) 5.5rem',
+        'statement-line-wide': '4.375rem minmax(0, 1fr) 5.25rem 5.25rem 5.75rem',
+      },
       // Pocket's focus ring is 3px of tangerine (B57.4).
       outlineWidth: { 3: '3px' },
       // `below-header` — the viewport under the console's sticky top bar (`top-header`, Pocket's 72px, B57.8).

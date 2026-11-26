@@ -136,6 +136,8 @@ const NOT_AN_EMPTY_STATE: Record<string, string> = {
 const NO_NEXT_ACTION: Record<string, string> = {
   'No capability asks for terms on this deployment yet.':
     'B57.42 — Capability terms (CapabilityTerms.tsx) when Talyvor has published no terms: terms are written and published by Talyvor, so there is nothing the owner can do to put one here.',
+  'Nothing moved in this period.':
+    'B61.134 — a statement whose period had no line (AccountStatement.tsx), in Pocket Live DESIGN.md 16.2 and 16.6’s own words. The period is in the past or chosen; its four figures still show above, Download still works, and the next action — another period — is the Period card beside the paper.',
   'Nothing here.':
     'B27.30 — an empty STATUS COLUMN on a board (BoardColumns.tsx). On the public board the reader has no account and the board is read-only by design, so there is nothing for them to do; on the signed-in board an issue reaches a column by being moved, and the keys line under the board names `s` for that.',
 }

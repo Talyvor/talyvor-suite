@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { inlineLink } from '@talyvor/ui'
-import { Button as PocketButton, Card, Chip, EmptyState, Face, Facts, Icon, Money, RoomBadge, Row, Tabs, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
+import { cn, inlineLink } from '@talyvor/ui'
+import { Button as PocketButton, Card, Chip, EmptyState, Face, Facts, Icon, Money, RoomBadge, Row, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { ApiError } from '../../lib/api'
@@ -20,11 +20,10 @@ import {
   useKeys,
 } from './AgentBank'
 import { approvalDeclineTo, approvalSheetTo, expiresText } from './ApprovalSheet'
-import { DownloadFailed } from './AgentStatement'
 import { agentBankApi, useAccount, type Agent, type AgentApproval, type PaymentRequest } from './agentBankApi'
 import { formatDecided } from './format'
 import { signApproval } from './passkeys'
-import { AccountStatement, MonthlyStatements, accountTitle, useAccountMonthCsv } from './AccountStatement'
+import { AccountStatement, StatementDownloads, accountOwner, balanceName, statementPeriods } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
@@ -478,63 +477,96 @@ function ApprovalsPage() {
   )
 }
 
+/** B61.134 — a row of pills that choose one thing, as Pocket's segments do: the one chosen in ink. */
+function Choice({ label, options, value, onChange }: { label: string; options: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={o.id === value}
+          onClick={() => onChange(o.id)}
+          className={cn(
+            // A choice is a control: Pocket's 1.5 px control edge at 3:1 until it is chosen and fills with ink.
+            'inline-flex h-8.5 items-center whitespace-nowrap rounded-pill px-3.5 text-body font-semibold text-ink-2 shadow-edge transition-press hover:text-ink active:scale-97',
+            'aria-checked:bg-primary aria-checked:text-on-primary aria-checked:shadow-none',
+            pocketFocusRing,
+          )}
+        >
+          {o.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * B61.134 — Statements as one sheet of paper (Pocket Live DESIGN.md 16.2): the statement on the left, and at the right
+ * three cards, Download (PDF, Excel and CSV), Statement for (the balances, then the agents) and Period. A choice redraws
+ * the paper, and each file is the statement on it.
+ */
 export function StatementsScreen() {
   const { book, agents } = useAgentNames()
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const [params, setParams] = useSearchParams()
-  // B56.15 — every currency account the company or an agent holds. B61.55: the agents' credit statements are parked;
-  // their past statements download under Settings › Your data.
-  const tabs = (accounts.data?.accounts ?? []).map((a) => ({ id: a.id, title: accountTitle(a, agents), account: a }))
-  const tab = tabs.find((t) => t.id === params.get('wallet')) ?? tabs[0] ?? null
-  // B57.25 — a currency account's statement is its document, and Lens's CSV.
-  const thisAccount = useAccountMonthCsv(tab?.account ?? null, tab?.title ?? '')
-  // Pocket's tabs choose by their words, so two accounts of one name take the first's tab.
-  const titles = [...new Set(tabs.map((t) => t.title))]
+  // B56.15 — every currency account the company or an agent holds: the company's balances first, then the agents'.
+  const list = accounts.data?.accounts ?? []
+  const balances = list.filter((a) => a.purpose !== 'agent')
+  const agentAccounts = list.filter((a) => a.purpose === 'agent')
+  const account = list.find((a) => a.id === params.get('wallet')) ?? balances[0] ?? agentAccounts[0] ?? null
+  const agent = account?.purpose === 'agent' ? (agents.find((a) => a.id === account.agent_id) ?? null) : null
+  const periods = statementPeriods(account?.created_at)
+  const period = periods.find((p) => p.id === params.get('period')) ?? periods[0]
+  const choose = (next: { wallet?: string; period?: string }) =>
+    setParams({ wallet: next.wallet ?? account?.id ?? '', period: next.period ?? period.id }, { replace: true })
+  // An agent with more than one balance names its currency beside it.
+  const agentLabel = (a: (typeof list)[number]) => {
+    const name = accountOwner(a, agents)
+    return agentAccounts.filter((x) => x.agent_id === a.agent_id).length > 1 ? `${name} · ${a.currency}` : name
+  }
   return (
     <RegionScreen>
-      <Region index="00" label="Statements" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-4xl flex-col gap-4">
+      <Region index="00" label="Statements" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-6xl flex-col gap-4">
         {accounts.isError ? (
           <p className="text-body text-muted">{readFailure(accounts.error, 'The currency accounts')}</p>
         ) : accounts.isPending || book.isPending ? (
           <p className="text-body text-muted">Reading…</p>
-        ) : tabs.length === 0 ? (
+        ) : account === null ? (
           // B17.477 — Pocket's empty card, as every other wallet screen says it has nothing yet.
           <div {...{ [DESIGN_ATTR]: 'pocket' }}>
             <EmptyState icon={<Icon name="statements" />} title="No accounts yet" line="An account’s statement starts with its first payment in or out." />
           </div>
         ) : (
-          <div {...{ [DESIGN_ATTR]: 'pocket' }} className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAccount.isPending} onClick={() => thisAccount.mutate()}>
-                Download CSV
-              </PocketButton>
-            </div>
-            {thisAccount.isError ? <DownloadFailed error={thisAccount.error} /> : null}
-            {/* B59.25 — every card payment, dispute and refund of a date range, as one file. */}
-            <div className="flex justify-end">
-              <CardExport />
+          <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid items-start gap-4 wide:grid-cols-statements">
+            <AccountStatement key={`${account.id}-${period.id}`} account={account} agent={agent} period={period} />
+            <div className="grid gap-4">
+              <StatementDownloads account={account} agentName={account.purpose === 'agent' ? accountOwner(account, agents) : ''} period={period} />
+              <Card>
+                <h3 className="font-display text-reading font-bold text-ink">Statement for</h3>
+                <div className="mt-3 grid gap-2">
+                  {balances.length > 0 ? (
+                    <Choice label="Balance" options={balances.map((a) => ({ id: a.id, name: balanceName(a.currency).replace(/ balance$/, '') }))} value={account.id} onChange={(id) => choose({ wallet: id })} />
+                  ) : null}
+                  {agentAccounts.length > 0 ? (
+                    <Choice label="Agent" options={agentAccounts.map((a) => ({ id: a.id, name: agentLabel(a) }))} value={account.id} onChange={(id) => choose({ wallet: id })} />
+                  ) : null}
+                </div>
+              </Card>
+              <Card>
+                <h3 className="font-display text-reading font-bold text-ink">Period</h3>
+                <div className="mt-3">
+                  <Choice label="Period" options={periods} value={period.id} onChange={(id) => choose({ period: id })} />
+                </div>
+              </Card>
+              {/* B59.25 — every card payment, dispute and refund of a date range, as one file. */}
+              <div className="flex justify-end">
+                <CardExport />
+              </div>
             </div>
           </div>
         )}
-        {tab ? (
-          <div {...{ [DESIGN_ATTR]: 'pocket' }}>
-            <Tabs
-              label="Statements"
-              tabs={titles}
-              value={tab.title}
-              onChange={(title) => setParams({ wallet: tabs.find((t) => t.title === title)?.id ?? '' }, { replace: true })}
-            />
-          </div>
-        ) : null}
-        {tab ? (
-          <AccountStatement
-            key={tab.id}
-            account={tab.account}
-            agent={tab.account.purpose === 'agent' ? (agents.find((a) => a.id === tab.account.agent_id) ?? null) : null}
-          />
-        ) : null}
-        {/* B30.95 — the account's statement for each month, as a PDF. */}
-        {tab ? <MonthlyStatements key={`months-${tab.id}`} account={tab.account} title={tab.title} /> : null}
       </Region>
     </RegionScreen>
   )

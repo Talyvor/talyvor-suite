@@ -160,6 +160,9 @@ const NOT_YET = [
   'areas/chat/Savings.tsx',
   'areas/chat/ScheduledPrompt.tsx',
   'areas/chat/WalletButtons.tsx',
+  // B61.134: the statement paper's columns print the PDF's figure, no currency sign and no minus (DESIGN.md 16.3), which
+  // <Money> does not draw; every other figure on the paper is <Money>.
+  'areas/lens/AccountStatement.tsx',
   'areas/lens/AgentBank.tsx',
   'areas/lens/AgentCardPanel.tsx',
   'areas/lens/AgentMoneyWallet.tsx',

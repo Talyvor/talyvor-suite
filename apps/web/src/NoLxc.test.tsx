@@ -148,8 +148,10 @@ describe('the credit wallet is parked', () => {
 
   it('Statements lists the accounts’ statements only', { timeout: 30_000 }, async () => {
     await at('/statements')
-    const tabs = await screen.findByRole('tablist', { name: 'Statements' })
-    expect([...tabs.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['Company · GBP', 'Researcher · GBP'])
+    // B61.134 — Statement for: the balances, then the agents.
+    const pills = async (name: string) => [...(await screen.findByRole('radiogroup', { name })).querySelectorAll('[role="radio"]')].map((t) => t.textContent)
+    expect(await pills('Balance')).toEqual(['British pound'])
+    expect(await pills('Agent')).toEqual(['Researcher'])
     expect(said(document.body).match(new RegExp(`.{0,40}(${CREDIT.source}).{0,30}`, 'i'))?.[0]).toBeUndefined()
   })
 

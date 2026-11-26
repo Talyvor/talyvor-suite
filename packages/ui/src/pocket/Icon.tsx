@@ -218,6 +218,20 @@ const ICONS = {
       <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
     </>
   ),
+  // B61.134 — Statements' three files (Pocket Live DESIGN.md 16.2): the PDF, the Excel sheet and the CSV's rows.
+  doc: (
+    <>
+      <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5a1.5 1.5 0 0 1 1-1.5z" />
+      <path d="M14 3.5v4h4M9 12.5h6M9 16h6" />
+    </>
+  ),
+  sheet: (
+    <>
+      <rect x="4" y="4.5" width="16" height="15" rx="2.5" />
+      <path d="M4 9.5h16M4 14.5h16M10 9.5v10" />
+    </>
+  ),
+  rows: <path d="M5 7h14M5 12h14M5 17h14" />,
 } as const
 
 export type IconName = keyof typeof ICONS

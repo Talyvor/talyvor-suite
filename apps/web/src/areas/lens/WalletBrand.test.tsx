@@ -41,8 +41,8 @@ describe('the wallet screens in the brand', () => {
     ['/agents/agt_research', ['Edit rules']],
     // B57.17 — Review is Pocket's secondary button, as w-approvals draws it; Approve is the sheet's.
     ['/approvals', []],
-    // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them.
-    ['/statements', []],
+    // B61.134 — Statements' Download card: the PDF is the main button (Pocket Live DESIGN.md 16.2), Excel and CSV secondary.
+    ['/statements', ['PDFBranded, ready to print or send']],
     ['/statements/royalties', []],
     ['/ledger', []],
     ['/spend', []],
