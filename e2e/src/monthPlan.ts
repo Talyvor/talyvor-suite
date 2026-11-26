@@ -172,6 +172,8 @@ export function monthPlan({ screen = true }: { screen?: boolean } = {}): Scenari
       } finally {
         await page.close()
       }
+      // B17.548 — Chat is held in the launch version (launch.ts), so a launch run, which opens Home, leaves its half out.
+      if (ctx.app.home) return { pass: true, detail: `${detail}; Money → Spending shows it with its adjustments; Chat's half left out, Chat is held in the launch version` }
 
       // 7. In Chat: safe to spend today is Lens's, and the question never reaches the model.
       const chat = await ctx.app.tab('/chat')

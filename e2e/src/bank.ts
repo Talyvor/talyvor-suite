@@ -4742,7 +4742,7 @@ export function agentBalanceStored(seed: number): Scenario {
     owner: 'talyvor-lens',
     items: ['B28.20', 'B28.297'],
     agents: 1,
-    title: `an agent funded ${MANY_FUNDINGS} times at once holds exactly their sum: the balance Lens stores, the postings on the statement and the screen all agree`,
+    title: `an agent funded ${MANY_FUNDINGS} times at once holds exactly their sum: the balance Lens stores and the postings on the statement agree`,
     run: (ctx) => withBank(ctx, async (bank) => {
       const before = await bookOf(ctx)
       const a = await openAgent(ctx, bank, `Tally ${seed}`)
@@ -4771,10 +4771,9 @@ export function agentBalanceStored(seed: number): Scenario {
       if (after.unallocated_ulxc !== after.workspace_balance_ulxc - after.allocated_ulxc) {
         return fail(`the book does not add up: ${after.workspace_balance_ulxc} ≠ ${after.allocated_ulxc} + ${after.unallocated_ulxc}`)
       }
-      const shown = await bank.balanceShown(a)
-      const want = usdShown(total, ctx.env.usdPerLXC)
-      if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; its postings sum to ${want}`)
-      return { pass: true, detail: `${MANY_FUNDINGS} fundings at once, ${lxcText(total)} LXC: ${a.name}'s stored balance = its ${posted.length} postings = the screen's ${shown}, and the workspace's agents hold that much more` }
+      // B17.548 — no screen draws an agent's credit balance since B61.55 (its row on the agent page is the parked credit wallet's),
+      // so the stored balance is held to its postings and the statement, not to a figure on screen.
+      return { pass: true, detail: `${MANY_FUNDINGS} fundings at once, ${lxcText(total)} LXC: ${a.name}'s stored balance = its ${posted.length} postings = its statement's closing, and the workspace's agents hold that much more` }
     }),
   }
 }

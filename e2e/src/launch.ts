@@ -168,6 +168,8 @@ const LEDGER_PARKED = 'it reads the Ledger page (ledger-balance), which the laun
  * credit rows (Send or request, Requests, Transfers, Recurring transfer, Pots, Escrow, Cash out, Automatic top-up) are the
  * parked gateway's, and Home and Agents name no LXC total. Found by playing the launch self-test against that web.
  * B17.495 — statement-paging reads an agent's credit statement, which B61.55 took off the agent page and Statements.
+ * B17.548 — statement-pdf and statement-journal download one agent's credit statement for a period from that same card, and
+ * wallet-fx reads an agent's credit balance in pounds and euros, which no launch screen draws since B61.55.
  */
 export const LXC_PARKED = 'LXC is parked: its steps need an LXC control or figure B61.14 took off every launch screen'
 const NO_HERO_PHOTO = 'it measures the homepage hero photograph’s fade, and the homepage has had no photograph since B57.60 (Pocket’s hero, the approval sheet’s picture)'
@@ -181,8 +183,9 @@ export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
   ].map((id) => [id, NEEDS_A_MODEL])),
   ...Object.fromEntries([
     'agent-approval', 'agent-approval-push', 'agent-payee-daily-cap', 'agent-payee-lists', 'agent-runs-out-date', 'approvals-badge',
-    'approvals-inbox', 'approve-always-allow', 'home-daily-briefing', 'statement-line-kinds', 'statement-paging', 'wallet-cash-out',
-    'wallet-give-back', 'wallet-pots', 'wallet-recurring', 'wallet-request', 'wallet-send-refund',
+    'approvals-inbox', 'approve-always-allow', 'home-daily-briefing', 'statement-journal', 'statement-line-kinds', 'statement-paging',
+    'statement-pdf', 'wallet-cash-out', 'wallet-fx', 'wallet-give-back', 'wallet-pots', 'wallet-recurring', 'wallet-request',
+    'wallet-send-refund',
   ].map((id) => [id, LXC_PARKED])),
   ...Object.fromEntries([
     'agent-cards', 'agent-wallet-kinds', 'batch-approval-pays-once', 'coach-week', 'invoices-screen', 'money-layer-contract', 'pay-screen',

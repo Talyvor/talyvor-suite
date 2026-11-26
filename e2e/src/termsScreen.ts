@@ -65,7 +65,8 @@ export function termsAndCredentialScreens(): Scenario {
 
       const page = await ctx.app.tab('/settings/terms')
       try {
-        await page.locator('main h1').filter({ hasText: 'Capability terms' }).waitFor({ timeout: TIMEOUT_MS })
+        // B17.548 — since B61.121 Settings' pages open in the panel over Settings, named by its heading.
+        await page.getByRole('dialog', { name: 'Capability terms', exact: true }).waitFor({ timeout: TIMEOUT_MS })
         const row = page.getByTestId(`terms-${CAPABILITY}`)
         await row.waitFor({ timeout: TIMEOUT_MS })
         const shown = ((await row.textContent()) ?? '').trim()

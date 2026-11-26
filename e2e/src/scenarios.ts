@@ -1564,7 +1564,8 @@ export function headerLockupFaults(l: { logo: boolean; tagline: boolean }): stri
 /** B29.4 — /marketing in the board's design: the kit's logo and nothing scrolls sideways, at 1440 and 390. B32.1: the
  *  verb stack ROUTE · PROVE · REUSE · COMPOUND was retired with the tagline, so no verb shows as a word. B61.83: since
  *  B57.60 the hero is Pocket's (Landing.tsx: the heading on ink beside the approval sheet's picture), with no
- *  photograph and no positioning band, so it is the hero's heading that is waited for. */
+ *  photograph and no positioning band, so it is the hero's heading that is waited for. B17.548: since B64.1 that heading is
+ *  version 4's, the one h1 in the hero's section, with no id. */
 export function marketingBoard(): Scenario {
   return {
     id: 'marketing-board',
@@ -1576,14 +1577,14 @@ export function marketingBoard(): Scenario {
       try {
         for (const [width, height] of [[1440, 900], [390, 844]] as const) {
           await page.setViewportSize({ width, height })
-          await page.locator('#hero-heading').waitFor({ state: 'visible' })
+          await page.locator('section.hero h1').waitFor({ state: 'visible' })
           const got = await page.evaluate(() => {
             // B61.83 — the header shows the kit's logo file (packages/ui Logo: img[data-brand="logo"] from /brand/logo), one per theme.
             const header = document.querySelector('header')
             const logo = Array.from(header?.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]') ?? [])
               .some((i) => i.checkVisibility() && new URL(i.src).pathname.startsWith('/brand/logo/'))
             return {
-              heading: (document.querySelector('#hero-heading')?.textContent ?? '').trim(),
+              heading: (document.querySelector('section.hero h1')?.textContent ?? '').trim(),
               stack: document.querySelector('.tal-verbs') !== null,
               verbs: document.body.innerText.match(/\b(route|prove|reuse|compound)\b/gi) ?? [],
               lockup: { logo, tagline: /ai work that compounds/i.test(header?.innerText ?? '') },
