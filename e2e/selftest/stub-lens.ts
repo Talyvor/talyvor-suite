@@ -1322,6 +1322,11 @@ createServer(async (req, res) => {
       if (bearer === '' || ![process.env.STUB_OPERATOR_READ_KEY, process.env.STUB_ADMIN_KEY].includes(bearer)) return json(res, 401, { error: 'admin credentials required' })
       return json(res, 200, { lists: [], cases: bank.complianceCases(url.searchParams.get('status') ?? ''), fuzzy_threshold_bps: 9000 })
     }
+    // talyvor-lens B30.7 — the alerts transaction monitoring raised on its cases, on the same keys.
+    if (p === '/v1/admin/compliance/alerts') {
+      if (bearer === '' || ![process.env.STUB_OPERATOR_READ_KEY, process.env.STUB_ADMIN_KEY].includes(bearer)) return json(res, 401, { error: 'admin credentials required' })
+      return json(res, 200, { alerts: bank.complianceAlerts(url.searchParams.get('case_id') ?? '') })
+    }
     // talyvor-lens B39.9 — one workspace's own request limits, on the admin key, as Lens: an omitted one keeps its default.
     const limitsOf = /^\/v1\/admin\/workspaces\/([^/]+)\/rate-limits$/.exec(p)
     if (limitsOf !== null) {
