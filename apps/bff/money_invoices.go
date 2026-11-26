@@ -12,7 +12,7 @@ import (
 //
 //	GET  /api/money/accounts                        the company's and its agents' currency accounts (Lens B30.13)
 //	POST /api/money/accounts   {currency, agent_id}  open one, the company's or an agent's, on test money
-//	GET  /api/money/accounts/{id}/statement?from=&to=&format=json|csv   B56.15: one account's statement for a period (Lens
+//	GET  /api/money/accounts/{id}/statement?from=&to=&format=json|csv|pdf|xlsx   B56.15: one account's statement for a period (Lens
 //	                                                B56.14): the opening, in, out and closing, and every posting to it
 //	GET  /api/money/invoices                        every invoice the workspace's agents issued, with payments and reminders
 //	POST /api/money/invoices   {account_id, customer_name, customer_email, customer_address, customer_vat_number,
