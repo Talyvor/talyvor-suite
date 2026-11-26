@@ -1,0 +1,61 @@
+[
+  {
+    "route": "/agents/agt_research?top_up=wm_ask",
+    "screen": "w-agent-research",
+    "answers": {
+      "/api/agents/agt_research/wallet-moves/wm_ask": {
+        "id": "wm_ask",
+        "agent_id": "agt_research",
+        "route": "convert",
+        "sell_minor": 10000,
+        "sell_currency": "GBP",
+        "fee_minor": 150,
+        "buy_minor": 126400000,
+        "buy_currency": "USDC",
+        "rate": "1.2790",
+        "status": "quoted",
+        "expires_at": "2026-10-22T09:40:00Z",
+        "created_at": "2026-10-22T09:25:00Z"
+      }
+    }
+  },
+  {
+    "route": "/agents/agt_research?top_up=wm_ask",
+    "answers": {
+      "/api/agents/agt_research/wallet-moves/wm_ask": {
+        "id": "wm_ask",
+        "agent_id": "agt_research",
+        "route": "convert",
+        "sell_minor": 10000,
+        "sell_currency": "GBP",
+        "fee_minor": 150,
+        "buy_minor": 126400000,
+        "buy_currency": "USDC",
+        "rate": "1.2790",
+        "status": "quoted",
+        "expires_at": "2026-10-22T09:40:00Z",
+        "created_at": "2026-10-22T09:25:00Z"
+      }
+    },
+    "dark": true
+  },
+  {
+    "route": "/agents/agt_research?top_up=wm_ask",
+    "answers": {
+      "/api/agents/agt_research/wallet-moves/wm_ask": {
+        "id": "wm_ask",
+        "agent_id": "agt_research",
+        "route": "convert",
+        "sell_minor": 10000,
+        "sell_currency": "GBP",
+        "fee_minor": 150,
+        "buy_minor": 126400000,
+        "buy_currency": "USDC",
+        "rate": "1.2790",
+        "status": "quoted",
+        "expires_at": "2026-10-22T09:20:00Z",
+        "created_at": "2026-10-22T09:05:00Z"
+      }
+    }
+  }
+]

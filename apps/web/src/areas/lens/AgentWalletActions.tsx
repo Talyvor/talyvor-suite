@@ -37,6 +37,8 @@ import {
 // Request a payment as a link and a QR code (Lens B48.10). Activity: every posting on each wallet, a payment on the
 // chain with its explorer link; Statements: a month of each wallet, and its CSV or PDF (Lens B48.14).
 // B48.44: on the agent's page, the top-up its wallet_topup_link asked the owner for (?top_up=<move>), quoted then confirmed.
+// B57.224: that top-up drawn in Pocket, as sheet:fund draws Add money (its heading, and the press that says what moves)
+// and P7 its quote card, with where the money comes from first; it turns to expired the moment its price runs out.
 // B57.216 — in Pocket: the quote as P7 draws Instant transfer's (You send, Rate, Fee, They get, then the seconds its price
 // is locked for, counting down), the Statement with its downloads beside its heading as the agent's page draws its own,
 // and each Activity line dated as that statement dates its lines.
@@ -54,6 +56,14 @@ const TOP_UP_ROUTES: { value: Exclude<WalletMoveRoute, 'cash_out'>; name: string
   { value: 'convert', name: 'From your pounds, euros or dollars' },
   { value: 'wallet', name: 'From your own USDC' },
 ]
+
+/** Where a top-up link's money comes from, in the From row of its quote. */
+const LINK_FROM: Record<Exclude<WalletMoveRoute, 'cash_out'>, string> = {
+  card: 'Your card',
+  bank_transfer: 'A bank transfer',
+  convert: 'Your pounds, euros or dollars',
+  wallet: 'Your own USDC',
+}
 
 /** Where a network's transactions are shown. */
 const EXPLORERS: Record<string, string> = { base: 'https://basescan.org', 'base-sepolia': 'https://sepolia.basescan.org' }
@@ -77,8 +87,9 @@ function confirmFailure(err: unknown): string {
 }
 
 /** The seconds a quote's price is still locked for, counted from when it arrived here, so a clock that is off does not
- *  shorten it; and how many it was locked for. A quote without an end is never counted down. */
-function useLockedSeconds(m: WalletMove): { lockedFor: number; left: number } | null {
+ *  shorten it; and how many it was locked for. A quote without an end is never counted down. B57.224: a top-up link's
+ *  quote was made when the agent asked, maybe minutes before it was opened, so it counts down to its own end. */
+function useLockedSeconds(m: WalletMove, fromItsEnd = false): { lockedFor: number; left: number } | null {
   const [arrived] = useState(Date.now)
   const [, tick] = useState(0)
   const life = m.expires_at ? Math.max(0, Date.parse(m.expires_at) - Date.parse(m.created_at)) : NaN
@@ -89,7 +100,8 @@ function useLockedSeconds(m: WalletMove): { lockedFor: number; left: number } | 
     return () => clearInterval(timer)
   }, [counts])
   if (!counts) return null
-  return { lockedFor: Math.round(life / 1000), left: Math.max(0, Math.ceil((arrived + life - Date.now()) / 1000)) }
+  const end = fromItsEnd ? Date.parse(m.expires_at ?? '') : arrived + life
+  return { lockedFor: Math.round(life / 1000), left: Math.max(0, Math.ceil((end - Date.now()) / 1000)) }
 }
 
 /** What a quoted move costs and brings, then Confirm; a cash-out or convert is signed with the owner's passkey first. */
@@ -97,18 +109,21 @@ function MoveQuote({
   agent,
   m,
   change = 'Change',
+  link = false,
   onChange,
   onDone,
 }: {
   agent: Agent
   m: WalletMove
   change?: string
+  /** B57.224 — the top-up link's quote: its From row, Move <amount>, and its lock counted to its own end. */
+  link?: boolean
   onChange: () => void
   onDone: (m: WalletMove) => void
 }) {
   const qc = useQueryClient()
   const signs = m.route === 'cash_out' || m.route === 'convert'
-  const lock = useLockedSeconds(m)
+  const lock = useLockedSeconds(m, link)
   const over = lock !== null && lock.left === 0
   // A second press before the first has re-rendered the button disabled is not a second confirm.
   const sent = useRef(false)
@@ -138,6 +153,7 @@ function MoveQuote({
     <div className="grid gap-3" data-testid="wallet-move-quote">
       <Facts
         facts={[
+          ...(link && m.route !== 'cash_out' ? [{ label: 'From', value: LINK_FROM[m.route] }] : []),
           { label: 'You send', value: <Money minor={m.sell_minor} currency={m.sell_currency} /> },
           ...(m.sell_currency === m.buy_currency ? [] : [{ label: 'Rate', value: rateText(m) }]),
           { label: 'Fee', value: <Money minor={m.fee_minor} currency={m.sell_currency} /> },
@@ -170,7 +186,15 @@ function MoveQuote({
       {over ? <Note ok={false}>This quote has expired. Nothing moved.</Note> : null}
       {signs ? <p className="text-center text-body text-ink-3">Your passkey asks before anything moves.</p> : null}
       <Button size="lg" className="w-full" disabled={confirm.isPending || over} onClick={press}>
-        {confirm.isPending ? 'Confirming…' : 'Confirm'}
+        {confirm.isPending ? (
+          'Confirming…'
+        ) : link ? (
+          <span>
+            Move <Money minor={m.sell_minor} currency={m.sell_currency} />
+          </span>
+        ) : (
+          'Confirm'
+        )}
       </Button>
       <Button variant="secondary" className="w-full" disabled={confirm.isPending} onClick={onChange}>
         {change}
@@ -201,6 +225,16 @@ function MoveDone({ agent, m }: { agent: Agent; m: WalletMove }) {
   )
 }
 
+/** Re-renders every second while on. */
+function useEverySecond(on: boolean) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!on) return
+    const timer = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [on])
+}
+
 /** A quote whose price is no longer held: confirming it would be refused. */
 const expired = (m: WalletMove) => m.status === 'quoted' && !!m.expires_at && Date.parse(m.expires_at) <= Date.now()
 
@@ -222,6 +256,9 @@ export function TopUpLink({ agent }: { agent: Agent }) {
     mutationFn: (m: WalletMove) => agentWalletApi.quote(agent.id, { route: m.route, amount_minor: m.sell_minor, currency: m.sell_currency }),
     onSuccess: setFresh,
   })
+  const m = fresh ?? read.data
+  // While its price is held, look again every second, so the quote turns to expired, with Add money, the moment it ends.
+  useEverySecond(!done && m?.status === 'quoted')
   if (moveID === '') return null
   const close = () =>
     setParams(
@@ -231,7 +268,6 @@ export function TopUpLink({ agent }: { agent: Agent }) {
       },
       { replace: true },
     )
-  const m = fresh ?? read.data
   const notNow = (
     <Button variant="secondary" className="w-full" onClick={close}>
       Not now
@@ -286,10 +322,10 @@ export function TopUpLink({ agent }: { agent: Agent }) {
       </>
     )
   } else {
-    body = <MoveQuote key={m.id} agent={agent} m={m} change="Not now" onChange={close} onDone={setDone} />
+    body = <MoveQuote key={m.id} agent={agent} m={m} change="Not now" link onChange={close} onDone={setDone} />
   }
   return (
-    <Card className="grid gap-3" data-testid="agent-top-up-link">
+    <Card tone="white" className="grid gap-3" data-testid="agent-top-up-link">
       <h2 className="font-display text-reading font-bold text-ink">Add money to {agent.name}</h2>
       {done ? null : <p className="text-body text-ink-2">{agent.name} asked for this top-up. Nothing moves until you confirm.</p>}
       {body}

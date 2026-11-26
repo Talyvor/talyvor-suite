@@ -65,7 +65,7 @@ describe('the top-up link an agent asked for', () => {
     expect(within(card).getByText('Fee').nextSibling?.textContent).toContain('1.50')
     expect(within(card).getByText('1 EUR = 1.0820 USDC')).toBeTruthy()
     expect(within(card).getByTestId('wallet-move-gets').textContent).toContain('106.70')
-    const confirm = within(card).getByRole('button', { name: 'Confirm' })
+    const confirm = within(card).getByRole('button', { name: 'Move €100.00' })
     fireEvent.click(confirm)
     fireEvent.click(confirm)
     expect(await within(card).findByText(/is in Researcher’s wallet/)).toBeTruthy()
@@ -77,14 +77,31 @@ describe('the top-up link an agent asked for', () => {
     const calls = open(move({ expires_at: '2026-11-25T08:00:00Z' }))
     const card = await screen.findByTestId('agent-top-up-link')
     expect(await within(card).findByText('This quote has expired. Nothing moved.')).toBeTruthy()
-    expect(within(card).queryByRole('button', { name: 'Confirm' })).toBeNull()
+    expect(within(card).queryByRole('button', { name: /^Move/ })).toBeNull()
     fireEvent.click(within(card).getByRole('button', { name: 'Add money' }))
     await waitFor(() => expect(within(card).getByText('Fee').nextSibling?.textContent).toContain('1.60'))
     const quoted = calls.filter((c) => c.url === '/api/agents/agt_1/wallet-moves/quote')
     expect(quoted.map((c) => JSON.parse(c.body))).toEqual([{ route: 'card', amount_minor: 10_000, currency: 'EUR' }])
-    fireEvent.click(within(card).getByRole('button', { name: 'Confirm' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Move €100.00' }))
     await within(card).findByText(/is in Researcher’s wallet/)
     expect(confirms(calls).map((c) => c.url)).toEqual(['/api/agents/agt_1/wallet-moves/wm_new/confirm'])
+  })
+
+  // B57.224 — drawn in Pocket: sheet:fund's heading and press ("Move <amount>"), P7's quote card with where the money
+  // comes from first. The agent asked minutes before the owner opened the link, so its lock counts down to its own end.
+  it('draws the quote as Pocket’s quote card, and a quote that runs out while open says so and offers Add money', async () => {
+    const asked = new Date(Date.now() - 600_000).toISOString()
+    const calls = open(move({ route: 'convert', sell_currency: 'GBP', created_at: asked, expires_at: new Date(Date.now() + 1_500).toISOString() }))
+    const card = await screen.findByTestId('agent-top-up-link')
+    const labels = (await within(card).findAllByRole('term')).map((t) => t.textContent)
+    expect(labels).toEqual(['From', 'You send', 'Rate', 'Fee', 'They get'])
+    expect(within(card).getByText('From').nextSibling?.textContent).toBe('Your pounds, euros or dollars')
+    expect(within(card).getByTestId('wallet-move-seconds-left').textContent).toMatch(/^[12] seconds left$/)
+    expect(within(card).getByRole('button', { name: 'Move £100.00' })).toBeTruthy()
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'Add money' })).toBeTruthy(), { timeout: 4_000 })
+    expect(within(card).getByText('This quote has expired. Nothing moved.')).toBeTruthy()
+    expect(within(card).queryByRole('button', { name: /^Move/ })).toBeNull()
+    expect(confirms(calls)).toEqual([])
   })
 
   it('says a link that is not this agent’s top-up moved nothing, and Not now closes it', async () => {
