@@ -9,6 +9,8 @@ import type { Agent } from './agentBankApi'
 // B48.47 — under each of the agent's wallets: Top up and Cash out, each quoted then confirmed once (a cash-out signed
 // with the owner's passkey over Lens's challenge), Request as a link and a QR code, Activity with explorer links, and a
 // month's Statement with its CSV. The BFF is mocked at the wire with what Lens B48.8, B48.10 and B48.14 answer.
+// B57.216 — in Pocket: each action a row of the Money card with its line, the quote as P7 draws it (You send, Rate, Fee,
+// They get, then how long the price is locked), and the Statement with its downloads beside its heading.
 
 /** What the owner's passkey signs, as the browser hands it over. */
 const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
@@ -112,7 +114,7 @@ describe('the agent’s wallet: top up, cash out, request, activity, statements'
     fireEvent.click(within(card).getByRole('button', { name: 'Review' }))
     const quote = await within(card).findByTestId('wallet-move-quote')
     expect(JSON.parse(posts(calls, '/wallet-moves/quote')[0].body)).toEqual({ route: 'cash_out', amount_minor: 10_000_000, currency: 'USDC', payee_id: 'payee_me', to_currency: 'GBP' })
-    expect(within(quote).getByText('My Monzo gets')).toBeTruthy()
+    expect(within(quote).getByText('They get')).toBeTruthy()
     fireEvent.click(within(quote).getByRole('button', { name: 'Confirm' }))
     await waitFor(() => expect(card.textContent).toMatch(/is on its way to your bank account/))
     expect(posts(calls, '/wallet-moves/wmove_1/challenge')).toHaveLength(1)
@@ -156,8 +158,28 @@ describe('the agent’s wallet: top up, cash out, request, activity, statements'
     fireEvent.click(await within(card).findByRole('button', { name: 'Statements' }))
     const statement = await within(card).findByTestId('wallet-statements-USDC')
     await within(statement).findByText('Closing balance')
+    expect(within(statement).getByRole('heading', { name: 'Statement' })).toBeTruthy()
     fireEvent.click(within(statement).getByRole('button', { name: 'Download CSV' }))
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1))
     expect(calls.some((c) => /\/api\/agents\/agt_1\/wallet\/statement\?month=\d{4}-\d{2}&format=csv$/.test(c.url))).toBe(true)
+  })
+
+  it('draws each action as a row with its line, and the quote as P7’s facts with the seconds its price is locked', async () => {
+    mockBff()
+    const card = await screen.findByTestId('agent-money-wallet')
+    const top = await within(card).findByRole('button', { name: 'Top up' })
+    expect(top).toHaveAttribute('aria-expanded', 'false')
+    expect(top).toHaveAccessibleDescription('By card, bank transfer, or from your own money or USDC')
+    expect(within(card).getByRole('button', { name: 'Cash out' })).toHaveAccessibleDescription('Turn Researcher’s USDC back into money, in your own bank account')
+    fireEvent.click(top)
+    expect(top).toHaveAttribute('aria-expanded', 'true')
+    const form = within(card).getByTestId('wallet-top-up-USDC')
+    fireEvent.change(within(form).getByRole('textbox', { name: 'Amount in GBP' }), { target: { value: '50' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Review' }))
+    const quote = await within(card).findByTestId('wallet-move-quote')
+    expect(quote.textContent).toMatch(/^You send.+Rate.+Fee.+They get/)
+    expect(quote.textContent).not.toMatch(/You pay|Price held until/)
+    expect(within(quote).getByText(/Locked for/).textContent).toBe('Locked for 30 seconds')
+    expect(within(quote).getByTestId('wallet-move-seconds-left').textContent).toMatch(/^(30|29) seconds left$/)
   })
 })
