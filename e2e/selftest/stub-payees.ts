@@ -108,6 +108,11 @@
 //   self-hosted-unproved   — more than 1,000 USDC to a self-hosted address is paid without the owner's proof
 // B61.67 — and the owner moving money between the company's account and an agent's (POST /v1/money/accounts/{id}/funding,
 // Lens B61.66), which is how instant-transfer-send funds its sender.
+// B30.127 — and an agent's payment out from its own account (account_id) judged by its rules at its LXC value (judgeAgentPayment,
+// stub-bank.ts): above its approval amount it files an approval and is refused 403 until the owner approves it, then the same
+// request pays. The Test partner returns a payment whose minor units end in 14: completed when made, it reads returned, its money
+// back in the account, once read again (GET /v1/money/payments/{id}). Its defect:
+//   payment-above-moved    — a payment refused for its approval takes its amount from the account anyway
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -179,6 +184,8 @@ const DETAILS_NOTICE = 'Call them on a number you already know — not one from 
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
 /** B56.28 — Talyvor's fee for accepting a payment from an account, as stub-lens.ts states it at /v1/public/fees. */
 const A2A_FEE_BPS = 100
+/** B30.127 — what a minor unit is worth in µLXC at the Test rate, as the agent's rules count a payment out: £100.00 is 1,250 LXC. */
+const ULXC_PER_MINOR: Record<string, number> = { GBP: 125_000 }
 const PAYMENT_UNSIGNED = 'economy: this workspace signs its payments with a passkey or the phone app — sign this payment\'s challenge (POST /v1/money/payments/challenge)'
 
 type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }
@@ -367,6 +374,7 @@ export class PayeeDesk {
     const one = /^\/v1\/money\/payments\/([^/]+)$/.exec(path)
     if (one !== null && req.method === 'GET') {
       const p = (this.payments.get(ws) ?? []).find((x) => x.id === one[1])
+      if (p !== undefined) this.refresh(ws, p)
       return p === undefined ? this.json(res, 404, { error: 'economy: no such payment' }) : this.json(res, 200, p), true
     }
     const proof = /^\/v1\/money\/payees\/([^/]+)\/address-proof$/.exec(path)
@@ -935,12 +943,48 @@ export class PayeeDesk {
     return this.json(res, 200, { proved: true })
   }
 
-  /** B48.27 — POST /v1/money/payments on agent `agentID`'s own key: paid from its wallet in the currency. */
+  /** B30.127 — an agent's payment out judged by its rules at `valueULXC` (stub-bank.ts): a refusal, or undefined to pay it. */
+  judgeAgentPayment: (ws: string, agentID: string, valueULXC: number, fingerprint: string, memo: string) => { status: number; error: string } | undefined = () => undefined
+
+  /**
+   * B48.27 — POST /v1/money/payments on agent `agentID`'s own key: paid from its wallet in the currency. B30.127: or from its own
+   * account `account_id`; a GBP payment judged first by its rules, as Lens's PayOutside judges it.
+   */
   async agentPay(req: IncomingMessage, res: ServerResponse, ws: string, agentID: string): Promise<void> {
-    const b = await this.body<{ payee_id?: string; amount_minor?: number; currency?: string; reference?: string; idempotency_key?: string }>(req)
+    const b = await this.body<{ payee_id?: string; amount_minor?: number; currency?: string; reference?: string; idempotency_key?: string; account_id?: string }>(req)
     const key = String(req.headers['idempotency-key'] ?? b.idempotency_key ?? '')
-    const p = this.pay(ws, this.payees.get(ws) ?? [], { ...b, idempotency_key: key, account_id: this.wallet(ws, agentID, (b.currency ?? '').toUpperCase()).id })
+    const currency = (b.currency ?? '').toUpperCase()
+    const own = (this.accounts.get(ws) ?? []).find((a) => a.id === b.account_id && a.agent_id === agentID)
+    if (b.account_id && own === undefined) return this.json(res, 404, { error: 'economy: no such money account' })
+    const account = own ?? this.wallet(ws, agentID, currency)
+    const amount = b.amount_minor ?? 0
+    const perMinor = ULXC_PER_MINOR[currency]
+    if (perMinor !== undefined && amount > 0 && !(this.payments.get(ws) ?? []).some((p) => p.idempotency_key === key)) {
+      const fingerprint = ['payment_out', agentID, account.id, b.payee_id ?? '', amount, currency, 'test', b.reference ?? ''].join('\0')
+      const payee = (this.payees.get(ws) ?? []).find((x) => x.id === b.payee_id)
+      const refused = this.judgeAgentPayment(ws, agentID, amount * perMinor, fingerprint, `${money(amount, currency)} to ${payee?.name ?? 'a payee'} (test money) — ${b.reference ?? ''}`)
+      if (refused !== undefined) {
+        if (this.broken('payment-above-moved') && /approv/.test(refused.error)) {
+          account.test_minor -= amount
+          account.balance_minor -= amount
+          this.line(ws, account, 'payment_out_hold', -amount)
+        }
+        return this.json(res, refused.status, { error: refused.error })
+      }
+    }
+    const p = this.pay(ws, this.payees.get(ws) ?? [], { ...b, idempotency_key: key, account_id: account.id })
     return 'error' in p ? this.json(res, p.status, { error: p.error }) : this.json(res, 201, p)
+  }
+
+  /** B30.127 — payment `p` as the Test partner has it now: a completed one whose minor units end in 14 came back, its money in the account again. */
+  private refresh(ws: string, p: Payment): void {
+    if (p.status !== 'completed' || p.amount_minor % 100 !== 14) return
+    const account = (this.accounts.get(ws) ?? []).find((a) => a.id === p.account_id)
+    p.status = 'returned'
+    if (account === undefined) return
+    account[p.funding === 'live' ? 'live_minor' : 'test_minor'] += p.amount_minor
+    account.balance_minor += p.amount_minor
+    this.line(ws, account, 'payment_out_returned', p.amount_minor)
   }
 
   /** B40.29 — one payment out of an approved request's item, from `agentID`'s account in its currency (the company's for ''). */
