@@ -7,11 +7,15 @@
 // account of its own holding nothing, pays it through the link and must be refused 409 for want of money; the invoice
 // must still read sent with the total due and no payment, and neither agent's account may have moved.
 //
-// shortcut: the payer holds nothing — Lens has no route that puts test money into an account until B30.15's payments-in
-// webhook lands; once it has, fund the payer here (B30.14's payment reference) and assert the paid path: the issuer's
-// account up by the total, the payer's down by it, the invoice paid.
+// B56.28 — then the payer's company puts the total into its GBP account and gives it to its agent, and the agent pays
+// the invoice, twice (a retry). Lens charges the issuer its fee for accepting the payment once (B56.21): the issuer's
+// agent account's statement holds the payment in and exactly one acceptance_fee line of merchant_a2a_fee_bps of the
+// total, as Lens states the rate (GET /v1/public/fees), the invoice reads paid with that fee_minor on its one payment,
+// and the issuer's agent account holds the total less the fee, the payer's nothing.
 
+import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
+import { BPS, percent } from './fees.ts'
 import type { Answered, SyntheticUser, WorkspaceTerms } from './lens.ts'
 import { said } from './routes.ts'
 import type { Scenario } from './scenarios.ts'
@@ -20,7 +24,11 @@ import type { Scenario } from './scenarios.ts'
 interface Account { id: string; agent_id?: string; currency: string; purpose: string; balance_minor: number; test_minor: number; live_minor: number }
 /** An invoice as its issuer reads it (economy.Invoice); the pay page shows it without the issuer's ids. */
 interface Invoice { id: string; workspace_id?: string; agent_id?: string; account_id?: string; number: string; reference: string; pay_token?: string; pay_url?: string
-  currency: string; subtotal_minor: number; vat_minor: number; total_minor: number; paid_minor: number; due_minor: number; status: string; payments?: unknown[] }
+  currency: string; subtotal_minor: number; vat_minor: number; total_minor: number; paid_minor: number; due_minor: number; status: string; payments?: InvoicePayment[] | null }
+/** One payment of an invoice (economy.InvoicePayment): fee_minor is Talyvor's fee for accepting it (B56.21). */
+export interface InvoicePayment { entry_id: string; method: string; amount_minor: number; fee_minor: number; returned_minor: number }
+/** One posting on an account's statement (economy.MoneyStatementLine). */
+export interface StatementLine { entry_id: string; kind: string; amount_minor: number; funding: string }
 /** The public pay page (GET /v1/pay/{token}). */
 interface PayPage { notice?: string; card: boolean; transfer?: { details: unknown; mode: string; reference: string }; invoice: Invoice }
 
@@ -36,34 +44,74 @@ const TOTAL = SUBTOTAL + VAT
 /** An agent account's payment reference (talyvor-lens economy.paymentReference). */
 const PAYMENT_REFERENCE = /TLV[0-9A-F]{12}/
 
+/** Talyvor's fee for accepting a payment of `amountMinor` from an account at `bps`, as Lens charges it (economy.partOf):
+ * to the nearest minor unit, a half up, and never more than the payment. */
+export function acceptanceFeeOf(amountMinor: number, bps: number): number {
+  return Math.min(Math.floor((amountMinor * bps + BPS / 2) / BPS), amountMinor)
+}
+
+/** B56.28 — what is wrong with an invoice of `total` paid once from another company's agent account, charged at `bps`:
+ * the issuer's statement holds the payment in and exactly one acceptance_fee line of the fee (none if the fee is 0), the
+ * invoice reads paid with one agent payment carrying that fee_minor, and the accounts hold the total less the fee and
+ * nothing. Empty when all is right. */
+export function acceptanceFeeFaults(o: { total: number; bps: number | undefined; invoice: Invoice | undefined; issuerLines: StatementLine[]
+  issuerHolds: number | undefined; payerHolds: number | undefined }): string[] {
+  if (o.bps === undefined) return ['Lens states no merchant_a2a_fee_bps in GET /v1/public/fees, so the fee for accepting a payment from an account cannot be judged']
+  const fee = acceptanceFeeOf(o.total, o.bps)
+  const faults: string[] = []
+  const paidIn = o.issuerLines.filter((l) => l.kind === 'invoice_payment')
+  if (paidIn.length !== 1 || paidIn[0].amount_minor !== o.total) {
+    faults.push(`the issuer's agent account's statement holds one invoice_payment of +${o.total}; it holds ${JSON.stringify(paidIn)}`)
+  }
+  const fees = o.issuerLines.filter((l) => l.kind === 'acceptance_fee')
+  const want = fee > 0 ? [-fee] : []
+  if (JSON.stringify(fees.map((l) => l.amount_minor)) !== JSON.stringify(want)) {
+    faults.push(`the issuer's agent account's statement holds ${fee > 0 ? `exactly one acceptance_fee line of -${fee} (${percent(o.bps)} of ${o.total})` : 'no acceptance_fee line (the fee is 0)'}; ` +
+      `it holds ${fees.length === 0 ? 'none' : JSON.stringify(fees)}`)
+  }
+  if (fees.some((l) => l.funding !== 'test')) faults.push(`a Sandbox payment's fee is Sandbox money; it was ${JSON.stringify(fees.map((l) => l.funding))}`)
+  const inv = o.invoice
+  const payments = inv?.payments ?? []
+  if (inv === undefined || inv.status !== 'paid' || inv.paid_minor !== o.total || inv.due_minor !== 0) {
+    faults.push(`the invoice reads paid with ${o.total} paid and 0 due; it reads ${JSON.stringify(inv).slice(0, 300)}`)
+  }
+  if (payments.length !== 1 || payments[0].method !== 'agent' || payments[0].amount_minor !== o.total || payments[0].fee_minor !== fee) {
+    faults.push(`the invoice shows one agent payment of ${o.total} with fee_minor ${fee}; it shows ${JSON.stringify(payments)}`)
+  }
+  if (o.issuerHolds !== o.total - fee) faults.push(`the issuer's agent account holds the total less the fee, ${o.total - fee}; it holds ${o.issuerHolds}`)
+  if (o.payerHolds !== 0) faults.push(`the payer's agent account paid all it held and holds 0; it holds ${o.payerHolds}`)
+  return faults
+}
+
 export function invoicePayLink(): Scenario {
   return {
     id: 'invoice-pay-link',
     owner: 'talyvor-lens',
     own: true,
     feature: 'Agent Wallets',
-    items: ['B30.20'],
+    items: ['B30.20', 'B56.21', 'B56.28'],
     title: 'invoices and pay links: an agent issues and sends a GBP invoice with VAT; its pay page reads with no credential, ' +
-      "with no notice and no transfer to the Test partner's details, naming no issuer id; another company's unfunded agent is refused 409 and nothing moves",
+      "with no notice and no transfer to the Test partner's details, naming no issuer id; another company's unfunded agent is refused 409 and nothing moves; " +
+      'funded, it pays, and the issuer is charged its fee for accepting the payment once, on its statement and on the payment',
     run: async (ctx) => {
-      const { lens } = ctx.env
+      const { lens, fees } = ctx.env
       const [issuer, payer] = await lens.createUsers(2)
       const call = async <T>(user: SyntheticUser, method: string, path: string, body: object | undefined, note: string): Promise<Answered<T>> => {
         const got = await lens.act<T>(user, method, path, body)
         ctx.evidence.push({ note, answer: said(got) })
         return got
       }
-      /** The company's GBP account, then one of its agents' under it: the agent and its account. */
-      const openAgentAccount = async (user: SyntheticUser, who: string, agentName: string): Promise<{ agent: string; account: Account } | string> => {
+      /** The company's GBP account, then one of its agents' under it: the agent, its account and the company's. */
+      const openAgentAccount = async (user: SyntheticUser, who: string, agentName: string): Promise<{ agent: string; account: Account; company: Account } | string> => {
         const terms = await call<{ terms: WorkspaceTerms[] | null }>(user, 'GET', TERMS, undefined, `${who} reads the workspace's terms`)
         if (!terms.ok) return `reading ${who} workspace's terms was refused: ${said(terms)}`
         for (const t of terms.value.terms ?? []) {
-          if (!['currency_accounts', 'account_details'].includes(t.capability) || t.accepted != null) continue
+          if (!['currency_accounts', 'account_details', 'payments_in'].includes(t.capability) || t.accepted != null) continue
           const accepted = await call(user, 'POST', `${TERMS}/${t.capability}/accept`, { version: t.version }, `${who} accepts version ${t.version} of ${t.capability}' terms`)
           if (accepted.status !== 201) return `accepting ${t.capability}' terms must answer 201; Lens answered ${said(accepted)}`
         }
         const company = await call<Account>(user, 'POST', '/v1/money/accounts', { currency: 'GBP' }, `${who} opens the company's GBP account on test money`)
-        if (company.status !== 201) return `opening a company GBP account must answer 201; Lens answered ${said(company)}`
+        if (company.status !== 201 || !company.ok) return `opening a company GBP account must answer 201; Lens answered ${said(company)}`
         const agent = await lens.createAgent(user, agentName)
         ctx.evidence.push({ note: `${who} creates the agent ${agentName}`, answer: agent.id })
         const opened = await call<Account>(user, 'POST', '/v1/money/accounts', { currency: 'GBP', agent_id: agent.id }, `${who} opens the agent's GBP account`)
@@ -71,7 +119,7 @@ export function invoicePayLink(): Scenario {
         if (opened.value.purpose !== 'agent' || opened.value.agent_id !== agent.id || opened.value.test_minor !== 0) {
           return `an agent's account is purpose agent, the agent's own, holding 0; Lens opened ${JSON.stringify(opened.value)}`
         }
-        return { agent: agent.id, account: opened.value }
+        return { agent: agent.id, account: opened.value, company: company.value }
       }
 
       // The issuer: its agent's account, its payment reference, and the invoice, sent.
@@ -133,12 +181,43 @@ export function invoicePayLink(): Scenario {
         }
       }
 
+      // B56.28 — the payer's company puts the total in and gives it to its agent, which pays, then pays again (a retry).
+      const topped = await call(payer, 'POST', `/v1/money/accounts/${paying.company.id}/test-money`, { amount_minor: TOTAL, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` },
+        `the payer puts ${TOTAL} minor of Sandbox money in the company's GBP account`)
+      if (topped.status !== 201) return fail(`putting ${TOTAL} minor in the payer's company GBP account must answer 201; Lens answered ${said(topped)}`)
+      const given = await call(payer, 'POST', `/v1/money/accounts/${paying.account.id}/funding`, { direction: 'to_agent', amount_minor: TOTAL, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` },
+        `the payer gives its agent ${TOTAL} minor from the company's account`)
+      if (given.status !== 201) return fail(`giving the payer's agent ${TOTAL} minor must answer 201; Lens answered ${said(given)}`)
+      for (const attempt of ['pays the invoice', 'pays it again, a retry']) {
+        const ok = await call<{ invoice: Invoice }>(payer, 'POST', `/v1/pay/${token}/agent`, { agent_id: paying.agent }, `the payer's agent ${attempt}`)
+        if (ok.status !== 200 || !ok.ok) return fail(`the payer's agent holding ${TOTAL} ${attempt}: Lens must answer 200; it answered ${said(ok)}`)
+      }
+      const listed = await call<{ invoices: Invoice[] | null }>(issuer, 'GET', '/v1/money/invoices', undefined, 'the issuer lists its invoices once paid')
+      if (!listed.ok) return fail(`listing the issuer's invoices was refused: ${said(listed)}`)
+      const now = new Date()
+      const day = (d: Date) => d.toISOString().slice(0, 10)
+      const period = `from=${day(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)))}&to=${day(new Date(now.getTime() + 86_400e3))}`
+      const statement = await call<{ lines: StatementLine[] | null }>(issuer, 'GET', `/v1/money/accounts/${issuing.account.id}/statement?${period}`, undefined,
+        "the issuer reads its agent account's statement for this month")
+      if (!statement.ok) return fail(`reading the issuer's agent account's statement was refused: ${said(statement)}`)
+      const holds = async (user: SyntheticUser, who: string, id: string): Promise<number | undefined> => {
+        const accounts = await call<{ accounts: Account[] | null }>(user, 'GET', '/v1/money/accounts', undefined, `${who} lists the accounts once paid`)
+        const a = accounts.ok ? (accounts.value.accounts ?? []).find((x) => x.id === id) : undefined
+        return a === undefined ? undefined : a.test_minor + a.live_minor
+      }
+      const bps = fees.merchant_a2a_fee_bps
+      const faults = acceptanceFeeFaults({ total: TOTAL, bps, invoice: (listed.value.invoices ?? []).find((x) => x.id === inv.id),
+        issuerLines: statement.value.lines ?? [], issuerHolds: await holds(issuer, 'the issuer', issuing.account.id), payerHolds: await holds(payer, 'the payer', paying.account.id) })
+      if (faults.length > 0) return fail(faults.join('; '))
+      const fee = acceptanceFeeOf(TOTAL, bps ?? 0)
+
       return {
         pass: true,
         detail: "a GBP invoice of £145.00 (two lines, 20% VAT on one) issued from the agent's account and sent, with a number, a reference and a pay link; " +
           "its pay page read with no credential, with no notice and no transfer to the Test partner's details, naming no issuer id; " +
           "another company's agent holding £0.00 refused 409; the invoice still sent with £145.00 due and no payment, both agents' accounts still 0; " +
-          'the paid path waits on payments in (B30.15)',
+          `funded with £145.00, the agent paid it twice and was taken once; the issuer charged one acceptance_fee of ${fee} minor (${percent(bps ?? 0)}), ` +
+          `shown as the payment's fee_minor, its agent account holding ${TOTAL - fee}`,
       }
     },
   }

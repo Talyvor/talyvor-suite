@@ -229,6 +229,12 @@ export class LaunchDesk {
     return this.json(res, 200, { workspace_id: ws, account_id: a.id, agent_id: a.agent_id ?? '', currency: a.currency, lines: this.statementLines.get(a.id) ?? [] }), true
   }
 
+  /** B56.28 — a posting made elsewhere (stub-payees.ts: money in, funding, invoice payments and their fees) on account `id`'s
+   * statement, beside its conversions. */
+  post(id: string, l: StatementLine): void {
+    this.statementLines.set(id, [...(this.statementLines.get(id) ?? []), l])
+  }
+
   private async convertQuote(req: IncomingMessage, res: ServerResponse, ws: string, agentID: string): Promise<void> {
     const b = await this.body<{ sell_currency?: string; buy_currency?: string; sell_minor?: number }>(req)
     const sellCur = (b.sell_currency ?? '').toUpperCase()

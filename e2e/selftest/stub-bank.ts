@@ -608,6 +608,8 @@ export class Bank {
     this.payees = new PayeeDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
       { read: d.read, base: d.base, appURL: d.appURL })
+    // B56.28 — an account's statement holds its conversions (LaunchDesk) and its other postings (PayeeDesk) alike.
+    this.payees.onLine = (id, l) => this.launch.post(id, l)
     this.permissionMandates = new PermissionMandateDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })))
     this.paymentRequests = new PaymentRequestDesk(d.json, d.read, (name) => this.broken(name), (ws) => this.payees.payeesOf(ws),
