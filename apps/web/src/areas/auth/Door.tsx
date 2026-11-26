@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Logo, cn } from '@talyvor/ui'
+import { Logo, cn, playSound } from '@talyvor/ui'
 import { Button, Icon, Input, pocketFocusRing } from '@talyvor/ui/pocket'
 import { StatusLabel } from '../../labels/StatusLabel'
 import {
@@ -329,6 +329,8 @@ export function Door({ returnTo, foot }: DoorProps) {
     } else if (passcode && canKey && !passkeyHere()) {
       go({ at: 'faster', passcode })
     } else {
+      // B61.128 — section 15: the app opens after the passcode or the passkey.
+      playSound('unlock')
       await land(returnTo ?? '/')
     }
   }

@@ -1,3 +1,4 @@
+import { playSound } from '@talyvor/ui'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, Field, Icon, Input, Select, Switch, showSnack } from '@talyvor/ui/pocket'
@@ -163,6 +164,7 @@ function LimitsForm({
   const save = useMutation({
     mutationFn: (tokens: TokenLimit[]) => signPermission(agent, { tokens, ...counterparties, expires }),
     onSuccess: (next, tokens) => {
+      playSound('moved')
       const limited = tokens.length > 0
       setSigned(limited)
       if (!limited) showSnack({ title: `${agent.name}’s wallet is frozen`, line: 'Every payment from it is refused until you sign new limits.' })

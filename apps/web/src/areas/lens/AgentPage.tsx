@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { inlineLink } from '@talyvor/ui'
+import { inlineLink, playSound } from '@talyvor/ui'
 import { Bar, Button, Card, Chip, Crumb, Dialog, Eyebrow, Icon, Money, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { AgentCard as AgentCardArt } from '../../cards/AgentCard'
 import { useAuthMeReader } from '../../lib/authMe'
@@ -302,12 +302,15 @@ function CardColumn({ s }: { s: AgentSummary }) {
   const frozen = card.status === 'frozen'
   const toggle = useMutation({
     mutationFn: (freeze: boolean) => (freeze ? agentBankApi.freezeCard(agent.id) : agentBankApi.unfreezeCard(agent.id)),
-    onSuccess: (_card, freeze) =>
+    onSuccess: (_card, freeze) => {
+      playSound(freeze ? 'freeze' : 'unfreeze')
       showSnack(
         freeze
           ? { title: `${agent.name}’s card is frozen`, line: 'Every purchase on it is refused until you unfreeze it. Its other spending carries on, within its rules.' }
           : { title: `${agent.name}’s card takes purchases again`, line: `Each one is judged by ${agent.name}’s rules.` },
-      ),
+      )
+    },
+    onError: () => playSound('refused'),
     onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: summaryKey(agent.id) }), qc.invalidateQueries({ queryKey: cardKey(agent.id) })]),
   })
   if (card.status === 'none') {
@@ -376,7 +379,10 @@ function Header({ s }: { s: AgentSummary }) {
   const running = !agent.paused_at && !allPaused
   const pause = useMutation({
     mutationFn: () => agentBankApi.pause(agent.id, 'paused from its page'),
-    onSuccess: () => showSnack({ title: `${agent.name} is paused`, line: 'Talyvor refuses its next request or payment until you resume it.' }),
+    onSuccess: () => {
+      playSound('pause')
+      showSnack({ title: `${agent.name} is paused`, line: 'Talyvor refuses its next request or payment until you resume it.' })
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
   const by = me.data?.user?.sub && me.data.user.sub === s.owner_user_id ? ' by you' : ''

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { listenForSounds } from '../../soundsAsked'
 
 // B61.33 — Pay, to a person (Pocket Live's web `pay` and its panel): first on Pay, one field takes a Talyvor name, phone
 // number or email; a match shows the person's shown name with Pay, and no match says Lens's words. The panel takes the
@@ -188,5 +189,19 @@ describe('Pay, to a person (B61.33)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Change something' }))
     dialog = screen.getByRole('dialog', { name: 'Pay Dana R.' })
     expect(within(dialog).getByLabelText('Amount in USD')).toBeTruthy()
+  })
+
+  it('B61.128 — plays sent once Lens has paid, and a refusal plays refused and never sent', async () => {
+    const card = await openPay()
+    const dialog = await review(card)
+    const sounds = listenForSounds()
+    refusal = { status: 409, error: 'economy: this person cannot be paid just now' }
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
+    await within(dialog).findByTestId('pay-a-person-refused')
+    expect(sounds()).toEqual(['refused'])
+    refusal = null
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
+    await within(dialog).findByTestId('pay-a-person-sent')
+    expect(sounds()).toEqual(['refused', 'sent'])
   })
 })

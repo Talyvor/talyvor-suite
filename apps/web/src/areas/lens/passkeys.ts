@@ -5,6 +5,7 @@
 // on every approve or deny is signed with it over a challenge Lens issues for that one approval.
 // Pushes arrive through /sw.js, subscribed with the key Lens serves.
 
+import { playSound } from '@talyvor/ui'
 import {
   agentBankApi,
   type EnrolmentWaiting,
@@ -200,6 +201,8 @@ export async function assertOver({ challenge, allow_credentials }: { challenge: 
     },
   })) as PublicKeyCredential | null
   if (!cred) throw new Error('The approval was not signed.')
+  // B61.128 — section 15: the passkey says yes.
+  playSound('tick')
   const res = cred.response as AuthenticatorAssertionResponse
   return {
     credential_id: b64u(cred.rawId),

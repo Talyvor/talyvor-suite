@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn, inlineLink } from '@talyvor/ui'
+import { cn, inlineLink, playSound } from '@talyvor/ui'
 import { Button, Dialog, Field, Icon, Input, Money, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
@@ -99,6 +99,7 @@ export function AgentFundingDialog({
   const move = useMutation({
     mutationFn: () => agentBankApi.agentFunding(agentAccount?.id ?? '', direction, minor ?? 0, key),
     onSuccess: (f) => {
+      playSound('moved')
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
       void qc.invalidateQueries({ queryKey: BOOK_KEY })
       setKey(newMoveKey())
@@ -106,6 +107,7 @@ export function AgentFundingDialog({
       showSnack({ title: toAgent ? <>{moved} moved to {agent.name}</> : <>{moved} back from {agent.name}</> })
       onClose()
     },
+    onError: () => playSound('refused'),
   })
   const ready = agentAccount !== undefined && companyAccount !== undefined && minor !== null
   return (

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Button, Dialog, Icon, hideSnack, showSnack } from '@talyvor/ui/pocket'
-import { cn, inlineLink } from '@talyvor/ui'
+import { cn, inlineLink, playSound } from '@talyvor/ui'
 import { BOOK_KEY, deviceText, useKeys } from '../areas/lens/AgentBank'
 import { agentBankApi } from '../areas/lens/agentBankApi'
 import { resumeEveryAgent } from '../areas/lens/passkeys'
@@ -26,8 +26,10 @@ export function usePauseEveryAgent(reason: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => agentBankApi.pauseAll(reason),
-    onSuccess: () =>
-      showSnack({ title: 'Every agent is paused', line: 'Talyvor refuses each one’s next request or payment until you start them again.' }),
+    onSuccess: () => {
+      playSound('pause')
+      showSnack({ title: 'Every agent is paused', line: 'Talyvor refuses each one’s next request or payment until you start them again.' })
+    },
     onError: (err) => showSnack({ title: 'Your agents were not paused', line: deviceText(err, 'Try again.') }),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
@@ -105,6 +107,7 @@ function StartEveryAgentDialog({ onClose }: { onClose: () => void }) {
   const start = useMutation({
     mutationFn: resumeEveryAgent,
     onSuccess: () => {
+      playSound('resume')
       showSnack({ title: 'Your agents can work again', line: 'An agent paused on its own stays paused.' })
       onClose()
     },

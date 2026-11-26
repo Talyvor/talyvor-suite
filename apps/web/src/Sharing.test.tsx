@@ -141,11 +141,11 @@ describe('sharing consent', () => {
     expect(screen.queryByText('Documents you attach')).not.toBeInTheDocument()
   })
 
-  it('Appearance: Light, Dark or Same as this device, moved here from the top bar', async () => {
+  it('Look and sound: Light, Dark or Same as this device, moved here from the top bar', async () => {
     mockBff(true)
     window.history.pushState({}, '', '/settings')
     render(<App />)
-    const appearance = await screen.findByRole('tablist', { name: 'Appearance' })
+    const appearance = await screen.findByRole('tablist', { name: 'Look and sound' })
     expect(screen.queryByRole('button', { name: /Switch to (dark|light) theme/ })).not.toBeInTheDocument()
     fireEvent.click(within(appearance).getByRole('tab', { name: 'Dark' }))
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
@@ -157,6 +157,24 @@ describe('sharing consent', () => {
     expect(within(appearance).getByRole('tab', { name: 'Same as this device' })).toHaveAttribute('aria-selected', 'true')
     fireEvent.click(within(appearance).getByRole('tab', { name: 'Light' }))
     expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  })
+
+  it('Look and sound: Sounds is on by default, kept when switched off, and plays moneyin once when switched on', async () => {
+    mockBff(true)
+    window.history.pushState({}, '', '/settings')
+    render(<App />)
+    const card = await screen.findByTestId('settings-look-and-sound')
+    const sounds = within(card).getByRole('switch', { name: 'Sounds' })
+    expect(sounds).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(sounds)
+    expect(sounds).toHaveAttribute('aria-checked', 'false')
+    expect(window.localStorage.getItem('talyvor-sounds')).toBe('off')
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+    fireEvent.click(sounds)
+    expect(sounds).toHaveAttribute('aria-checked', 'true')
+    expect(window.localStorage.getItem('talyvor-sounds')).toBeNull()
+    expect(play.mock.contexts.map((el) => new URL((el as HTMLAudioElement).src).pathname)).toEqual(['/sounds/moneyin.wav'])
+    play.mockRestore()
   })
 
   it('Show amounts in: pounds or euros beside LXC, dollars by default', async () => {

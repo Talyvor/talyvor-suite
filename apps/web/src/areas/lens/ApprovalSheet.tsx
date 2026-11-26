@@ -3,7 +3,7 @@ import { useId, useState } from 'react'
 import { useEffect } from 'react'
 import { Link, useLocation, useNavigate, type To } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { inlineLink } from '@talyvor/ui'
+import { inlineLink, playSound } from '@talyvor/ui'
 import { Button, Dialog, Face, Field, Input, Layer, Money, SheetFrame, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { isSessionExpired } from '../../lib/productState'
@@ -139,6 +139,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
     mutationFn: async ({ decision, reason }: { decision: 'approve' | 'deny'; reason?: string }) =>
       agentBankApi.decide(a.id, decision, keys.signed ? await signApproval(a.id) : undefined, undefined, reason),
     onSuccess: (got, { decision }) => {
+      playSound(decision === 'approve' ? 'approved' : 'declined')
       onClose()
       showSnack(
         decision === 'approve' && got?.waiting_for_second_approver
@@ -157,6 +158,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
           : { title: `Declined. ${name}’s ${a.payee ? 'payment' : 'request'} is refused`, line: 'And the same request is refused without asking you for 24 hours.' },
       )
     },
+    onError: () => playSound('refused'),
     onSettled: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: APPROVALS_KEY }),

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { listenForSounds } from '../../soundsAsked'
 
 // B61.84 — Add money and Take back on an agent's page (Pocket Live's fund and take panels): the owner gives the agent money
 // from the company's account in its account's currency, or takes it back, now (BFF B61.84, Lens B61.66). The dialog names
@@ -86,8 +87,10 @@ describe('Add money and Take back on an agent’s page (B61.84)', () => {
     expect(text(within(dialog).getByTestId('agent-funding-review'))).toBe('$10.00From the company account to Research’s US dollar account, now.')
     const accountsRead = reads['/api/money/accounts']
     const summaryRead = reads['/api/agents/agt_1/summary']
+    const sounds = listenForSounds()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Move $10.00' }))
     await waitFor(() => expect(text(document.body)).toContain('$10.00 moved to Research'))
+    expect(sounds()).toEqual(['moved'])
     expect(posts).toHaveLength(1)
     expect(posts[0].path).toBe('/api/money/accounts/macc_research/funding')
     expect(posts[0].body).toEqual({ direction: 'to_agent', amount_minor: 1000 })
@@ -105,8 +108,10 @@ describe('Add money and Take back on an agent’s page (B61.84)', () => {
     await waitFor(() => expect(text(within(dialog).getByTestId('agent-funding-line'))).toBe('Into the company account. Research holds $0.00.'))
     fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '4' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
+    const sounds = listenForSounds()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Take back $4.00' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Only the workspace’s owner or an admin may move money between the company and an agent.')
+    expect(sounds()).toEqual(['refused'])
     expect(posts.map((p) => p.body)).toEqual([{ direction: 'to_company', amount_minor: 400 }])
     expect(company).toBe(10_000)
   })

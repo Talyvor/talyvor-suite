@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Chip, Facts, Field, Icon, Input, Money, Row, Select, pocketFocusRing, type ChipTone } from '@talyvor/ui/pocket'
-import { inlineLink } from '@talyvor/ui'
+import { inlineLink, playSound } from '@talyvor/ui'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { AgentFace } from './AgentFace'
@@ -436,10 +436,12 @@ export function AgentCryptoSend({ agent, agents }: { agent: Agent; agents: Agent
   const sent = useMutation({
     mutationFn: (reviewed: CryptoSendQuote) => sendSigned(agent.id, request(), key, reviewed),
     onSuccess: () => {
+      playSound('sent')
       setKey(newMoveKey())
       setQuote(null)
       setAmount('')
     },
+    onError: () => playSound('refused'),
     onSettled: () => qc.invalidateQueries({ queryKey: cryptoSendsKey(agent.id) }),
   })
   const change = () => {
