@@ -59,9 +59,9 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'first-agent', 'kya-credential', 'sdk-wallet-quickstart', 'pocket-02', 'pocket-09', 'pocket-10',
   ],
   wallets: [
-    'agent-balance-stored', 'agent-wallet', 'agent-wallet-kinds', 'b30-capabilities', 'capability-terms', 'daily-reconciliation',
-    'ledger-call-once', 'ledger-moves-at-once', 'money-layer-contract', 'openapi-wallets', 'status-money-rails', 'status-truth',
-    'terms-credential-screens', 'wallet-brand', 'wallet-cash-out', 'wallet-currency', 'wallet-fx', 'wallet-pots', 'pocket-20',
+    'agent-balance-stored', 'agent-wallet', 'agent-wallet-kinds', 'b30-capabilities', 'capability-terms', 'currency-convert-margin',
+    'daily-reconciliation', 'ledger-call-once', 'ledger-moves-at-once', 'money-layer-contract', 'openapi-wallets', 'status-money-rails',
+    'status-truth', 'terms-credential-screens', 'wallet-brand', 'wallet-cash-out', 'wallet-currency', 'wallet-fx', 'wallet-pots', 'pocket-20',
   ],
   cards: ['agent-cards', 'physical-card', 'wallet-card', 'wallet-card-freeze', 'wallet-card-purchase'],
   payments: [
