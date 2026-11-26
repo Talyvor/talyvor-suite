@@ -500,23 +500,68 @@ export function walletRecurring(seed: number, partner: number): Scenario {
   }
 }
 
+/**
+ * B28.67 — a cash-out is signed (Lens B28.339). The person makes a passkey on this browser on Approvals and devices (a
+ * virtual authenticator that verifies the user stands in for Face ID); a cash-out sent with no signature is refused, and
+ * the agent's statement holds no cash_out line and no cash-out is listed. Asked on the screen, the passkey signs it:
+ * one cash_out line of the amount on the agent's statement, held from the agent at once, then paid by the test partner.
+ * On a workspace of its own, so its passkey asks no other scenario for a signature.
+ */
 export function walletCashOut(seed: number): Scenario {
   const funded = 2e6
   const amount = 500_000
   return {
     id: 'wallet-cash-out',
     owner: 'talyvor-lens',
+    own: true,
+    items: ['B28.67'],
     agents: 1,
-    title: "a person cashes an agent's credits out on Agent Wallets: held from the agent at once, then paid by the test partner",
+    title: "a person with a passkey cashes an agent's credits out on Agent Wallets: unsigned it is refused and holds nothing; " +
+      'signed on the screen, one cash_out line held from the agent at once, then paid by the test partner',
     run: (ctx) => withBank(ctx, async (bank) => {
       const { env, app } = ctx
       const a = await fundedAgent(ctx, bank, `Earner ${seed}`, funded)
       if (typeof a === 'string') return fail(a)
+      const lines = async () => (await env.lens.agentLines(app.user, a.id)).filter((l) => l.kind === 'cash_out')
+
+      // Face ID on this browser: a platform authenticator that verifies the user, kept for this page's whole life.
+      const { page } = bank
+      const cdp = await app.context.newCDPSession(page)
+      await cdp.send('WebAuthn.enable', { enableUI: false })
+      await cdp.send('WebAuthn.addVirtualAuthenticator', {
+        options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+      })
+      await page.goto(new URL('/settings/devices', page.url()).toString())
+      await page.getByRole('heading', { name: 'Approvals are signed', exact: true }).waitFor({ timeout: ACTION_TIMEOUT_MS })
+      await page.getByRole('button', { name: 'Add this device', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
+      await page.getByRole('dialog').getByRole('button', { name: 'Make a passkey', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
+      const keys = await until(async () => {
+        const got = await env.lens.act<{ passkeys: unknown[] | null }>(app.user, 'GET', '/v1/workspaces/{ws}/agents/passkeys')
+        return got.ok ? got.value.passkeys ?? [] : []
+      }, (k) => k.length > 0, 30_000)
+      ctx.evidence.push({ note: `Approvals and devices → Add this device → Make a passkey: Lens lists ${keys.length} passkey(s)` })
+      if (keys.length === 0) return fail('Make a passkey on Approvals and devices registered no passkey with Lens')
+
+      // Unsigned, through the app's own cash-out call: refused, and nothing held.
+      const origin = new URL(page.url()).origin
+      const unsigned = await page.request.post(`${origin}/api/agents/${encodeURIComponent(a.id)}/cash-outs`,
+        { headers: { Origin: origin }, data: { amount_ulxc: amount, destination: `Unsigned ${seed}` } })
+      ctx.evidence.push({ note: `cash out ${lxcText(amount)} LXC with no signature`, answer: `${unsigned.status()} ${(await unsigned.text()).slice(0, 300)}` })
+      if (unsigned.ok()) return fail(`a cash-out with no signature, in a workspace with a passkey, answered ${unsigned.status()}, not a refusal`)
+      const early = await lines()
+      if (early.length > 0) return fail(`after the unsigned cash-out was refused, ${a.name}'s statement holds cash_out line(s): ${JSON.stringify(early)}`)
+      if ((await env.lens.cashOuts(app.user)).some((c) => c.agent_id === a.id)) return fail(`the unsigned cash-out was refused, yet Lens lists a cash-out for ${a.name}`)
+      const kept = await balance(ctx, app.user, a.id)
+      if (kept !== funded) return fail(`after the unsigned cash-out was refused, ${a.name} holds ${kept} µLXC, not the ${funded} it was funded`)
+
+      // Signed: asked on the screen, the passkey signs Lens's challenge for it.
       const said = await bank.cashOut(a, amount, `Test Bank ${seed}`)
-      ctx.evidence.push({ note: `Ask to cash out ${lxcText(amount)} LXC: ${said}` })
-      if (!/^Asked/.test(said)) return fail(`cashing out was refused: "${said}"`)
+      ctx.evidence.push({ note: `Ask to cash out ${lxcText(amount)} LXC, signed with the passkey: ${said}` })
+      if (!/^Asked/.test(said)) return fail(`cashing out with the passkey was refused: "${said}"`)
       const mine = (await env.lens.cashOuts(app.user)).filter((c) => c.agent_id === a.id)
       if (mine.length !== 1 || mine[0].amount_ulxc !== amount || mine[0].destination !== `Test Bank ${seed}`) return fail(`Lens has ${mine.length} cash-out(s) for ${a.name}: ${JSON.stringify(mine)}`)
+      const posted = await lines()
+      if (posted.length !== 1 || posted[0].amount_ulxc !== -amount) return fail(`signed, ${a.name}'s statement holds ${posted.length} cash_out line(s), want one of -${amount}: ${JSON.stringify(posted)}`)
       const held = await balance(ctx, app.user, a.id)
       if (held !== funded - amount) return fail(`asked to cash out ${amount} µLXC, ${a.name} holds ${held} µLXC: the credits were not held from it`)
       const last = await until(async () => (await env.lens.cashOuts(app.user)).find((c) => c.id === mine[0].id), (c) => c?.status === 'paid' || c?.status === 'failed')
@@ -524,7 +569,8 @@ export function walletCashOut(seed: number): Scenario {
       if (last?.status !== 'paid') return fail(`the cash-out is ${last?.status ?? 'gone'}${last?.detail ? ` (${last.detail})` : ''} ${TICK_WAIT_MS / 60_000} minutes on, not paid`)
       const after = await balance(ctx, app.user, a.id)
       if (after !== funded - amount) return fail(`paid out, ${a.name} holds ${after} µLXC, want ${funded - amount}`)
-      return { pass: true, detail: `${lxcText(amount)} LXC held from the agent at once and paid by the ${last.partner} partner; the agent keeps the rest` }
+      return { pass: true, detail: `unsigned, refused ${unsigned.status()} with nothing held; signed with the passkey, one -${amount} µLXC cash_out line, ` +
+        `${lxcText(amount)} LXC held from the agent at once and paid by the ${last.partner} partner; the agent keeps the rest` }
     }),
   }
 }
