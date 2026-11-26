@@ -1321,6 +1321,50 @@ export class LensClient {
     }
   }
 
+  /**
+   * B28.79 — one question on an agent's own key, streamed and read to its end: the words served, the stop reason, whether
+   * message_stop arrived, how long the stream lasted, and `cut` — what ended it — when the connection ended before it did.
+   */
+  async streamAsAgent(key: string, provider: string, model: string, prompt: string, maxTokens: number): Promise<Answered<{ text: string; stopReason: string; stopped: boolean; ms: number; cut?: string }>> {
+    const t0 = Date.now()
+    const res = await this.send('POST', `/v1/proxy/${provider}/v1/messages`, {
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', Accept: 'text/event-stream', 'X-Talyvor-Cache': 'bypass' },
+      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, messages: [{ role: 'user', content: prompt }] }),
+    })
+    if (!res.ok || res.body === null) return { ok: false, status: res.status, error: refusalOf(await res.text()) }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffered = ''
+    let text = ''
+    let stopReason = ''
+    let cut: string | undefined = 'the connection closed'
+    try {
+      for (;;) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        buffered += decoder.decode(chunk.value, { stream: true })
+        const events = buffered.split('\n\n')
+        buffered = events.pop() ?? ''
+        for (const ev of events) {
+          const data = /^data: (.*)$/m.exec(ev)?.[1]
+          if (data === undefined) continue
+          let e: { type?: string; delta?: { text?: string; stop_reason?: string } }
+          try {
+            e = JSON.parse(data) as typeof e
+          } catch {
+            continue
+          }
+          if (e.type === 'content_block_delta') text += e.delta?.text ?? ''
+          if (e.type === 'message_delta') stopReason = e.delta?.stop_reason ?? stopReason
+          if (e.type === 'message_stop') cut = undefined
+        }
+      }
+    } catch (e) {
+      if (cut !== undefined) cut = `the connection failed: ${e instanceof Error ? (e.cause instanceof Error ? e.cause.message : e.message) : String(e)}`
+    }
+    return { ok: true, status: res.status, value: { text, stopReason, stopped: cut === undefined, ms: Date.now() - t0, ...(cut === undefined ? {} : { cut }) } }
+  }
+
   /** B30.115 — every wallet capability, its class and whether it takes real money now (Lens B22.1, B30.1). */
   async walletCapabilities(user: SyntheticUser): Promise<CapabilityStatus[]> {
     const body = (await this.call('GET', '/v1/wallets/capabilities', this.bearer(user.token))) as { capabilities?: CapabilityStatus[] | null }

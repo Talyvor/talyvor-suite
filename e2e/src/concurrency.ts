@@ -8,8 +8,12 @@
 //   ledger-call-once — an agent's request sent twice at once and once after under one Idempotency-Key, and a streamed
 //     answer the agent hangs up on once it starts to arrive: each is one charge on the agent's statement and one spend row
 //     on the workspace's ledger debiting the same, and the agent ends holding what it was funded less exactly those.
+// B28.79 adds a third, on the same agent's key:
+//   stream-outlives-30s — a streamed answer long enough to take well past the 30 s Lens's server once cut streams at
+//     is read to its end: it reaches message_stop with its words, and is one charge and one spend row.
 
 import { randomUUID } from 'node:crypto'
+import { chargeULXC } from './app.ts'
 import { fail, lxcText } from './bank.ts'
 import { worstInputTokens } from './budget.ts'
 import { chargeOf, complete } from './code.ts'
@@ -33,6 +37,10 @@ const CALL_FUND_ULXC = 1_000_000
 const REPLY_MAX_TOKENS = 16
 /** Enough for "1 2 … 60", so the answer is still arriving when the agent hangs up. */
 const STREAM_MAX_TOKENS = 200
+/** B28.79 — the old cut: Lens's server ended every stream about 30 s after the request. */
+const OLD_CUT_MS = 30_000
+/** B28.79 — enough for a fast model to stream well past OLD_CUT_MS (Haiku at 200 a second is 80 s), cheap on any judge model. */
+const LONG_MAX_TOKENS = 16_000
 /** B35.8 — a charge not on the statement within 90 s is the FAIL. */
 const CHARGED_WITHIN_MS = 90_000
 /** After the first charge is complete, how long a second one for the same request is given to land. */
@@ -248,6 +256,55 @@ export function ledgerCallOnce(): Scenario {
       if (wrong.length > 0) return fail(wrong.join('; '))
       return { pass: true, detail: `the request sent ${copies.length} times under one key was billed once (${retried} µLXC) and the stream hung up on after ` +
         `"${hung.value.said}" once (${streamed} µLXC): one charge and one spend row each, and ${agent.name} holds ${held} µLXC, its funding less exactly those` }
+    },
+  }
+}
+
+/**
+ * B28.79 — streaming answers are not cut at about 30 seconds. An agent asks, on its own key, for an answer far longer than
+ * fits in 30 s and reads the stream to its end: it must reach message_stop with its words, not end blank or mid-answer, and
+ * be billed once. An answer that came whole before 30 s proves nothing either way, and is an ERROR, not a PASS.
+ */
+export function streamOutlives30s(): Scenario {
+  return {
+    id: 'stream-outlives-30s',
+    owner: 'talyvor-lens',
+    items: ['B28.79'],
+    own: true,
+    plan: 'business_company',
+    agents: 1,
+    feature: 'Agent Wallets',
+    title: "an agent's streamed answer that takes longer than 30 seconds streams to its end, and is one charge on its statement and one spend row on the ledger",
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const agent = await lens.createAgent(user, `Long answer ${RUN_SALT}`)
+      const k = await lens.act<{ key: string }>(user, 'POST', `/v1/workspaces/{ws}/agents/${agent.id}/keys`, { name: 'stream-outlives-30s' })
+      if (!k.ok) return fail(`issuing ${agent.name} a key was refused: ${k.status} ${k.error}`)
+      const model = modelOf(ctx)
+      const prompt = `Write the whole numbers from 1 to 5000 in English words, one per line, and nothing else. (${RUN_SALT}-${Date.now().toString(36)})`
+      const worstUSD = listPriceUSD(model, worstInputTokens(prompt.length), LONG_MAX_TOKENS)
+      // Twice the answer's worst case, so neither its price nor Lens's fee on it can leave the agent short.
+      await lens.fundAgent(user, agent.id, Math.max(CALL_FUND_ULXC, 2 * chargeULXC(worstUSD, ctx.env.usdPerLXC)))
+      const lines0 = await lens.agentLines(user, agent.id)
+      const rows0 = new Set((await lens.ledger(user)).map((r) => r.id))
+      const hold = ctx.env.cap.reserve(worstUSD)
+      let r: Awaited<ReturnType<typeof lens.streamAsAgent>>
+      try {
+        r = await lens.streamAsAgent(k.value.key, ctx.env.judgeProvider, model.id, prompt, LONG_MAX_TOKENS)
+      } finally {
+        ctx.env.cap.settle(hold, undefined)
+      }
+      if (!r.ok) return fail(`the streamed request was refused: ${r.status} ${r.error}`)
+      const s = r.value
+      const secs = (s.ms / 1000).toFixed(1)
+      ctx.evidence.push({ note: `the stream lasted ${secs} s, ${s.cut ?? `ended on message_stop (${s.stopReason || 'no stop reason'})`}, with ${s.text.length} characters: …${s.text.slice(-80)}`, question: prompt })
+      if (s.cut !== undefined) return fail(`the stream ended after ${secs} s with no message_stop (${s.cut}), ${s.text.length === 0 ? 'blank' : `${s.text.length} characters into the answer`}`)
+      if (s.text.trim() === '') return fail(`the stream reached message_stop after ${secs} s with no words`)
+      if (s.ms <= OLD_CUT_MS) throw new Error(`the answer came whole in ${secs} s, before the ${OLD_CUT_MS / 1000} s the old cut fell at, so it shows nothing either way`)
+      const charged = await billedOnce(ctx, agent.id, lines0, rows0, `the ${secs} s stream`)
+      if (typeof charged === 'string') return fail(charged)
+      return { pass: true, detail: `a ${secs} s stream reached message_stop (${s.stopReason}) with ${s.text.length} characters, and was billed once: ${charged} µLXC, one charge and one spend row` }
     },
   }
 }

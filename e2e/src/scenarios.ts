@@ -145,7 +145,7 @@ import { roomFromIssue } from './roomFromIssue.ts'
 import { roomDecideRun, roomInviteScreen } from './roomScreens.ts'
 import { call, said, settingsConfigBudgets, settingsGuardrails, settingsOperatorOnly, settingsPrompts, settingsStoredAnswers, settingsSwitches, settingsTareDistill } from './settings.ts'
 import { creditsTopUp, evals, lensTokens, namedIdsIsolated, nodes, outputsAttribution, povi } from './economy.ts'
-import { ledgerCallOnce, ledgerMovesAtOnce } from './concurrency.ts'
+import { ledgerCallOnce, ledgerMovesAtOnce, streamOutlives30s } from './concurrency.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
 import { trackWebhookSigned } from './trackWebhooks.ts'
 import { docsWebhookSigned } from './docsWebhooks.ts'
@@ -5277,6 +5277,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // again leave the agent holding exactly what landed, and a request retried under one key and a stream hung up on are
   // each billed once.
   if (i === 2) list.push(ledgerMovesAtOnce(), ledgerCallOnce())
+  // B28.79 — a streamed answer longer than 30 s, once a run, on a workspace of its own: it streams to its end, billed once.
+  if (i === 4) list.push(streamOutlives30s())
   // B28.280 — Stripe's webhooks, once a run, each on a workspace of its own: an unsigned or forged event credits nothing,
   // and a signed one sent again credits once.
   if (i === 2) list.push(webhookUnsigned(), webhookReplayed())
