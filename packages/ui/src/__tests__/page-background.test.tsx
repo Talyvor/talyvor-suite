@@ -144,4 +144,12 @@ describe('the glass across the whole window (B61.125)', () => {
     expect(css).toMatch(/--bg-wash: 46%;\s*--bg-veil: 16%;/)
     expect(css).toMatch(/--bg-wash: 32%;\s*--bg-veil: 12%;/)
   })
+
+  // B17.566 — sign-in and sign-up draw the background themselves, so their frame holds the glass tokens; its own colour
+  // under the glass was cloud at 66% white, not Pocket's cloud. The cards on it stay glass.
+  it('a page that draws the background itself keeps the solid cloud under it', () => {
+    expect(css).toMatch(/:root,\n\[data-theme\] \{[^}]*--cloud-solid: var\(--cloud\);/)
+    expect(rule(':has(> .pk-bg).bg-cloud')).toMatch(/background-color: var\(--cloud-solid\);/)
+    expect(rule(':is(.pk-glass, :has(> .pk-bg))')).not.toMatch(/--cloud-solid/)
+  })
 })
