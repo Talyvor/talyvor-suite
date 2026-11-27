@@ -271,6 +271,8 @@ interface Budget {
 interface ApiKey { id: string; workspace_id: string; key_prefix: string; name: string; scopes: string[]; created_at: string }
 interface Workspace {
   id: string; token: string; created_at: string; balance: number; ledger: Row[]; answers: Map<string, string>
+  /** B28.250 — its own provider keys, by provider, held only while STUB_PROVIDER_KEYS=1 arms key custody. */
+  providerKeys?: Map<string, string>
   keys: (ApiKey & { key: string })[]
   /** Documents uploaded for Chat to reference by their tdoc_ id (Lens POST /v1/documents, B18.13), listed and deleted (B28.380). */
   documents: Map<string, { mediaType: string; bytes: Buffer; filename: string; uploadedAt: string }>
@@ -884,6 +886,18 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   const model = swapped ? chatModelsOf(provider).at(-1) : requested
   const named = swapped ? { model: model?.id } : !auto ? {} : { model: BREAK === 'auto' ? 'claude-sonnet-5' : model?.id }
   if (model === undefined || (provider === 'anthropic') !== (path === 'v1/messages')) return json(res, 400, { error: 'bad request' })
+  // B28.250 — talyvor-lens: a call on the workspace's own key goes to the provider on that key. The provider refuses the
+  // harness's placeholder, and its 401 here echoes the key and the address it was sent to, as a proxy in front of one may;
+  // Lens cuts both out of what the tenant is shown, on both copies of the proxy. STUB_BREAK=provider-key-echo passes the
+  // buffered refusal on as it came, provider-key-echo-stream the streamed one.
+  const ownKey = ws.providerKeys?.get(provider)
+  if (ownKey !== undefined) {
+    const host = provider === 'anthropic' ? 'api.anthropic.com' : 'api.openai.com'
+    const echoed = `invalid x-api-key ${ownKey} sent to https://${host}/${path}`
+    const shown = broke(body.stream === true ? 'provider-key-echo-stream' : 'provider-key-echo') ? echoed
+      : echoed.replaceAll(ownKey, '[REDACTED]').replaceAll(host, '[upstream]')
+    return json(res, 401, { type: 'error', error: { type: 'authentication_error', message: shown } }, { 'X-Talyvor-BYOK': 'own-key' })
+  }
   const messages = body.messages ?? []
   // B28.78 — Anthropic refuses a conversation holding an answer that said nothing, as a stopped one does.
   const blank = messages.findIndex((m, i) => m.role === 'assistant' && i < messages.length - 1 && text(m).trim() === '' &&
@@ -1811,6 +1825,21 @@ createServer(async (req, res) => {
       if (rest === '/distill/usage') return json(res, 200, { converted: ws.usage.converted, vision_ocr: 0, days: 30 })
       // B29.12 — Settings reads provider keys. Lens mounts the route only while key custody is armed
       // (talyvor-lens cmd/lens/main.go, `if byokStore != nil`); unarmed, as here, it is not found.
+      // B28.250 — STUB_PROVIDER_KEYS=1 arms it: a key saved is held for its provider, as Lens's custody does, and shown by its last 4.
+      const providerKey = /^\/provider-keys\/([a-z]+)$/.exec(rest)
+      if (process.env.STUB_PROVIDER_KEYS === '1' && providerKey !== null) {
+        ws.providerKeys ??= new Map()
+        if (req.method === 'PUT') {
+          const { key = '' } = JSON.parse((await read(req)) || '{}') as { key?: string }
+          ws.providerKeys.set(providerKey[1], key)
+          return json(res, 200, { provider: providerKey[1], last4: key.slice(-4) })
+        }
+        if (req.method === 'DELETE') {
+          ws.providerKeys.delete(providerKey[1])
+          res.writeHead(204)
+          return void res.end()
+        }
+      }
       if (rest === '/provider-keys' || rest.startsWith('/provider-keys/')) {
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
         return void res.end('404 page not found\n')

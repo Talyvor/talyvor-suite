@@ -147,7 +147,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'gateway-sessions', 'injection-blocked', 'keys-not-forwarded', 'known-answer', 'lens-convert', 'lens-reads', 'lens-tokens',
     'lxc-convert-bonds', 'named-ids-isolated', 'nodes', 'one-digit-trap', 'outputs-attribution', 'pattern-mining-switch',
     'personal-data-not-pooled', 'pool-isolation', 'pooled-royalty', 'povi', 'pricing-fee-company', 'pricing-fee-group',
-    'pricing-fee-studio', 'pricing-own-key', 'provider-keys', 'rate-limits-hold', 'rate-limits-redis-down', 'rephrase-same-account', 'royalties-not-headline',
+    'pricing-fee-studio', 'pricing-own-key', 'provider-key-hidden', 'provider-keys', 'rate-limits-hold', 'rate-limits-redis-down', 'rephrase-same-account', 'royalties-not-headline',
     'settings-config-budgets', 'settings-guardrails', 'settings-operator-only', 'settings-prompts', 'settings-stored-answers',
     'settings-switches', 'settings-tare-distill', 'speech-through-lens', 'spend-plain-words', 'spend-platform-fee',
     'spending-limit', 'ssrf-refused', 'stream-outlives-30s', 'tare-model', 'tare-training', 'try-conversion', 'try-tare', 'workspace-limits-raised',

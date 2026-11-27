@@ -1831,6 +1831,16 @@ export class LensClient {
     }
   }
 
+  /** B28.250 — one question through Lens's proxy, buffered or streamed, and the whole of what Lens answered, as it came. */
+  async askRaw(user: SyntheticUser, provider: string, model: string, prompt: string, maxTokens: number, stream: boolean): Promise<{ status: number; ownKey: boolean; text: string }> {
+    const key = await this.sessionKey(user)
+    const res = await this.send('POST', `/v1/proxy/${provider}/v1/messages`, {
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model, max_tokens: maxTokens, stream, messages: [{ role: 'user', content: prompt }] }),
+    })
+    return { status: res.status, ownKey: res.headers.get('X-Talyvor-BYOK') === 'own-key', text: await res.text() }
+  }
+
   /** B17.10 — the workspace's earnings ledger, newest first — every row, however many pages. */
   async earningsRows(user: SyntheticUser): Promise<EarningsRow[]> {
     const rows: EarningsRow[] = []
