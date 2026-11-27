@@ -71,7 +71,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'bills-pay-all-due', 'compliance', 'invoice-pay-link', 'invoices-screen', 'mcp-pay-retried-once', 'mcp-sdk-agent-pay',
     'monitoring', 'money-tampered', 'outside-payees', 'pay-screen', 'payee-cooling-off', 'payee-details-lock', 'payment-request-batch', 'payments-out', 'bulk-payouts', 'money-mandates', 'standing-orders', 'agent-allowances', 'agent-card-account',
     'permission-mandate', 'screening-travel-rule', 'subscriptions-view', 'trust-layer', 'wallet-give-back', 'wallet-handle-pause',
-    'wallet-recurring', 'wallet-request', 'wallet-requests-answered', 'wallet-schedule-topup-pot', 'wallet-send-refund',
+    'wallet-recurring', 'wallet-request', 'wallet-request-keyed', 'wallet-requests-answered', 'wallet-schedule-topup-pot', 'wallet-send-refund',
     'xss-shown-back', 'pocket-03', 'pocket-04', 'pocket-05', 'pocket-06', 'pocket-08', 'pocket-13', 'pocket-15', 'pocket-16',
     'pocket-17', 'phone-approve', 'phone-pay-payee',
   ],

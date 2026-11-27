@@ -198,6 +198,81 @@ export function walletRequestsAnswered(seed: number, partner: number): Scenario 
   }
 }
 
+/**
+ * B28.72 — a money request asked and accepted under an Idempotency-Key, as an agent's retry sends it twice: on Lens, the
+ * person's agent asks another of its agents for credits with a key, and sends it again — one request, the same id; the same
+ * key with another amount is 409 and asks nothing more. The payer accepts with a key of its own and sends that again too: the
+ * second answers the same transfer, and the ledger holds one posting each side.
+ */
+export function walletRequestKeyed(seed: number): Scenario {
+  const amount = 400_000
+  return {
+    id: 'wallet-request-keyed',
+    owner: 'talyvor-lens',
+    agents: 2,
+    items: ['B28.72'],
+    feature: 'Agent Wallets',
+    title: 'a money request asked and accepted twice under the same Idempotency-Key: one request, one transfer, one posting each side; ' +
+      'the same key with another amount is 409',
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const asker = await lens.createAgent(user, `Keyed asker ${seed}-${RUN_SALT}`)
+      const payer = await lens.createAgent(user, `Keyed payer ${seed}-${RUN_SALT}`)
+      await lens.fundAgent(user, payer.id, 1e6)
+      const sides: Side[] = [{ user, agent: asker.id, who: asker.name }, { user, agent: payer.id, who: payer.name }]
+      const memo = memoOf('keyed invoice', seed)
+      const ask = async (ulxc: number, key: string, note: string) => {
+        const r = await lens.act<MoneyRequest>(user, 'POST', `/v1/workspaces/{ws}/agents/${asker.id}/requests`, { from: payer.id, amount_ulxc: ulxc, memo }, { 'Idempotency-Key': key })
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      const accept = async (id: string, key: string, note: string) => {
+        const r = await lens.act<MoneyRequest>(user, 'POST', `/v1/workspaces/{ws}/money-requests/${id}/accept`, undefined, { 'Idempotency-Key': key })
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      const asked = async () => (await lens.moneyRequests(user)).filter((r) => r.from_agent_id === asker.id && r.memo === memo)
+
+      // 1. Asked twice under one key: one request.
+      const askKey = `e2e-ask-${randomUUID()}`
+      const first = await ask(amount, askKey, `${asker.name} asks ${payer.name} for ${amount} µLXC under a key`)
+      if (!first.ok) return fail(`asking under an Idempotency-Key was refused: ${said(first)}`)
+      const again = await ask(amount, askKey, 'the same ask, sent again under the same key')
+      if (!again.ok || again.value.id !== first.value.id) return fail(`the same ask under the same key must answer request ${first.value.id} again; Lens answered ${said(again)}`)
+      const other = await ask(amount + 1, askKey, `the same key with ${amount + 1} µLXC`)
+      if (other.status !== 409) return fail(`the same key with another amount must answer 409; Lens answered ${said(other)}`)
+      const listed = await asked()
+      ctx.evidence.push({ note: 'the requests the asker made with this memo', answer: JSON.stringify(listed) })
+      if (listed.length !== 1 || listed[0].id !== first.value.id || listed[0].amount_ulxc !== amount) {
+        return fail(`three asks under one key must leave one request of ${amount} µLXC, ${first.value.id}; Lens lists ${JSON.stringify(listed)}`)
+      }
+
+      // 2. Accepted twice under one key: one transfer, one posting each side.
+      const acceptKey = `e2e-accept-${randomUUID()}`
+      let before = await books(ctx, sides)
+      const paid = await accept(first.value.id, acceptKey, `${payer.name}'s owner accepts it under a key`)
+      if (!paid.ok || paid.value.status !== 'accepted' || paid.value.transfer_id === undefined) return fail(`accepting under an Idempotency-Key must answer accepted with its transfer; Lens answered ${said(paid)}`)
+      let wrong = await movedBy(ctx, sides, before, [amount, -amount], 'accepted under a key')
+      if (wrong !== undefined) return fail(wrong)
+      before = await books(ctx, sides)
+      const repaid = await accept(first.value.id, acceptKey, 'the same accept, sent again under the same key')
+      if (!repaid.ok || repaid.value.transfer_id !== paid.value.transfer_id) {
+        return fail(`the same accept under the same key must answer transfer ${paid.value.transfer_id} again; Lens answered ${said(repaid)}`)
+      }
+      wrong = await movedBy(ctx, sides, before, [0, 0], 'the accept sent again')
+      if (wrong !== undefined) return fail(wrong)
+      const transfers = (await lens.transfers(user, payer.id)).filter((t) => t.request_id === first.value.id)
+      if (transfers.length !== 1 || transfers[0].id !== paid.value.transfer_id) return fail(`the request must be paid by one transfer, ${paid.value.transfer_id}; Lens lists ${JSON.stringify(transfers)}`)
+      return {
+        pass: true,
+        detail: `asked twice under one key: one request, ${first.value.id}; the key with another amount: 409; accepted twice under one key: one transfer, ` +
+          `${paid.value.transfer_id}, of ${lxcText(amount)} LXC, one posting each side, the retry moving nothing`,
+      }
+    },
+  }
+}
+
 // ─── loans: offered, read, declined, withdrawn, accepted ─────────────────────
 
 /**

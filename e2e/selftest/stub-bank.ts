@@ -15,6 +15,7 @@
 //   send-one-side       — a send leaves the sender but never reaches the other company's agent
 //   refund-kept         — giving a transfer back takes it from the receiver and never returns it to the sender
 //   request-unpaid      — accepting a request marks it accepted and pays nothing
+//   idempotency-ignored — B28.72: asking for and accepting a request ignore the Idempotency-Key, so a retry asks again and its accept is 404
 //   loan-no-payout      — accepting a loan makes it active without paying the borrower
 //   escrow-open-free    — paying into escrow takes nothing from the payer
 //   escrow-release-lost — confirming delivery releases the escrow to nobody
@@ -447,6 +448,8 @@ interface Transfer {
 interface MoneyReq {
   id: string; from_workspace_id: string; from_agent_id: string; to_workspace_id: string; to_agent_id: string; amount_ulxc: number; memo: string
   status: 'pending' | 'accepted' | 'declined'; transfer_id?: string; created_at: string; decided_at?: string
+  /** B28.72 — the Idempotency-Keys it was asked and accepted under; never answered. */
+  ask_key?: string; accept_key?: string
 }
 interface Loan {
   id: string; lender_workspace_id: string; lender_agent_id: string; borrower_workspace_id: string; borrower_agent_id: string; principal_ulxc: number
@@ -2408,11 +2411,16 @@ export class Bank {
       return answer(this.transfer(from, to, t.amount_ulxc, `refund: ${t.memo}`, { refund_of: t.id }, !this.broken('refund-kept'))), true
     }
     if (rest === '/money-requests' && method === 'GET') {
-      return json(res, 200, { requests: this.requests.filter((r) => r.from_workspace_id === ws.id || r.to_workspace_id === ws.id) }), true
+      return json(res, 200, { requests: this.requests.filter((r) => r.from_workspace_id === ws.id || r.to_workspace_id === ws.id).map(({ ask_key: _a, accept_key: _b, ...r }) => r) }), true
     }
     if ((m = /^\/money-requests\/([^/]+)\/(accept|decline)$/.exec(rest)) !== null && method === 'POST') {
+      // B28.72 — the retry of the accept that paid it, under the same Idempotency-Key, answers what it first did.
+      const key = this.broken('idempotency-ignored') ? '' : String(req.headers['idempotency-key'] ?? '')
+      const paid = this.requests.find((x) => x.id === m?.[1] && x.to_workspace_id === ws.id && x.status === 'accepted')
+      if (m[2] === 'accept' && key !== '' && paid?.accept_key === key) return json(res, 200, { ...paid, ask_key: undefined, accept_key: undefined }), true
       const r = this.requests.find((x) => x.id === m?.[1] && x.to_workspace_id === ws.id && x.status === 'pending')
       if (r === undefined) return json(res, 404, { error: 'economy: no such pending request to this workspace' }), true
+      if (m[2] === 'accept' && key !== '') r.accept_key = key
       if (m[2] === 'accept' && !this.broken('request-unpaid')) {
         const payer = this.agents.get(r.to_agent_id)
         const payee = this.agents.get(r.from_agent_id)
@@ -2423,7 +2431,7 @@ export class Bank {
       }
       r.status = m[2] === 'accept' ? 'accepted' : 'declined'
       r.decided_at = now
-      return json(res, 200, r), true
+      return json(res, 200, { ...r, ask_key: undefined, accept_key: undefined }), true
     }
     if (rest === '/loans' && method === 'GET') {
       return json(res, 200, { loans: this.loans.filter((l) => l.lender_workspace_id === ws.id || l.borrower_workspace_id === ws.id) }), true
@@ -2555,10 +2563,17 @@ export class Bank {
       const payer = this.wallet(b.from ?? '')
       if (payer === undefined) return json(res, 404, { error: 'economy: no wallet has that ID or handle' }), true
       if (!((b.amount_ulxc ?? 0) > 0)) return json(res, 400, { error: 'economy: the amount must be positive µLXC' }), true
+      // B28.72 — under an Idempotency-Key a retry answers the request it first made; the same key with another payer, amount or memo is 409.
+      const key = this.broken('idempotency-ignored') ? '' : String(req.headers['idempotency-key'] ?? '')
+      const was = key === '' ? undefined : this.requests.find((x) => x.from_workspace_id === ws.id && x.from_agent_id === a.id && x.ask_key === key)
+      if (was !== undefined && (was.to_agent_id !== payer.id || was.amount_ulxc !== b.amount_ulxc || was.memo !== (b.memo ?? ''))) {
+        return json(res, 409, { error: 'economy: this Idempotency-Key was already used for a different request' }), true
+      }
+      if (was !== undefined) return json(res, 201, { ...was, ask_key: undefined, accept_key: undefined }), true
       const r: MoneyReq = { id: id('mrq_'), from_workspace_id: ws.id, from_agent_id: a.id, to_workspace_id: payer.ws, to_agent_id: payer.id,
-        amount_ulxc: b.amount_ulxc ?? 0, memo: b.memo ?? '', status: 'pending', created_at: now }
+        amount_ulxc: b.amount_ulxc ?? 0, memo: b.memo ?? '', status: 'pending', created_at: now, ...(key === '' ? {} : { ask_key: key }) }
       this.requests.unshift(r)
-      return json(res, 201, r), true
+      return json(res, 201, { ...r, ask_key: undefined }), true
     }
     if (action === '/loans' && method === 'POST') {
       const b = await this.body<{ to?: string; principal_ulxc?: number; interest_bps?: number; instalments?: number; every?: string; late_fee_ulxc?: number; memo?: string }>(req)
