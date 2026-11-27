@@ -78,7 +78,7 @@ const USD_PER_UNIT: Record<string, number> = { GBP: 1.25, EUR: 1.1, USD: 1 }
 interface Conversion { id: string; workspace_id: string; agent_id: string; from_account_id: string; to_account_id: string; sell_minor: number; sell_currency: string
   margin_bps: number; margin_minor: number; free_minor: number; buy_minor: number; buy_currency: string; reference_rate: string; rate: string; funding: string
   status: string; idempotency_key?: string; entry_id?: string; expires_at: string; created_at: string }
-interface StatementLine { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string }
+interface StatementLine { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string; partner_ref?: string; counterparty?: string }
 
 export class LaunchDesk {
   private readonly quotes = new Map<string, Quote>()
@@ -228,7 +228,9 @@ export class LaunchDesk {
     const a = this.accounts(ws).find((x) => x.id === m[1])
     if (a === undefined) return this.json(res, 404, { error: 'economy: no such money account' }), true
     // B30.107 — this month's totals as Lens's MoneyStatement gives them: Opening + In − Out = Closing (every stub account opened this month).
-    const lines = this.statementLines.get(a.id) ?? []
+    // B17.506 — each line with who it was from or to and the balance after it, as Lens's MoneyStatementLine has them.
+    let after = 0
+    const lines = (this.statementLines.get(a.id) ?? []).map((l) => ({ ...l, counterparty: l.counterparty ?? '', balance_after_minor: (after += l.amount_minor) }))
     const inMinor = lines.reduce((n, l) => n + Math.max(l.amount_minor, 0), 0)
     const outMinor = lines.reduce((n, l) => n - Math.min(l.amount_minor, 0), 0)
     return this.json(res, 200, { workspace_id: ws, account_id: a.id, agent_id: a.agent_id ?? '', currency: a.currency, opening_minor: 0, in_minor: inMinor,

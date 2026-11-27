@@ -66,6 +66,9 @@
 // account the payment once (card_dispute_won), the same outcome again moving nothing; GET …/card-disputes lists them. Its defects:
 //   dispute-won-uncredited — a won dispute credits nothing back
 //   dispute-won-twice      — the same won outcome again credits the payment again
+// B17.506 — and each card money entry is a line on the agent account's statement, as Lens posts it: the approval's card_hold of
+// the caps' total, a charge's card_charge of the cap it leaves unspent and a won dispute's card_dispute_won of the payment, the
+// charge and the dispute named by the issuer's payment id (partner_ref), which the app disputes a statement line by (B28.60).
 // B17.512 — the card desk keeps its own clock, STUB_CLOCK_AHEAD_MS ahead of the runner's (Lens's database clock is not the
 // testers' Mac's), and says it in each card answer's Date header, as Lens's server does.
 
@@ -277,7 +280,7 @@ export class PayeeDesk {
   /** B30.148 — each completed payment's entry, by the payment's id. */
   private readonly entries = new Map<string, { entry_id: string; created_at: string; postings: EntryPosting[] }>()
   /** B48.27 — each workspace's wallet ledger lines, newest first, and the addresses its owner proved they hold. */
-  private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string; entry_id?: string }[]>()
+  private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string; entry_id?: string; partner_ref?: string; counterparty?: string }[]>()
   /** B56.28 — each invoice's payment by an agent account, by `${invoice id}\n${account id}`: a retry answers it. */
   private readonly invoicePaidBy = new Map<string, unknown>()
   /** B30.133 — the sandbox webhook ids taken. */
@@ -540,6 +543,7 @@ export class PayeeDesk {
     }
     from.test_minor -= batch.total_minor // the card_hold
     from.balance_minor -= batch.total_minor
+    this.line(ws, from, 'card_hold', -batch.total_minor)
     const expires = new Date(lensNow() + (this.broken('card-life-25h') ? 25 : 24) * 3_600_000).toISOString()
     for (const c of batch.cards) Object.assign(c, { status: 'active', last4: randomBytes(2).toString('hex'), expires_at: expires })
     Object.assign(batch, { status: 'issued', approved_by: 'owner', approved_at: new Date().toISOString() })
@@ -686,6 +690,7 @@ export class PayeeDesk {
     if (from !== undefined) {
       from.test_minor += card.cap_minor - amount
       from.balance_minor += card.cap_minor - amount
+      this.line(ws, from, 'card_charge', card.cap_minor - amount, undefined, { partner_ref: authorization, counterparty: card.merchant })
     }
     this.charges.set(ws, [...(this.charges.get(ws) ?? []), { entry_id: `me_${randomUUID()}`, agent_id: batch.agent_id, merchant: card.merchant, ...d,
       amount_minor: amount, currency: batch.currency, created_at: new Date().toISOString() }])
@@ -726,6 +731,7 @@ export class PayeeDesk {
     if (to !== undefined) {
       to.test_minor += credit
       to.balance_minor += credit
+      if (credit > 0) this.line(ws, to, 'card_dispute_won', credit, undefined, { partner_ref: d.payment_id, counterparty: d.merchant })
     }
     Object.assign(d, { status, credited_minor: credit, decided_at: new Date().toISOString() })
     return this.json(res, 200, d), true
@@ -1116,7 +1122,7 @@ export class PayeeDesk {
   }
 
   /** B56.28 — each posting as a statement line, for an account statement kept elsewhere (stub-launch.ts). */
-  onLine: (accountID: string, l: { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string }) => void = () => {}
+  onLine: (accountID: string, l: { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string; partner_ref?: string; counterparty?: string }) => void = () => {}
 
   /** B48.27 — a line on `account`'s wallet ledger, as Lens's wallet activity reads its postings. */
   /** B30.139 — the agent's open account in `currency`, which its card may draw on (Lens B30.30). */
@@ -1131,17 +1137,18 @@ export class PayeeDesk {
     this.line(ws, account, kind, amount, `me_${randomUUID()}`)
   }
 
-  private line(ws: string, account: Account, kind: string, amount: number, entryID?: string): void {
+  private line(ws: string, account: Account, kind: string, amount: number, entryID?: string, ref: { partner_ref?: string; counterparty?: string } = {}): void {
     const at = new Date().toISOString()
     this.lines.set(ws, [{ account_id: account.id, ...(account.agent_id === undefined ? {} : { agent_id: account.agent_id }), currency: account.currency, kind,
-      amount_minor: amount, at, ...(entryID === undefined ? {} : { entry_id: entryID }) }, ...(this.lines.get(ws) ?? [])])
-    this.onLine(account.id, { entry_id: entryID ?? `me_${randomUUID()}`, line: 1, at, kind, amount_minor: amount, funding: 'test', state: 'completed' })
+      amount_minor: amount, at, ...(entryID === undefined ? {} : { entry_id: entryID }), ...ref }, ...(this.lines.get(ws) ?? [])])
+    this.onLine(account.id, { entry_id: entryID ?? `me_${randomUUID()}`, line: 1, at, kind, amount_minor: amount, funding: 'test', state: 'completed', ...ref })
   }
 
   /** B56.28 — account `id`'s postings as statement lines, oldest first, all test money. */
-  statementLines(ws: string, id: string): { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string }[] {
+  statementLines(ws: string, id: string): { entry_id: string; line: number; at: string; kind: string; amount_minor: number; funding: string; state: string; partner_ref?: string; counterparty?: string }[] {
     return (this.lines.get(ws) ?? []).filter((l) => l.account_id === id).reverse()
-      .map((l, i) => ({ entry_id: l.entry_id ?? `me_line_${i}`, line: 1, at: l.at, kind: l.kind, amount_minor: l.amount_minor, funding: 'test', state: 'completed' }))
+      .map((l, i) => ({ entry_id: l.entry_id ?? `me_line_${i}`, line: 1, at: l.at, kind: l.kind, amount_minor: l.amount_minor, funding: 'test', state: 'completed',
+        ...(l.partner_ref === undefined ? {} : { partner_ref: l.partner_ref }), ...(l.counterparty === undefined ? {} : { counterparty: l.counterparty }) }))
   }
 
   /** B56.28 — GET /v1/money/accounts/{id}/statement: `id`'s postings (statementLines). */
