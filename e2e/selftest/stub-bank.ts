@@ -177,6 +177,8 @@
 //
 // B17.537 adds the roles and the second approver (stub-second-approver.ts): above the line an agent's payment waits for two people.
 //   second-approver-one-approval — the first approval above the line approves the payment
+// B17.540 adds what each role may do, and a role taken away (stub-second-approver.ts):
+//   role-viewer-funds — a Viewer's fund moves the money
 //
 // B17.509 adds every wallet list as a CSV (talyvor-lens B28.332): ?format=csv on the approvals, the schedules and an agent's
 // transfers answers the same list as name.csv, one row per item under a header of its fields. Its defect:
@@ -200,7 +202,7 @@ import { ScanDesk } from './stub-scan.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
 import { TrustLayerDesk } from './stub-trust-layer.ts'
-import { APPROVAL_ROLES, SecondApproverDesk, type TwoApprovals } from './stub-second-approver.ts'
+import { SecondApproverDesk, type TwoApprovals } from './stub-second-approver.ts'
 import type { Judge, RoomAgent } from './stub-rooms.ts'
 import { LaunchDesk } from './stub-launch.ts'
 
@@ -1373,14 +1375,17 @@ export class Bank {
   /**
    * B17.537 — a role session (Lens B28.342), minted on POST /v1/provision/roles: an Approver or an Admin reads and decides the
    * workspace's approvals as that person, and every other route refuses it 403.
+   * B17.540 — every role reads an agent's summary, and Finance and Admin fund and withdraw; a session whose role was taken
+   * away is refused 401.
    */
   async roleSession(req: IncomingMessage, res: ServerResponse, bearer: string, path: string): Promise<boolean> {
     if (await this.second.provision(req, res, path)) return true
+    if (this.second.endedSession(bearer)) return this.d.json(res, 401, { error: 'auth: that role was taken away' }), true
     const s = this.second.session(bearer)
     if (s === undefined) return false
-    const m = /^\/v1\/workspaces\/([^/]+)(\/agents\/approvals(?:\/[^/]+\/(?:approve|deny))?)$/.exec(path)
+    const m = /^\/v1\/workspaces\/([^/]+)(\/.*)$/.exec(path)
     const ws = this.d.workspace(s.ws)
-    if (m === null || m[1] !== s.ws || ws === undefined || !APPROVAL_ROLES.includes(s.role)) {
+    if (m === null || m[1] !== s.ws || ws === undefined || !this.second.may(s.role, req.method ?? 'GET', m[2])) {
       return this.d.json(res, 403, { error: "only the workspace's owner, an admin or a person whose role allows it may do this" }), true
     }
     return this.workspaceRoute(req, res, ws, m[2], new URL(path, this.d.base), undefined, `user:${s.person}`)
