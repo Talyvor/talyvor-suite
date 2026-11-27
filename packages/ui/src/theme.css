@@ -347,6 +347,8 @@ h1, h2, h3, h4 { font-family: var(--display); }
   --hair-frost: color-mix(in srgb, var(--ink) 8%, transparent);
   --hair-side: color-mix(in srgb, var(--ink) 9%, transparent);
   --tint: color-mix(in srgb, var(--ink) 9%, transparent);
+  /* B17.566 — the solid cloud, kept under its own name for the page beneath the glass, where cloud itself is frosted. */
+  --cloud-solid: var(--cloud);
 }
 
 /* B61.125 — the window's two colours turn to the next page's over 900 ms: registered, so they can be eased. */
@@ -421,6 +423,11 @@ h1, h2, h3, h4 { font-family: var(--display); }
   --faint: var(--ink-3);
   --label: var(--ink-3);
   --accent-tint: var(--cloud-2);
+}
+/* B17.566 — a page that draws the background itself (sign-in, sign-up) is still Pocket's cloud underneath it: only what
+   sits on the glass is frosted, not the page's own colour. */
+:has(> .pk-bg).bg-cloud {
+  background-color: var(--cloud-solid);
 }
 /* Cards, facts and notes: a hairline of ink at 6%, on the glass and in a panel. In a panel they are the page colour at
    66% too, over its washes. Second-level controls (the grey button, chips, the search, round icon buttons, the account
