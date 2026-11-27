@@ -39,6 +39,7 @@ import { agentCardReplace } from './agentCardReplace.ts'
 import { passkeyRecovery } from './passkeyRecovery.ts'
 import { workspaceRoles } from './workspaceRoles.ts'
 import { workspaceRolesLens } from './workspaceRolesLens.ts'
+import { phoneTeamRoles } from './phoneTeamRoles.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
 import { moneyMandates } from './moneyMandates.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
@@ -5697,6 +5698,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B57.87 — Pocket's journeys on the phone, each once a run on a workspace of its own, in the phone app's web export
   // (E2E_MOBILE_SRC): approve from the Live Activity's link, pay a saved payee, pause from the widget and resume, stop everything.
   if (i === 7) list.push(...phoneJourneys())
+  // B17.552 — Team and roles on the phone (B28.463), once a run, on a workspace of its own, in the phone app's web export: the
+  // owner gives a Viewer and a Finance role in Your team, the Viewer's fund writes no posting, Finance's posts one, and a Viewer
+  // removed on the phone reads nothing.
+  if (i === 7) list.push(phoneTeamRoles())
   // B52.28 — Scan in the app, once a run, on a workspace of its own: a watch keeps the owner's measure of unusual and stops when
   // told, the public track record scores a hit only inside its range, and Scan agents and Track record show both.
   if (i === 7) list.push(scanAgents())
