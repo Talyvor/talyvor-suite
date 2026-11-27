@@ -27,6 +27,7 @@
 //   cash-out-free       — a cash-out is paid without holding the credits from the agent
 //   cash-out-unsigned   — B28.67: in a workspace with a passkey, a cash-out with no signature is held and paid anyway
 //   lockdown-keeps-key  — B28.68: a lost phone's lockdown leaves the phone's key signing
+//   removed-passkey-signs — B28.340: a removed passkey answers removed and still signs approvals
 //   approval-signed-unkept — B57.87: an approval signed by the phone answers approved and stays pending
 //   pause-unkept        — B57.87: an agent's pause answers paused and leaves it running
 //   pause-all-unkept    — B57.87: pause-all answers every agent paused and pauses none
@@ -2830,7 +2831,8 @@ export class Bank {
       if (assertion?.device_id !== undefined) {
         const refused = this.devices.refused(ws.id, assertion)
         if (refused !== undefined) return json(res, 403, { error: refused }), true
-      } else if ((keys.length > 0 || this.devices.any(ws.id)) && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
+      } else if ((keys.length > 0 || this.devices.any(ws.id) || this.lockdowns.has(ws.id)) && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
+        // B17.544 — a lockdown's revoked keys still make the workspace's approvals signed, as Lens holds them revoked, not gone.
         return json(res, 403, { error: 'economy: approvals in this workspace are signed: approve with a registered passkey' }), true
       }
       // B28.315 — over the second-approver line the first person's approval leaves it pending; the second, by another, approves it.
@@ -2957,7 +2959,8 @@ export class Bank {
       this.passkeyKeys.set(credential_id, public_key)
       const k = { credential_id, name, created_at: now }
       this.passkeys.set(ws.id, [...(this.passkeys.get(ws.id) ?? []), k])
-      return json(res, 201, k), true
+      // B17.544 — the workspace's first key answers its recovery code (Lens B55.48), as the first phone key does.
+      return json(res, 201, this.recoveryCodes.has(ws.id) ? k : { ...k, recovery_code: this.newRecoveryCode(ws.id) }), true
     }
     if ((m = /^\/agents\/approvals\/([^/]+)\/challenge$/.exec(rest)) !== null && method === 'POST') {
       return json(res, 200, { challenge: challenge(), allow_credentials: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id) }), true
@@ -2973,6 +2976,8 @@ export class Bank {
       const gone = decodeURIComponent(m[1] ?? '')
       if (!(this.passkeys.get(ws.id) ?? []).some((k) => k.credential_id === gone)) return json(res, 404, { error: 'economy: no such passkey in this workspace' }), true
       if (live().length <= 1) return json(res, 409, { error: 'economy: this is the workspace\'s last key: add another before removing it' }), true
+      // B17.544 — STUB_BREAK=removed-passkey-signs answers removed and keeps the passkey signing.
+      if (this.broken('removed-passkey-signs')) return json(res, 200, { removed: true }), true
       this.passkeys.set(ws.id, (this.passkeys.get(ws.id) ?? []).filter((k) => k.credential_id !== gone))
       return json(res, 200, { removed: true }), true
     }
