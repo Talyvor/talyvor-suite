@@ -88,6 +88,11 @@
 // frozen card is declined and nothing leaves the agent. Its defect:
 //   freeze-ignored      — a frozen card answers frozen, and a purchase on it is still approved
 //
+// B17.543 adds cancelling and replacing an agent's card (POST …/card/replace and …/card/cancel, for Lens's B28.321): a replace
+// answers 201 with a new card the agent then holds, keeping the old one's freeze and what it draws on; a cancel answers 200 with
+// the card cancelled, and the agent holds no card, so a purchase after it is refused and nothing leaves the agent. Its defect:
+//   card-cancel-pays    — a cancel answers the card cancelled, and the agent keeps it: a purchase on it is still approved
+//
 // B30.139 adds an agent card that spends from the agent's currency account (Lens B30.30): POST …/card/draws-on
 // {"draws_on":"account"|"credits"} (409 with no open account in the card's currency); a purchase on a card drawing on the account
 // is held there (card_hold), and its capture on Lens's test-mode Stripe webhook (issuing_transaction.created, settleCardCapture)
@@ -2726,6 +2731,20 @@ export class Bank {
       card.draws_on = on
       return json(res, 200, card), true
     }
+    // B17.543 — the card replaced (a new one the agent holds, with the old one's freeze and draws_on) or cancelled (no card).
+    if (action === '/card/replace' && method === 'POST') {
+      const old = this.cards.get(a.id)
+      if (old === undefined) return json(res, 404, { error: 'economy: the agent has no card' }), true
+      const card = { ...old, id: id('ic_'), last4: String(1000 + Math.floor(Math.random() * 9000)), created_at: now }
+      this.cards.set(a.id, card)
+      return json(res, 201, card), true
+    }
+    if (action === '/card/cancel' && method === 'POST') {
+      const card = this.cards.get(a.id)
+      if (card === undefined) return json(res, 404, { error: 'economy: the agent has no card' }), true
+      if (!this.broken('card-cancel-pays')) this.cards.delete(a.id)
+      return json(res, 200, { ...card, cancelled_at: now }), true
+    }
     // B28.360 — the card frozen or unfrozen: Lens answers the card.
     if ((action === '/card/freeze' || action === '/card/unfreeze') && method === 'POST') {
       const card = this.cards.get(a.id)
@@ -3103,7 +3122,7 @@ export class Bank {
     }
     // B52.28 — Scan agents' watches (stub-scan.ts), before the agent routes below catch …/scan-watches.
     if (await this.scan.route(req, res, ws.id, rest, now)) return true
-    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/card\/draws-on|\/wallet\/activity|\/rules\/challenge|\/cash-outs\/challenge|\/[a-z-]+)?$/.exec(rest)) !== null) {
+    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/card\/(?:replace|cancel)|\/card\/draws-on|\/wallet\/activity|\/rules\/challenge|\/cash-outs\/challenge|\/[a-z-]+)?$/.exec(rest)) !== null) {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true
       const action = m[2] ?? ''

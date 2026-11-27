@@ -70,9 +70,9 @@ export const said = (a: Answered<unknown> & { held?: string }): string =>
 
 /** One side of a trade: a company and one of its agents. */
 export interface Side { user: SyntheticUser; agent: string; who: string }
-type Books = { lines: AgentLine[]; balance: number | undefined }[]
+export type Books = { lines: AgentLine[]; balance: number | undefined }[]
 
-async function books(ctx: ScenarioCtx, sides: readonly Side[]): Promise<Books> {
+export async function books(ctx: ScenarioCtx, sides: readonly Side[]): Promise<Books> {
   return Promise.all(sides.map(async (s) => ({
     lines: await ctx.env.lens.agentLines(s.user, s.agent),
     balance: (await ctx.env.lens.agentBook(s.user)).agents.find((a) => a.id === s.agent)?.balance_ulxc,
@@ -84,7 +84,7 @@ async function books(ctx: ScenarioCtx, sides: readonly Side[]): Promise<Books> {
  * after it the balance before plus it, and the agent's balance with it — or, for 0, no posting and the balance unmoved.
  * Undefined when it did, else what moved instead.
  */
-async function movedBy(ctx: ScenarioCtx, sides: readonly Side[], before: Books, want: readonly number[], step: string): Promise<string | undefined> {
+export async function movedBy(ctx: ScenarioCtx, sides: readonly Side[], before: Books, want: readonly number[], step: string): Promise<string | undefined> {
   const after = await books(ctx, sides)
   const wrong: string[] = []
   const seen: string[] = []
