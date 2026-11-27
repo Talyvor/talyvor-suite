@@ -187,6 +187,7 @@ const said = (p: Probe) => ('testid' in p ? `data-testid "${p.testid}"` : `${p.r
  * web's source instead: that text must still be in apps/web/src. An entry no wait needs any more fails too.
  */
 const DRAWN_ONLY_WITH: Record<string, { data: string; drawnBy?: string }> = {
+  'src/cardDisputeScreen.ts button "Dispute this payment"': { data: 'a card payment on an account statement' },
   'src/chatPaymentCard.ts group "Prepared payments"': { data: 'a payment Chat prepared' },
   'src/mandateAsked.ts button "Review"': { data: 'a mandate waiting for its owner' },
   'src/phoneKeyWeb.ts button "Add this device"': { data: 'a phone asking to be added' },
