@@ -94,6 +94,12 @@
 // channel for each limit alert raised since the channel was added, and lists them newest first. The stub sends nothing, so
 // every delivery reads queued. Its defect:
 //   alert-delivery-once    — an alert is queued for the first channel only
+// B17.515 — and a low-balance alert on an agent's balance (Lens B28.334, B28.61): PUT, GET and DELETE /v1/money/low-balance keep
+// an owner's threshold for an agent's balance in a currency, read with what the agent's open accounts in it hold now; GET
+// /v1/money/low-balance/alerts checks first and raises one alert for each UTC hour an agent is found below, however often it
+// is read, newest first. Its defects:
+//   low-balance-unwatched  — nothing is checked: a balance below its threshold raises no alert
+//   low-balance-every-read — an agent already alerted this hour is alerted again on every read
 // B41.39 — and a budget by category: PUT /v1/money/spending/merchants puts a merchant (here a payee's name) in a category, and a
 // budget with a category spends only its category's payments; a payment with no correction is uncategorised. Its defect:
 //   budget-category-ignored — a budget with a category spends every payment in its currency
@@ -215,6 +221,9 @@ interface StubCardDispute { id: string; partner: string; payment_id: string; wor
   amount_minor: number; currency: string; reason: string; status: string; credited_minor: number; decided_at?: string; created_at: string }
 interface StubLimitAlert { id: string; kind: string; subject: string; agent_id?: string; category?: string; period: string; period_start: string; percent: number
   spent_minor: number; limit_minor: number; currency: string; created_at: string }
+/** B17.515 — an owner's low-balance threshold and an hour it was found below (economy.BalanceThreshold, economy.LowBalanceAlert). */
+interface StubThreshold { id: string; agent_id: string; currency: string; threshold_minor: number }
+interface StubLowBalanceAlert { id: string; agent_id: string; currency: string; hour_start: string; balance_minor: number; threshold_minor: number; created_at: string }
 interface StubAlertChannel { id: string; kind: string; url: string; created_at: string }
 interface StubAlertDelivery { id: string; channel_id: string; channel_kind: string; alert_kind: string; alert_id: string; title: string; body: string
   status: string; attempts: number; created_at: string }
@@ -306,6 +315,9 @@ export class PayeeDesk {
   /** B28.62 — each workspace's budgets and the alerts they raised. */
   private readonly budgets = new Map<string, StubBudget[]>()
   private readonly limitAlerts = new Map<string, StubLimitAlert[]>()
+  /** B17.515 — each workspace's low-balance thresholds and the alerts they raised. */
+  private readonly thresholds = new Map<string, StubThreshold[]>()
+  private readonly lowBalanceAlerts = new Map<string, StubLowBalanceAlert[]>()
   /** B28.66 — each workspace's alert channels and the deliveries queued to them. */
   private readonly alertChannels = new Map<string, StubAlertChannel[]>()
   private readonly alertDeliveries = new Map<string, StubAlertDelivery[]>()
@@ -434,6 +446,7 @@ export class PayeeDesk {
     if (await this.cardRoute(req, res, ws, path, '')) return true
     if (await this.disputeRoute(req, res, ws, path)) return true
     if (await this.budgetRoute(req, res, ws, path)) return true
+    if (await this.lowBalanceRoute(req, res, ws, path)) return true
     if (await this.coachRoute(req, res, ws, path)) return true
     if (await this.planRoute(req, res, ws, path)) return true
     if (path === '/v1/money/payees' && req.method === 'GET') return this.json(res, 200, { payees: list }), true
@@ -615,6 +628,55 @@ export class PayeeDesk {
       return this.json(res, 200, { alerts: [...alerts].reverse() }), true
     }
     return this.alertChannelRoute(req, res, ws, path)
+  }
+
+  /** B17.515 — `ws`'s thresholds, each with what its agent's open accounts in its currency hold now (Lens BalanceThresholds). */
+  private thresholdsOf(ws: string) {
+    return (this.thresholds.get(ws) ?? []).map((t) => {
+      const held = (this.accounts.get(ws) ?? []).filter((a) => a.purpose === 'agent' && a.agent_id === t.agent_id && a.currency === t.currency && a.status !== 'closed')
+      const balance = held.reduce((sum, a) => sum + a.balance_minor, 0)
+      return { ...t, balance_minor: balance, has_account: held.length > 0, below: held.length > 0 && balance < t.threshold_minor }
+    })
+  }
+
+  /** B17.515 — a low-balance threshold (PUT, GET and DELETE /v1/money/low-balance) and the alerts it raised (GET …/alerts). */
+  private async lowBalanceRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const thresholds = this.thresholds.get(ws) ?? []
+    if (path === '/v1/money/low-balance' && req.method === 'GET') return this.json(res, 200, { thresholds: this.thresholdsOf(ws) }), true
+    if (path === '/v1/money/low-balance' && req.method === 'PUT') {
+      const b = await this.body<Partial<StubThreshold>>(req)
+      if (!b.agent_id) return this.json(res, 400, { error: 'economy: spending: agent_id is required' }), true
+      if (!/^([A-Z]{3}|USDC)$/.test(b.currency ?? '')) return this.json(res, 400, { error: 'economy: spending: currency must be a currency code such as GBP, or USDC' }), true
+      if (!Number.isInteger(b.threshold_minor) || (b.threshold_minor ?? 0) <= 0) return this.json(res, 400, { error: 'economy: spending: threshold_minor must be above zero' }), true
+      let got = thresholds.find((t) => t.agent_id === b.agent_id && t.currency === b.currency)
+      if (got === undefined) {
+        got = { id: `lbt_${randomUUID()}`, agent_id: b.agent_id, currency: b.currency ?? '', threshold_minor: 0 }
+        this.thresholds.set(ws, [...thresholds, got])
+      }
+      got.threshold_minor = b.threshold_minor ?? 0
+      const id = got.id
+      return this.json(res, 200, this.thresholdsOf(ws).find((t) => t.id === id)), true
+    }
+    const one = /^\/v1\/money\/low-balance\/([^/]+)$/.exec(path)
+    if (one !== null && one[1] !== 'alerts' && req.method === 'DELETE') {
+      if (!thresholds.some((t) => t.id === one[1])) return this.json(res, 404, { error: 'economy: no such balance threshold' }), true
+      this.thresholds.set(ws, thresholds.filter((t) => t.id !== one[1]))
+      return this.json(res, 200, { deleted: one[1] }), true
+    }
+    if (path === '/v1/money/low-balance/alerts' && req.method === 'GET') {
+      const alerts = this.lowBalanceAlerts.get(ws) ?? []
+      const hour = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString()
+      for (const t of this.thresholdsOf(ws)) {
+        if (!t.below || this.broken('low-balance-unwatched')) continue
+        const raised = alerts.some((a) => a.agent_id === t.agent_id && a.currency === t.currency && a.hour_start === hour)
+        if (raised && !this.broken('low-balance-every-read')) continue
+        alerts.push({ id: `lba_${randomUUID()}`, agent_id: t.agent_id, currency: t.currency, hour_start: hour, balance_minor: t.balance_minor,
+          threshold_minor: t.threshold_minor, created_at: new Date().toISOString() })
+      }
+      this.lowBalanceAlerts.set(ws, alerts)
+      return this.json(res, 200, { alerts: [...alerts].reverse() }), true
+    }
+    return false
   }
 
   /** B28.66 — where alerts go (POST, GET and DELETE /v1/money/alerts/channels) and what was queued to each (GET /v1/money/alerts/deliveries). */

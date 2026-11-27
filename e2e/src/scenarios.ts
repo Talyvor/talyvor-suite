@@ -123,6 +123,7 @@ import { oneSearch } from './oneSearch.ts'
 import { accountStatements } from './accountStatements.ts'
 import { alertChannels } from './alertChannels.ts'
 import { limitAlerts } from './limitAlerts.ts'
+import { lowBalanceAlert } from './lowBalanceAlert.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
 import { budgetsByCategory } from './budgetsByCategory.ts'
 import { scanAgents } from './scanAgents.ts'
@@ -5643,6 +5644,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.62 — limit-approach alerts, once a run, on a workspace of its own: £8.00 paid against a £10.00 monthly budget raises one
   // 50% and one 80% alert, still one each when read again, and the Agent Bank's Limit alerts card shows the 80% one.
   if (i === 7) list.push(limitAlerts())
+  // B17.515 — the low-balance alert (B28.61), once a run, on a workspace of its own: an agent holding £20.00 with its alert set to
+  // £25.00 on its page reads Below, Lens's alerts read three times are one an hour, and Latest alerts shows it.
+  if (i === 7) list.push(lowBalanceAlert())
   // B28.66 — where alerts go, once a run, on a workspace of its own: with push and a signed webhook added and email refused, a
   // budget's 50% and 80% alerts queue one delivery per channel, the same four when read again, and Agent Wallets lists them.
   if (i === 7) list.push(alertChannels())
