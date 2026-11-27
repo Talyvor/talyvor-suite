@@ -1,9 +1,10 @@
 // B30.107 — accounts, payments and FX end to end (Lens B30.13, B30.15, B30.17, B30.29), on Lens's API, once a run, on a
 // workspace of its own, judged on the ledger's postings at every step, never on a status code alone.
 //
-// money-accounts: the owner opens the company's GBP and EUR accounts and one agent's GBP and EUR accounts under them, each at
-// zero. £50.00 of test money comes into the company's GBP account through the payments-in path (POST …/test-money posts it as
-// Lens's ReceivePayment does a partner's notification): one payment_in line. The owner saves a payee and pays it £20.00 from
+// money-accounts: the owner opens the company's GBP and EUR accounts and one agent's GBP account under them, and takes the EUR
+// account the new agent already holds (Lens opens it with the agent), each at zero. £50.00 of test money comes into the
+// company's GBP account through the payments-in path (POST …/test-money posts it as Lens's ReceivePayment does a partner's
+// notification): one payment_in line. The owner saves a payee and pays it £20.00 from
 // that account: the payment completes, and the account carries one payment_out_hold line of the amount and its fee, completed.
 // The owner gives the agent £10.00 (agent_funding, −£10.00 on the company's account and +£10.00 on the agent's), and the agent
 // converts it to EUR at its quote: one fx_conversion entry, −£10.00 on its GBP account and +what the quote buys on its EUR one.
@@ -20,7 +21,7 @@ const PAID_MINOR = 2000
 const GIVEN_MINOR = 1000
 const PAYEE = { name: 'Nightly Accounts Supplier Ltd', country: 'GB', sort_code: '040004', account_number: '44556677' }
 
-interface Account { id: string; currency: string; purpose: string; agent_id?: string; balance_minor: number; test_minor: number; live_minor: number }
+interface Account { id: string; currency: string; purpose: string; status?: string; agent_id?: string; balance_minor: number; test_minor: number; live_minor: number }
 interface Payment { id: string; status: string; amount_minor: number; fee_minor?: number; account_id: string }
 interface Line { entry_id: string; kind: string; amount_minor: number; state?: string }
 interface Statement { opening_minor: number; in_minor: number; out_minor: number; closing_minor: number; lines: Line[] | null }
@@ -90,8 +91,15 @@ export function moneyAccounts(): Scenario {
         const agent = await lens.createAgent(user, `Accounts ${salt}`)
         const company: Record<string, string> = {}
         const own: Record<string, string> = {}
+        // A new agent in a Hybrid workspace already holds its EUR account: Lens opens the wallets of its kind as it creates it (B59.6, B48.1).
+        const held = (await accounts(`${agent.name}'s accounts as it was created`)).filter((a) => a.agent_id === agent.id && a.purpose === 'agent' && a.status === 'open')
         for (const [whose, ids, extra] of [["the company's", company, {}], [`${agent.name}'s`, own, { agent_id: agent.id }]] as const) {
           for (const currency of ['GBP', 'EUR']) {
+            const has = 'agent_id' in extra ? held.find((a) => a.currency === currency) : undefined
+            if (has !== undefined) {
+              ids[currency] = has.id
+              continue
+            }
             const opened = await step<Account>('POST', '/v1/money/accounts', { currency, ...extra }, `${whose} ${currency} account`)
             if (opened.status !== 201 || opened.value === undefined) return fail(`opening ${whose} ${currency} account on test money must answer 201; Lens answered ${said(opened)}`)
             ids[currency] = opened.value.id
