@@ -120,7 +120,7 @@
 // lens-shapes.json by test/stubLens.test.ts. A route this stub does not know is a 404 it logs as
 // "stub lens: no such route", which the self-test names — never a `{}` that a screen then throws on.
 
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http'
 import { Bank, SIM_QUOTES } from './stub-bank.ts'
@@ -1775,7 +1775,7 @@ createServer(async (req, res) => {
       if (rest === '/budgets' && req.method === 'POST') {
         const b = JSON.parse((await read(req)) || '{}') as Partial<Budget>
         const at = new Date().toISOString()
-        const budget: Budget = { id: randomBytes(8).toString('hex'), workspace_id: ws.id, scope: b.scope ?? 'workspace', scope_id: b.scope_id ?? '',
+        const budget: Budget = { id: randomUUID(), workspace_id: ws.id, scope: b.scope ?? 'workspace', scope_id: b.scope_id ?? '',
           period: b.period ?? 'monthly', limit_usd: b.limit_usd ?? 0, spent_usd: 0, alert_thresholds: b.alert_thresholds ?? [],
           enforcement: b.enforcement ?? 'hard_block', ends_at: null, created_at: at, updated_at: at }
         ws.budgets.push(budget)
@@ -1783,9 +1783,26 @@ createServer(async (req, res) => {
       }
       if (rest === '/budgets') return json(res, 200, ws.budgets)
       const budget = /^\/budgets\/([^/]+)$/.exec(rest)
+      // B28.246 — Lens answers 400 to a budget id that is not a UUID, and 404 to deleting one the workspace does not have.
+      // STUB_BREAK=budget-ids-off answers as Lens did before: the driver's cast error in a 500, and a false 200.
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (budget !== null && !isUUID.test(budget[1])) {
+        if (BREAK === 'budget-ids-off') return json(res, 500, { error: `pq: invalid input syntax for type uuid: "${budget[1]}"` })
+        return json(res, 400, { error: 'budget id must be a UUID' })
+      }
+      if (budget !== null && req.method === 'GET') {
+        const b = ws.budgets.find((x) => x.id === budget[1])
+        return b === undefined ? json(res, 404, { error: 'budget not found' }) : json(res, 200, b)
+      }
+      if (budget !== null && req.method === 'DELETE') {
+        const before = ws.budgets.length
+        ws.budgets = ws.budgets.filter((x) => x.id !== budget[1])
+        if (ws.budgets.length === before && BREAK !== 'budget-ids-off') return json(res, 404, { error: 'budget not found' })
+        return json(res, 200, { ok: true })
+      }
       if (budget !== null && req.method === 'PATCH') {
         const b = ws.budgets.find((x) => x.id === budget[1])
-        if (b === undefined) return json(res, 404, { error: 'no such budget' })
+        if (b === undefined) return json(res, 404, { error: 'budget not found' })
         // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: the self-test's stub Lens updating its own in-memory fixture
         Object.assign(b, JSON.parse((await read(req)) || '{}'), { id: b.id, workspace_id: ws.id, scope: b.scope, spent_usd: b.spent_usd, updated_at: new Date().toISOString() })
         return json(res, 200, b)
