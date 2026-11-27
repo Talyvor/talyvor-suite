@@ -632,7 +632,8 @@ export function agentApprovalDenied(seed: number, partner: number): Scenario {
  * An agent's test card frozen in the app: Lens holds it frozen, a purchase on it is declined and nothing leaves the agent.
  * Unfrozen in the app: Lens holds it unfrozen, and the next purchase is approved for exactly what Lens says it cost, one
  * posting on the agent's account. Unfreezing is asked even when freezing was refused, so both routes are reached.
- * B17.504 — it is B28.46's scenario: in the self-test it FAILs on STUB_BREAK=freeze-ignored, a frozen card still approved.
+ * B17.504 — it is B28.46's scenario, and B17.507 names B28.320, Lens's freeze and unfreeze, which it drives through the app:
+ * in the self-test it FAILs on STUB_BREAK=freeze-ignored, a frozen card still approved.
  */
 export function walletCardFreeze(seed: number): Scenario {
   const funded = 20e6
@@ -641,7 +642,7 @@ export function walletCardFreeze(seed: number): Scenario {
     id: 'wallet-card-freeze',
     owner: 'talyvor-lens',
     agents: 1,
-    items: ['B28.46'],
+    items: ['B28.46', 'B28.320'],
     title: "an agent's test card frozen in the app declines a purchase and nothing leaves the agent; unfrozen, the next purchase is approved, one posting of what it cost",
     run: async (ctx) => {
       const { env } = ctx
