@@ -39,7 +39,7 @@ import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush,
 import { chatMoneyRequests, marketAbuse, marketAgentCommitment, marketAgentMCP, marketBillRefund, marketJournal, marketOffers, marketPayout, marketRent, marketTrial, marketPayoutConnect, marketHeldSeller, marketReview, marketTakedown, walletCard, walletCardPurchase, walletCashOut, walletEscrow, walletLoan, walletLoanDefault, walletLoanRepay, walletPots, walletGiveBack, walletRecurring, walletRequest, walletSendRefund } from './trade.ts'
 import type { Inventory } from './coverage.ts'
 import { apiKeyRevoke, byokAddon, chatConnectors, chatDocsPage, chatExportImport, chatFileBug, chatShareLink, chatToolGuard, chatTrackIssue, docsShareCollab, docsTeamGrant, docsTools, lensConvert, mcpBodyBounded, patternMiningSwitch, providerKeys, requestBodyBounded, sessionSignOut, trackProject, trackSearchCycleBoard, trackWorkspaceRestore, walletFX, wrongAnswerStored } from './surface.ts'
-import { agentApprovalDenied, lxcConvertBonds, marketRemixLicence, walletCardFreeze, walletEscrowLens, walletHandlePause, walletLoansAnswered, walletRequestsAnswered, walletScheduleTopUpPot, walletTradingSim } from './routes.ts'
+import { agentApprovalDenied, lxcConvertBonds, marketRemixLicence, walletCardFreeze, walletEscrowLens, walletHandlePause, walletLoansAnswered, walletRequestKeyed, walletRequestsAnswered, walletScheduleTopUpPot, walletTradingSim } from './routes.ts'
 import { appShell, brandPlanes, chatBrand, chatHelpInFull, everyScreen, homeCards, lensReads, marketBrand, screensBrand, walletBrand } from './tour.ts'
 import { sdkWalletQuickstart } from './sdk.ts'
 import { featuresLeadWithWallets } from './features.ts'
@@ -5176,7 +5176,11 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // (a denial there needs an assertion), nor the ledger-still checks on 6, whose workspace takes a seller's credits
   // mid-run. The seller of the remixed listing is 8, 18, …, whose marketplace earnings nobody else reads.
   switch (i % 10) {
-    case 0: if (other < users) list.push(walletRequestsAnswered(i, other)); break
+    case 0:
+      if (other < users) list.push(walletRequestsAnswered(i, other))
+      // B28.72 — a request asked and accepted twice under one Idempotency-Key each, between two of the person's own agents.
+      list.push(walletRequestKeyed(i))
+      break
     case 1: if (other < users) list.push(walletLoansAnswered(i, other)); break
     case 2:
       if (other < users) list.push(walletEscrowLens(i, other))

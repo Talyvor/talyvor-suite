@@ -131,6 +131,7 @@ export interface MoneyRequest {
   from_agent_id: string
   to_agent_id: string
   amount_ulxc: number
+  memo?: string
   status: 'pending' | 'accepted' | 'declined'
   transfer_id?: string
 }
