@@ -13,7 +13,7 @@ import type { AppUser } from './app.ts'
 import type { Answered, LedgerRow, LensClient, SyntheticUser } from './lens.ts'
 import { refusalOf } from './lens.ts'
 import { ACTION_TIMEOUT_MS, agentIn, bookOf, card, fail, openAgent, withBank } from './bank.ts'
-import { bff } from './routes.ts'
+import { bff, said } from './routes.ts'
 import { RUN_SALT, freshWord, parseFooter } from './oracles.ts'
 import { CannotTest, eventually, metered } from './scenarios.ts'
 import { DocsPage, FeaturesScreen, TrackScreen, payCheckout } from './screens.ts'
@@ -125,6 +125,74 @@ export function sessionSignOut(seed: number): Scenario {
       return failures.length === 0
         ? { pass: true, detail: `version ${version?.commit ?? '(unstamped)'}${version?.agree === true ? ', the BFF and the bundle agree' : ''}; the app and Lens list ${app.user.workspaceID} alone; ${unknown} a JSON 404; Sign out ended the second browser's session (401 after) and left the first signed in` }
         : fail(failures.join('; '))
+    },
+  }
+}
+
+/** B28.245 — how much the oversized agent's name carries: 1 MiB, sixteen times the 64 KiB the app reads of a new agent. */
+export const OVERSIZED_NAME_BYTES = 1 << 20
+/** B28.245 — how long the app may take to refuse it: a bounded read answers at once, an unbounded one waits on all of it. */
+const REFUSED_WITHIN_MS = 15_000
+
+/**
+ * B28.245 — every request body the app takes is bounded. On a workspace of its own, the person adds an agent from the
+ * app's own page, the control, and Lens holds it; then the same add with a 1 MiB name is refused 4xx, never taken and
+ * never a 5xx, in time, and Lens holds no agent of that name; and the app still lists the control after.
+ *
+ * Its other half, the cap on what Lens, Track or Docs answer the app (8 MiB, then a 502), is out of reach from outside:
+ * no read a person or an agent makes gets an answer anywhere near 8 MiB from them, so apps/bff/upstream_read_cap_test.go
+ * proves it on every pull request with a 1 GB upstream.
+ */
+export function requestBodyBounded(): Scenario {
+  return {
+    id: 'request-body-bounded',
+    owner: 'talyvor-suite',
+    own: true,
+    agents: 1,
+    feature: 'Agent Wallets',
+    items: ['B28.245'],
+    title: "an agent added from the app's page is held by Lens; the same add with a 1 MiB name is refused 4xx in time, Lens holds no agent of that " +
+      'name, and the app still lists the first',
+    run: async (ctx) => {
+      const { app, env } = ctx
+      const wrong: string[] = []
+      const names = async () => (await env.lens.agentBook(app.user)).agents.map((a) => ({ id: a.id, name: a.name }))
+
+      // The control: an agent of an ordinary name is taken, so the refusal below is the size and nothing else.
+      const control = `bounded ${RUN_SALT}`
+      const added = await from(app.page, 'POST', '/api/agents', { name: control })
+      const id = parsed<{ id?: string }>(added.text)?.id
+      ctx.evidence.push({ note: `the control, POST /api/agents named "${control}": ${added.status} ${added.text.slice(0, 200)}` })
+      const held = await names()
+      if (added.status < 200 || added.status >= 300 || id === undefined || !held.some((a) => a.id === id && a.name === control)) {
+        return fail(`an agent named "${control}" was answered ${added.status} ${refusalOf(added.text)} and Lens holds ${held.map((a) => a.name).join(', ') || 'no agent'}, ` +
+          'so a refusal of a bigger one proves nothing')
+      }
+
+      const marker = `oversized ${RUN_SALT} `
+      const started = Date.now()
+      const big = await from(app.page, 'POST', '/api/agents', { name: marker + 'x'.repeat(OVERSIZED_NAME_BYTES) })
+      const took = Date.now() - started
+      const after = await names()
+      const kept = after.filter((a) => a.name.startsWith(marker))
+      ctx.evidence.push({ note: `POST /api/agents with a ${OVERSIZED_NAME_BYTES}-byte name: ${big.status} in ${took} ms, ${big.text.slice(0, 200)}; ` +
+        `Lens then holds ${after.length} agent(s): ${after.map((a) => a.name.slice(0, 40)).join(', ')}` })
+      if (big.status >= 200 && big.status < 300) wrong.push(`an agent with a ${OVERSIZED_NAME_BYTES}-byte name was taken: ${big.status} ${big.text.slice(0, 120)}`)
+      else if (big.status >= 500) wrong.push(`an agent with a ${OVERSIZED_NAME_BYTES}-byte name was answered ${big.status} ${refusalOf(big.text)}, a server failure, not a refusal of its size`)
+      else if (big.status < 400) wrong.push(`an agent with a ${OVERSIZED_NAME_BYTES}-byte name was answered ${big.status}, not refused`)
+      if (took > REFUSED_WITHIN_MS) wrong.push(`the oversized add took ${took} ms to answer, more than ${REFUSED_WITHIN_MS} ms`)
+      if (kept.length > 0) wrong.push(`Lens holds ${kept.length} agent(s) with the oversized name, ${kept[0].name.length} characters long`)
+      if (after.length !== held.length) wrong.push(`Lens held ${held.length} agent(s) before the oversized add and ${after.length} after`)
+
+      // And the app still answers: its own list names the control.
+      const list = await bff<{ agents?: { id: string }[] }>(ctx, 'GET', '/api/agents')
+      ctx.evidence.push({ note: `GET /api/agents after: ${said(list)}` })
+      if (!list.ok || !(list.value?.agents ?? []).some((a) => a.id === id)) wrong.push(`after the oversized add, the app's agent list answered ${said(list)}, without "${control}"`)
+
+      return wrong.length === 0
+        ? { pass: true, detail: `"${control}" added and held by Lens; a ${OVERSIZED_NAME_BYTES}-byte name refused ${big.status} in ${took} ms, Lens holds no agent of it, ` +
+          `and the app still lists ${after.length} agent(s)` }
+        : fail(wrong.join('; '))
     },
   }
 }
