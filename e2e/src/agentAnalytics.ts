@@ -12,18 +12,16 @@ import type { Scenario } from './scenarios.ts'
 /** A figure as the card draws it ("0.75 LXC", or beside the person's currency) → µLXC; NaN when it has none. */
 export const shownULXC = (text: string): number => Math.round(Number(/([\d,.]+)\s*LXC/.exec(text)?.[1]?.replace(/,/g, '') ?? 'NaN') * 1e6)
 
+/** What the agent was made to do: pay another agent, have credits taken back. */
+export interface AnalyticsMade { paidTo: { id: string; name: string }; paid: number; takenBack: number }
+
 /**
- * The oracle: the buckets' out sums to the analytics' out, to the statement's out for the agent and to the agent's own
- * postings out; the payment is a bucket under agent:<to>, the take-back under workspace, the question's postings under
- * the model its ledger lines name; and the screen shows the same Out, the paid agent by name and that model.
+ * Lens's half of the oracle (B28.326): the buckets' out sums to the analytics' out, to the statement's out for the agent
+ * and to the agent's own postings out; the payment is a bucket under agent:<to>, the take-back under workspace, the
+ * question's postings under the model its ledger lines name.
  */
-export function agentAnalyticsVerdict(
-  a: AgentSpendAnalytics,
-  statementOut: number | undefined,
-  lines: readonly AgentLine[],
-  made: { paidTo: { id: string; name: string }; paid: number; takenBack: number },
-  shown: AnalyticsShown,
-): { pass: boolean; detail: string } {
+export function analyticsLedgerWrong(a: AgentSpendAnalytics, statementOut: number | undefined, lines: readonly AgentLine[], made: AnalyticsMade):
+  { wrong: string[]; sum: number; model: string | undefined } {
   const wrong: string[] = []
   const buckets = a.buckets ?? []
   const sum = buckets.reduce((s, b) => s + b.out_ulxc, 0)
@@ -39,7 +37,19 @@ export function agentAnalyticsVerdict(
   const model = lines.find((l) => l.amount_ulxc < 0 && l.model)?.model
   if (model === undefined) wrong.push("no posting out on the agent's ledger names a model")
   else if (!buckets.some((b) => b.model === model && b.out_ulxc > 0)) wrong.push(`no bucket is under ${model}, the model the question's postings name`)
+  return { wrong, sum, model }
+}
 
+/** The oracle: Lens's half, and the screen shows the same Out, the paid agent by name and that model. */
+export function agentAnalyticsVerdict(
+  a: AgentSpendAnalytics,
+  statementOut: number | undefined,
+  lines: readonly AgentLine[],
+  made: AnalyticsMade,
+  shown: AnalyticsShown,
+): { pass: boolean; detail: string } {
+  const { wrong, sum, model } = analyticsLedgerWrong(a, statementOut, lines, made)
+  const buckets = a.buckets ?? []
   if (shownULXC(shown.out) !== sum) wrong.push(`the card shows Out "${shown.out}", want ${lxcText(sum)} LXC`)
   if (!shown.destinations.some((d) => d.startsWith(made.paidTo.name))) wrong.push(`By destination does not name ${made.paidTo.name}: ${JSON.stringify(shown.destinations)}`)
   if (shown.destinations.some((d) => d.includes('agent:'))) wrong.push(`By destination shows an account id: ${JSON.stringify(shown.destinations)}`)
@@ -89,5 +99,50 @@ export function agentAnalytics(seed: number): Scenario {
       const statementOut = totals.find((x) => x.account === `agent:${north.id}`)?.out_ulxc
       return agentAnalyticsVerdict(a, statementOut, lines, { paidTo: south, paid, takenBack }, shown)
     }),
+  }
+}
+
+/**
+ * B28.326 — the same agent's day on Lens alone, as the owner's own software reads it: made with Lens's API, paid from its
+ * own key, asked one question on it, and its analytics for the period put beside its statement's out and its postings.
+ */
+export function agentAnalyticsLens(seed: number): Scenario {
+  const paid = 500_000
+  const takenBack = 250_000
+  return {
+    id: 'agent-analytics-lens',
+    owner: 'talyvor-lens',
+    items: ['B28.326'],
+    agents: 2,
+    feature: 'Statements',
+    title: "one agent's analytics on Lens: every posting out in one bucket by day, model and destination, summing to its statement's out",
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const north = await lens.createAgent(user, `Analysed on Lens ${seed}`)
+      const south = await lens.createAgent(user, `Paid on Lens ${seed}`)
+      await lens.fundAgent(user, north.id, 3_000_000)
+      const k = await lens.act<{ key: string }>(user, 'POST', `/v1/workspaces/{ws}/agents/${north.id}/keys`, { name: `agent-analytics-lens ${seed}` })
+      if (!k.ok) return fail(`a key for ${north.name} was refused: ${k.status} ${k.error}`)
+      const payment = await lens.payAsAgent(k.value.key, user.workspaceID, north.id, south.id, paid, `analytics ${seed}`)
+      if (!payment.ok) return fail(`${north.name} paying ${south.name} was refused: ${payment.status} ${payment.error}`)
+      const asked = await agentAsks(ctx, k.value.key, 'What is 17 + 25? Answer with the number only.', `${north.name} asks with its own key`)
+      if (!asked.ok) return fail(`${north.name}'s question was refused: ${asked.status} ${asked.error}`)
+      await lens.withdrawAgent(user, north.id, takenBack)
+
+      // From yesterday, UTC: the agent was made today in any time zone, so the period holds every posting it has.
+      const from = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+      const read = await lens.act<AgentSpendAnalytics>(user, 'GET', `/v1/workspaces/{ws}/agents/${north.id}/analytics?from=${from}`)
+      if (!read.ok) return fail(`GET ${north.name}'s analytics answered ${read.status}: ${read.error.slice(0, 200)}`)
+      const a = read.value
+      const totals = await lens.agentPeriodTotals(user, north.id, from)
+      const lines = await lens.agentLines(user, north.id)
+      ctx.evidence.push({ note: `${north.name}'s analytics from ${from}: out ${a.out_ulxc}, returned ${a.returned_ulxc}, buckets ${JSON.stringify(a.buckets)}` })
+      ctx.evidence.push({ note: `${north.name}'s statement from ${from}: ${JSON.stringify(totals)}; its postings: ${JSON.stringify(lines.map((l) => ({ kind: l.kind, amount_ulxc: l.amount_ulxc, counterparty: l.counterparty, model: l.model })))}` })
+      const { wrong, sum, model } = analyticsLedgerWrong(a, totals.find((x) => x.account === `agent:${north.id}`)?.out_ulxc, lines, { paidTo: south, paid, takenBack })
+      return wrong.length === 0
+        ? { pass: true, detail: `${(a.buckets ?? []).length} bucket(s) sum to ${lxcText(sum)} LXC out, the statement's out and the agent's postings out; ${south.name}, the workspace and ${model} each hold theirs` }
+        : { pass: false, detail: wrong.join('; ') }
+    },
   }
 }

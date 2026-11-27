@@ -103,6 +103,10 @@
 // B28.324 adds Lens's statement search, filters and paging (cmd/lens writeStatementView): ?kind=, ?q=, ?limit=, ?cursor=. Its defect:
 //   statement-search-off — the period statement ignores ?kind=, ?q=, ?limit= and ?cursor=, as Lens did before B28.324
 //
+// B28.326 adds Lens's analytics for one agent (internal/economy/agent_analytics.go): its postings out, and the settles and
+// releases that returned part of them, by day in its time zone, model and destination. Its defect:
+//   agent-analytics-off — there is no analytics route, as Lens before B28.326
+//
 // B32.66 adds tax and weekly payouts (Lens B32.39–B32.42, stub-tax.ts): each billed use's tax on the bill, Talyvor's receipt
 // for each paid bill, the seller's weekly statements, and the synthetic payout run of talyvor-lens B32.99, which withholds a
 // seller with earnings and no tax details and pays one whose details are complete. Its defect, beside stub-tax.ts's two:
@@ -1138,6 +1142,37 @@ export class Bank {
     const loans = this.loans.filter((l) => party([l.lender_workspace_id, l.borrower_workspace_id], [l.lender_agent_id, l.borrower_agent_id]))
     const escrows = this.escrows.filter((e) => party([e.payer_workspace_id, e.payee_workspace_id], [e.payer_agent_id, e.payee_agent_id]))
     return { workspace_id: ws, agent_id: agentID, from: from.toISOString(), to: to.toISOString(), accounts, lines, loans, escrows }
+  }
+
+  /**
+   * B28.326 — one agent's spend over a statement's period as Lens's AgentSpendAnalytics buckets it: each posting out of
+   * the agent, and each settle or release back into it, by day in the agent's time zone, model and destination (the
+   * entry's other leg), ordered by day, model and destination.
+   */
+  private analytics(ws: string, a: Agent, period: { from: string; to: string }): object {
+    const zone = a.rules.timezone || 'UTC'
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    const from = new Date(period.from)
+    const to = new Date(period.to)
+    const buckets = new Map<string, { day: string; model: string; destination: string; out_ulxc: number; returned_ulxc: number; spent_ulxc: number; postings: number }>()
+    for (const p of this.postings) {
+      if (p.ws !== ws || p.account !== `agent:${a.id}` || new Date(p.at) < from || new Date(p.at) >= to) continue
+      if (p.amount_ulxc >= 0 && p.kind !== 'settle' && p.kind !== 'release') continue
+      const destination = this.postings.find((o) => o.entry_id === p.entry_id && o.posting_id !== p.posting_id)?.account ?? ''
+      const b = { day: day.format(new Date(p.at)), model: p.model ?? '', destination }
+      const k = `${b.day}\n${b.model}\n${b.destination}`
+      const got = buckets.get(k) ?? { ...b, out_ulxc: 0, returned_ulxc: 0, spent_ulxc: 0, postings: 0 }
+      if (p.amount_ulxc < 0) got.out_ulxc -= p.amount_ulxc
+      else got.returned_ulxc += p.amount_ulxc
+      got.spent_ulxc = got.out_ulxc - got.returned_ulxc
+      got.postings++
+      buckets.set(k, got)
+    }
+    const list = [...buckets.entries()].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)).map(([, b]) => b)
+    const out = list.reduce((s, b) => s + b.out_ulxc, 0)
+    const returned = list.reduce((s, b) => s + b.returned_ulxc, 0)
+    return { workspace_id: ws, agent_id: a.id, from: period.from, to: period.to, time_zone: zone, out_ulxc: out, returned_ulxc: returned,
+      spent_ulxc: out - returned, buckets: list }
   }
 
   /**
@@ -3138,8 +3173,13 @@ export class Bank {
         const own = this.postings.filter((p) => p.account === `agent:${a.id}`)
         let after = 0
         const lines = own.map((p) => ({ entry_id: p.entry_id, kind: p.kind, amount_ulxc: p.amount_ulxc, counterparty: p.counterparty, ref: p.ref,
-          balance_after_ulxc: (after += p.amount_ulxc), at: p.at }))
+          balance_after_ulxc: (after += p.amount_ulxc), at: p.at, ...(p.model === undefined ? {} : { model: p.model }) }))
         return json(res, 200, { agent_id: a.id, lines: lines.reverse() }), true
+      }
+      if (action === '/analytics' && method === 'GET' && !this.broken('agent-analytics-off')) {
+        const st = this.statement(ws.id, a.id, url)
+        if (typeof st === 'string') return json(res, 400, { error: st }), true
+        return json(res, 200, this.analytics(ws.id, a, st as { from: string; to: string })), true
       }
       if (action === '/pay' && method === 'POST') {
         const b = await this.body<{ to_agent_id?: string; amount_ulxc?: number; memo?: string }>(req)
