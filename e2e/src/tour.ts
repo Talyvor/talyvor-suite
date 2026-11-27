@@ -241,7 +241,8 @@ export function brandPlanes(): Scenario {
  * B57.8 — Pocket's shell, as the browser paints it in the dark theme: every row in the sidebar carries its 20px line
  * icon, the selected row (Home, on /) sits on the cloud in ink, as Pocket's own colours read on the page, and the top
  * bar holds the search that opens ⌘K, Pause every agent and the avatar to Settings, with no page title or Sign out.
- * B17.520 — the cloud is the row's own, or (B61.74) the sliding marker's while it sits under the row.
+ * B17.520 — the cloud is the row's own, or (B61.74) the sliding marker's while it sits under the row. B17.568 — the
+ * cloud and the ink are read in the sidebar, where the row sits, so on the glass they are the glass's.
  */
 export function appShell(): Scenario {
   return {
@@ -278,8 +279,11 @@ export function appShell(): Scenario {
             return { bg: style.backgroundColor, opacity: style.opacity, under: Math.abs(m.top - r.top) <= 1 && Math.abs(m.height - r.height) <= 1 }
           })()
           // Pocket's own colours, as the page resolves them, so the row is held to the tokens rather than to numbers here.
+          // B17.568 — read where the row sits: on the Shell's glass (B61.125) the cloud is the page colour at 68%, so a
+          // probe on <body>, outside the glass, read the solid cloud the sidebar no longer draws.
           const probe = document.createElement('span')
-          document.body.append(probe)
+          const host = mark?.parentElement ?? nav
+          host.append(probe)
           probe.style.color = 'var(--cloud)'
           const cloud = getComputedStyle(probe).color
           probe.style.color = 'var(--ink)'
