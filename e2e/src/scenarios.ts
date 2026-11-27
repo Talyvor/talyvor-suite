@@ -36,6 +36,7 @@ import { payeeByName } from './payeeByName.ts'
 import { savedPayeeByName } from './savedPayeeByName.ts'
 import { secondApprover } from './secondApprover.ts'
 import { agentCardReplace } from './agentCardReplace.ts'
+import { passkeyRecovery } from './passkeyRecovery.ts'
 import { workspaceRoles } from './workspaceRoles.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
 import { moneyMandates } from './moneyMandates.ts'
@@ -5545,6 +5546,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B17.543 — an agent's card replaced and cancelled (B28.321), once a run, on a workspace of its own: a purchase on the new card
   // posts once on the agent's account, and after the cancel the agent holds no card and a purchase writes no posting.
   if (i === 3) list.push(agentCardReplace())
+  // B17.544 — passkey management and recovery (B28.340), once a run, on a workspace of its own: a removed passkey and a locked-out
+  // phone's are refused and the payment waits with no posting; a passkey added with the recovery code approves it, posted once.
+  if (i === 3) list.push(passkeyRecovery())
   // B17.540 — roles (B28.70), once a run, on a workspace of its own: on Team and roles the owner gives a Viewer and a Finance role;
   // the Viewer's fund is refused and writes no posting, Finance's posts exactly one, and a removed Viewer's session reads nothing.
   if (i === 3) list.push(workspaceRoles())
