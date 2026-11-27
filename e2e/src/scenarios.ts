@@ -35,6 +35,7 @@ import { paymentsOut } from './paymentsOut.ts'
 import { payeeByName } from './payeeByName.ts'
 import { savedPayeeByName } from './savedPayeeByName.ts'
 import { secondApprover } from './secondApprover.ts'
+import { agentCardReplace } from './agentCardReplace.ts'
 import { workspaceRoles } from './workspaceRoles.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
 import { moneyMandates } from './moneyMandates.ts'
@@ -5541,6 +5542,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B17.537 — two-person approval above a second amount (B28.40), once a run, on a workspace of its own: above the second-approver
   // line the owner's approval leaves the agent's payment pending with zero postings, and the Approver-role person's posts exactly one.
   if (i === 3) list.push(secondApprover())
+  // B17.543 — an agent's card replaced and cancelled (B28.321), once a run, on a workspace of its own: a purchase on the new card
+  // posts once on the agent's account, and after the cancel the agent holds no card and a purchase writes no posting.
+  if (i === 3) list.push(agentCardReplace())
   // B17.540 — roles (B28.70), once a run, on a workspace of its own: on Team and roles the owner gives a Viewer and a Finance role;
   // the Viewer's fund is refused and writes no posting, Finance's posts exactly one, and a removed Viewer's session reads nothing.
   if (i === 3) list.push(workspaceRoles())
