@@ -262,7 +262,7 @@ const INTL_RATE: Record<string, string> = { 'GBP>EUR': '1.16', 'GBP>USD': '1.27'
 const payeeCurrency = (p: Payee): string => p.address ? 'USDC' : p.iban ? 'EUR' : p.routing_number ? 'USD' : 'GBP'
 const PAYMENT_UNSIGNED = 'economy: this workspace signs its payments with a passkey or the phone app — sign this payment\'s challenge (POST /v1/money/payments/challenge)'
 
-type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string; quote_id?: string }
+type OwnerPayment = { payee_id?: string; payee_name?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string; quote_id?: string }
 /** B30.135 — an international payment's quote (economy.InternationalQuote). */
 interface IntlQuote { id: string; workspace_id: string; account_id: string; payee_id: string; payee_name: string; destination_country: string; amount_minor: number
   currency: string; partner_cost_minor: number; fee_minor: number; total_minor: number; arrives_minor: number; arrives_currency: string; rate: string; funding: string
@@ -998,6 +998,8 @@ export class PayeeDesk {
     const payments = this.payments.get(ws) ?? []
     if (req.method !== 'POST') return this.json(res, 200, { payments })
     const b = await this.body<OwnerPayment & { assertion?: Assertion }>(req)
+    const unnamed = this.byName(payees, b)
+    if (unnamed !== undefined) return this.json(res, unnamed.status, { error: unnamed.error })
     if (this.passkeys(ws).length > 0 && !this.broken('payment-unsigned-paid')) {
       const refused = this.refused(ws, paymentKey(b), b.assertion)
       if (refused !== undefined) return this.json(res, 403, { error: b.assertion === undefined ? PAYMENT_UNSIGNED : refused })
@@ -1007,9 +1009,26 @@ export class PayeeDesk {
     return this.json(res, 201, p)
   }
 
+  /**
+   * B28.346 — a payment, its challenge or its quote with payee_name and no payee_id pays the one saved payee of that name, in any
+   * case and spacing, never a part of one: `b.payee_id` is set to it, or the refusal is answered (404 none, 409 two share it).
+   * STUB_BREAK=payee-name-unread is a Lens without B28.346: payee_name is not read, so the payment names no payee.
+   */
+  private byName(payees: Payee[], b: OwnerPayment): { status: number; error: string } | undefined {
+    const fold = (x: string) => x.trim().split(/\s+/).join(' ').toLowerCase()
+    if ((b.payee_id ?? '') !== '' || fold(b.payee_name ?? '') === '' || this.broken('payee-name-unread')) return undefined
+    const named = payees.filter((p) => fold(p.name) === fold(b.payee_name ?? ''))
+    if (named.length === 0) return { status: 404, error: `economy: no such payee called "${b.payee_name}"` }
+    if (named.length > 1) return { status: 409, error: `economy: more than one saved payee has this name: pay one of them by its payee_id: ${named.map((p) => p.id).join(', ')}` }
+    b.payee_id = named[0].id
+    return undefined
+  }
+
   /** B30.135 — POST /v1/money/payments/quote: an international payment priced first, kept for 15 minutes; 201. */
   private async intlQuote(req: IncomingMessage, res: ServerResponse, ws: string, payees: Payee[]): Promise<void> {
     const b = await this.body<OwnerPayment>(req)
+    const unnamed = this.byName(payees, b)
+    if (unnamed !== undefined) return this.json(res, unnamed.status, { error: unnamed.error })
     const currency = (b.currency ?? '').toUpperCase()
     const funding = b.funding === 'live' ? 'live' : 'test'
     const amount = b.amount_minor ?? 0
@@ -1038,6 +1057,8 @@ export class PayeeDesk {
   /** B54.35 — the challenge the owner's payment `b` is signed over, naming exactly it, and the passkeys that may sign it. */
   private async paymentChallenge(req: IncomingMessage, res: ServerResponse, ws: string): Promise<void> {
     const b = await this.body<OwnerPayment>(req)
+    const unnamed = this.byName(this.payees.get(ws) ?? [], b)
+    if (unnamed !== undefined) return this.json(res, unnamed.status, { error: unnamed.error })
     const c = randomBytes(32).toString('base64url')
     this.challenges.set(paymentKey(b), c)
     return this.json(res, 200, { challenge: c, allow_credentials: this.passkeys(ws).map((k) => k.credential_id), user_verification: 'required' })
