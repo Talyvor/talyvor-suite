@@ -33,6 +33,7 @@ import {
 } from './oracles.ts'
 import { paymentsOut } from './paymentsOut.ts'
 import { payeeByName } from './payeeByName.ts'
+import { savedPayeeByName } from './savedPayeeByName.ts'
 import { secondApprover } from './secondApprover.ts'
 import { workspaceRoles } from './workspaceRoles.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
@@ -5534,6 +5535,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B17.534 — a saved payee paid by its name (B28.346), once a run, on a workspace of its own: it completes to that payee with the
   // same ledger entry and statement lines as paying it by id, and a part of its name (404) or a name two payees share (409) moves nothing.
   if (i === 3) list.push(payeeByName())
+  // B17.541 — and the web app's side of it (B28.76), once a run, on a workspace of its own: a payee saved in the web app and paid
+  // there by its name, signed with the owner's passkey, writes the same ledger entry and statement lines as paying it by id.
+  if (i === 3) list.push(savedPayeeByName())
   // B17.537 — two-person approval above a second amount (B28.40), once a run, on a workspace of its own: above the second-approver
   // line the owner's approval leaves the agent's payment pending with zero postings, and the Approver-role person's posts exactly one.
   if (i === 3) list.push(secondApprover())
