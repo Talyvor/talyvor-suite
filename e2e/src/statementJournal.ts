@@ -142,3 +142,46 @@ async function downloaded(ctx: ScenarioCtx, bank: AgentBankScreen, agent: Agent 
   ctx.evidence.push({ note: `${whose}'s journal from ${from} through ${through}: ${file.name} ${JSON.stringify(file.text.slice(0, 2000))}; the JSON ${JSON.stringify(json)}` })
   return { file, json }
 }
+
+/**
+ * B28.329 — the same journal on Lens alone, as the owner's own software downloads it: an agent made with Lens's API,
+ * funded and some taken back, then its statement, and every agent wallet's, for yesterday and today with ?format=journal,
+ * each held to the JSON statement for the same period, and the agent's closing to what Lens's book holds for it.
+ */
+export function statementJournalLens(seed: number): Scenario {
+  const funded = 2_500_000
+  const takenBack = 750_001
+  return {
+    id: 'statement-journal-lens',
+    owner: 'talyvor-lens',
+    items: ['B28.329'],
+    agents: 1,
+    feature: 'Statements',
+    title: "an agent's journal, and every agent's, for Xero or QuickBooks from Lens: debits equal credits equal the statement's totals",
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const agent = await lens.createAgent(user, `Booked on Lens ${seed}`)
+      await lens.fundAgent(user, agent.id, funded)
+      await lens.withdrawAgent(user, agent.id, takenBack)
+
+      // Yesterday and today, UTC: the agent was made today in any time zone, so the period holds every posting it has.
+      const now = Date.now()
+      const [from, to] = [utcDay(now - DAY_MS), utcDay(now + DAY_MS)]
+      const held = agentIn(await bookOf(ctx), agent.id)?.balance_ulxc
+      if (held !== funded - takenBack) return fail(`${agent.name} was funded ${funded} µLXC and ${takenBack} taken back; Lens's book holds ${held ?? 'nothing'}`)
+      const account = `agent:${agent.id}`
+      const details: string[] = []
+      for (const path of [`agents/${agent.id}/statement`, 'agents/statement']) {
+        const got = await lens.as(user.token, 'GET', `/v1/workspaces/${user.workspaceID}/${path}?from=${from}&to=${to}&format=journal`, undefined, { Accept: 'text/csv' })
+        const name = /filename="([^"]+)"/.exec(got.headers.get('Content-Disposition') ?? '')?.[1] ?? `(no file name: ${got.status} ${got.headers.get('Content-Type') ?? ''})`
+        const json = await lens.agentPeriodInOut(user, path === 'agents/statement' ? undefined : agent.id, from, to)
+        ctx.evidence.push({ note: `GET ${path}?format=journal from ${from} to ${to}: ${got.status} ${name} ${JSON.stringify(got.text.slice(0, 2000))}; the JSON ${JSON.stringify(json)}` })
+        const v = statementJournalVerdict({ name, text: got.text }, json, { account, held })
+        if (!v.pass) return v
+        details.push(v.detail)
+      }
+      return { pass: true, detail: details.join('; ') }
+    },
+  }
+}

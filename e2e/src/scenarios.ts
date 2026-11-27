@@ -171,7 +171,7 @@ import { statementPaging } from './statementPaging.ts'
 import { statementSearch } from './statementSearch.ts'
 import { agentAnalytics, agentAnalyticsLens } from './agentAnalytics.ts'
 import { statementPDF, statementPDFLens } from './statementPDF.ts'
-import { statementJournal } from './statementJournal.ts'
+import { statementJournal, statementJournalLens } from './statementJournal.ts'
 import { openapiWallets } from './openapiWallets.ts'
 import { instantTransferOffered, instantTransferQuote, instantTransferSend } from './instantTransfer.ts'
 import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from './helpScreen.ts'
@@ -5160,7 +5160,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.324 — then an agent's statement on Lens filtered by kind, paged by next_cursor, and searched for one line.
     // B28.326 — then the same analytics on Lens alone, from the agent's own key, against its statement's out.
     // B28.328 — then the same PDF from Lens alone, as the owner's software downloads it, against the JSON statement's balances.
-    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), statementSearch(), agentAnalytics(i), agentAnalyticsLens(i), statementPDF(i), statementPDFLens(i), statementJournal(i)); break
+    // B28.329 — then the same journal from Lens alone, as the owner's software downloads it, against the JSON statement's in and out.
+    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), statementSearch(), agentAnalytics(i), agentAnalyticsLens(i), statementPDF(i), statementPDFLens(i), statementJournal(i), statementJournalLens(i)); break
     case 6: list.push(walletCashOut(i)); break
     case 7: if (other < users) list.push(walletRecurring(i, other)); break
     case 8: list.push(marketTakedown(i, i - 1)); break

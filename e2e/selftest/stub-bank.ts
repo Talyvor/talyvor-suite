@@ -110,6 +110,9 @@
 // B28.328 adds Lens's statement as a PDF (?format=pdf), the same rows as the CSV, amounts in dollars. Its defect:
 //   statement-pdf-off — the period statement ignores ?format=pdf and answers its JSON, as Lens before B28.328
 //
+// B28.329 adds Lens's statement as a Xero/QuickBooks journal (?format=journal), one balanced journal per entry. Its defect:
+//   statement-journal-off — the period statement ignores ?format=journal and answers its JSON, as Lens before B28.329
+//
 // B32.66 adds tax and weekly payouts (Lens B32.39–B32.42, stub-tax.ts): each billed use's tax on the bill, Talyvor's receipt
 // for each paid bill, the seller's weekly statements, and the synthetic payout run of talyvor-lens B32.99, which withholds a
 // seller with earnings and no tax details and pays one whose details are complete. Its defect, beside stub-tax.ts's two:
@@ -1189,7 +1192,7 @@ export class Bank {
   private answerStatement(res: ServerResponse, st: object | string, url: URL): void {
     if (typeof st === 'string') return this.d.json(res, 400, { error: st })
     const format = url.searchParams.get('format')
-    if (format !== 'csv' && (format !== 'pdf' || this.broken('statement-pdf-off')) && format !== 'journal') {
+    if (format !== 'csv' && (format !== 'pdf' || this.broken('statement-pdf-off')) && (format !== 'journal' || this.broken('statement-journal-off'))) {
       const view = this.broken('statement-search-off') ? st : statementView(st as PeriodStatement, url)
       return typeof view === 'string' ? this.d.json(res, 400, { error: view }) : this.d.json(res, 200, view)
     }
