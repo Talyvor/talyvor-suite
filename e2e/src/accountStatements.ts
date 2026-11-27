@@ -2,10 +2,12 @@
 // opens the company's GBP account and puts £25.00 of test money in it. Through the app's BFF, the account's statement
 // for this month is Lens's own (Lens B56.14): the same opening, in, out and closing, opening + in − out = closing, the
 // closing what the account holds, and the £25.00 one line of it. Download CSV is Lens's file and closes on the same
-// figure. On Statements the account has its tab, Company · GBP, whose band reads that balance.
+// figure. B17.579 — Statements is one sheet of paper (B61.134, Statements S4): under Statement for the owner chooses the
+// British pound balance, the paper's band reads that balance, and its PDF and Excel each download under DESIGN.md 16.1's
+// name, talyvor-statement-GBP-YYYY-MM, answered 200 as their own type.
 
 import { randomBytes } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Locator, Page } from 'playwright'
 import { fail } from './bank.ts'
@@ -14,6 +16,12 @@ import { call, said } from './settings.ts'
 
 const TIMEOUT_MS = 30_000
 const FUND_MINOR = 2500
+
+/** B17.579 — the paper's two other files, as the Download card names them, each sent as its own type and opening as one. */
+export const PAPER_FILES = [
+  { name: 'PDF', format: 'pdf', type: 'application/pdf', magic: '%PDF-' },
+  { name: 'Excel', format: 'xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', magic: 'PK\u0003\u0004' },
+] as const
 
 interface Account { id: string; purpose: string; currency: string; balance_minor: number }
 interface Statement { account_id: string; currency: string; opening_minor: number; in_minor: number; out_minor: number; closing_minor: number
@@ -73,7 +81,7 @@ export function accountStatements(): Scenario {
     items: ['B56.15'],
     feature: 'Agent wallets',
     title: "a currency account's statement on Statements: £25.00 paid in is its one line, the app's statement is Lens's, " +
-      'opening + in − out = closing = what the account holds, the CSV closes on it, and the Company · GBP tab shows it',
+      'opening + in − out = closing = what the account holds, the CSV closes on it, Statement for › British pound shows it, and its PDF and Excel download',
     run: async (ctx) => {
       const step = async <T>(method: string, path: string, body: unknown, note: string) => {
         const r = await call<T>(ctx, method, path, body)
@@ -124,16 +132,43 @@ export function accountStatements(): Scenario {
           return fail(`Download CSV must be Lens's file closing on ${st.closing_minor}; it answered ${csv.status} ${csv.type}, last line "${closing}"`)
         }
 
-        // 4. On Statements: the Company · GBP tab, its band's balance the closing.
-        await page.goto(new URL(`/statements?wallet=${id}`, page.url()).toString())
-        const tab = page.getByRole('tab', { name: 'Company · GBP' })
+        // 4. On Statements: Statement for › Balance › British pound, the paper's band the closing.
+        await page.goto(new URL('/statements', page.url()).toString())
+        const pound = page.getByRole('radiogroup', { name: 'Balance' }).getByRole('radio', { name: 'British pound', exact: true })
+        if (!(await pound.waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false))) return fail("Statements' Statement for must offer the British pound balance; it does not")
+        await pound.click()
+        if ((await pound.getAttribute('aria-checked')) !== 'true') return fail('British pound must be the balance chosen under Statement for')
+        if (!(await page.waitForURL((u) => u.searchParams.get('wallet') === id, { timeout: TIMEOUT_MS }).then(() => true, () => false))) {
+          return fail(`choosing British pound must open the company GBP account's paper (?wallet=${id}); the page is ${page.url()}`)
+        }
         const band = page.locator('[data-testid="account-statement-band"]')
         if (!(await band.waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false))) return fail("Statements must show the company GBP account's band; it does not")
-        if ((await tab.getAttribute('aria-selected')) !== 'true') return fail('the Company · GBP tab must be the one open')
         const balance = await bandBalance(band)
         const want = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(st.closing_minor / 100)
         ctx.evidence.push({ note: 'the band', answer: ((await band.textContent()) ?? '').replace(/\s+/g, ' ') })
         if (balance !== want) return fail(`the band's Balance must read ${want}; it reads "${balance}"`)
+
+        // 5. The paper's PDF and Excel: each 200 as its own type, saved under DESIGN.md 16.1's name for this month.
+        const month = day(now).slice(0, 7)
+        const downloads = page.locator('[data-testid="statement-download"]')
+        for (const f of PAPER_FILES) {
+          const wantName = `talyvor-statement-GBP-${month}.${f.format}`
+          const got = await Promise.all([
+            page.waitForEvent('download', { timeout: TIMEOUT_MS }),
+            page.waitForResponse((r) => r.url().includes(`/api/money/accounts/${id}/statement?`) && new URL(r.url()).searchParams.get('format') === f.format, { timeout: TIMEOUT_MS }),
+            downloads.getByRole('button', { name: `Download ${f.name}`, exact: true }).click({ timeout: TIMEOUT_MS }),
+          ]).catch((e: unknown) => e instanceof Error ? e : new Error(String(e)))
+          if (got instanceof Error) return fail(`Download ${f.name} must save the paper's ${f.name}; it did not: ${got.message.split('\n')[0]}`)
+          const [download, res] = got
+          const type = res.headers()['content-type'] ?? ''
+          // The file as saved: the page reads the response as a blob, after which Playwright gives its body back empty.
+          const head = (await readFile(await download.path())).subarray(0, f.magic.length).toString('latin1')
+          ctx.evidence.push({ note: `Download ${f.name}`, answer: `${res.status()} ${type}, saved as ${download.suggestedFilename()}` })
+          if (res.status() !== 200 || !type.startsWith(f.type) || head !== f.magic) {
+            return fail(`Download ${f.name} must answer 200 as ${f.type}; it answered ${res.status()} ${type || 'with no type'}, starting "${JSON.stringify(head).slice(1, -1)}"`)
+          }
+          if (download.suggestedFilename() !== wantName) return fail(`Download ${f.name} must save ${wantName}; it saved ${download.suggestedFilename()}`)
+        }
         await mkdir(ctx.env.outDir, { recursive: true })
         const viewport = page.viewportSize()
         for (const width of [1440, 390]) {
@@ -143,7 +178,7 @@ export function accountStatements(): Scenario {
           ctx.evidence.push({ note: `Statements at ${width}px: ${path}` })
         }
         if (viewport !== null) await page.setViewportSize(viewport)
-        return { pass: true, detail: `£25.00 in is the one line; the app's statement is Lens's (${figures(st)}), closing on what the account holds; the CSV closes on it; Company · GBP reads ${want}` }
+        return { pass: true, detail: `£25.00 in is the one line; the app's statement is Lens's (${figures(st)}), closing on what the account holds; the CSV closes on it; British pound reads ${want}; its PDF and Excel saved as talyvor-statement-GBP-${month}` }
       } finally {
         await page.close()
       }
