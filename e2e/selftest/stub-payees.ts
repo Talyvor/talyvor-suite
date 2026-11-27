@@ -188,9 +188,10 @@ interface StubMandate { id: string; workspace_id: string; agent_id: string; acco
   payee_name: string; payee_id?: string; hold_account_id?: string; max_per_pull_minor: number; max_per_month_minor: number; pulled_this_month_minor: number
   expires_at: string; status: string; revoked_at?: string; created_at: string }
 /** One row of a payout batch and the batch (economy.PayoutRow, economy.PayoutBatch). */
-interface StubRow { line: number; payee_id: string; payee_name?: string; amount_minor: number; currency: string; reference: string; status: string; payment_id?: string; detail?: string }
+interface StubRow { line: number; payee_id: string; payee_name?: string; amount_minor: number; fee_minor: number; currency: string; reference: string; status: string
+  payment_id?: string; detail?: string }
 interface StubBatch { id: string; workspace_id: string; funding: string; idempotency_key: string; status: string; rows: StubRow[]; rows_total: number; rows_valid: number
-  rows_invalid: number; totals_minor: Record<string, number>; approved_by?: string; approved_at?: string; created_at: string; updated_at: string }
+  rows_invalid: number; totals_minor: Record<string, number>; fees_minor: Record<string, number>; approved_by?: string; approved_at?: string; created_at: string; updated_at: string }
 /** A payment out (economy.OutsidePayment). */
 interface Payment { id: string; workspace_id: string; account_id: string; payee_id: string; payee_name: string; amount_minor: number; currency: string
   funding: string; reference: string; idempotency_key: string; status: string; created_at: string; address?: string; travel_rule?: Record<string, string>
@@ -239,6 +240,9 @@ const MONEY_WEBHOOK_SECRET = process.env.STUB_MONEY_WEBHOOK_SECRET ?? 'selftest-
 const ULXC_PER_MINOR: Record<string, number> = { GBP: 125_000 }
 /** B30.135 — Talyvor's fee for an international payment by sending currency, as stub-lens.ts states it at /v1/public/fees (Lens's fees.go). */
 export const INTL_FEE_MINOR: Record<string, number> = { GBP: 500, EUR: 600, USD: 700 }
+/** B17.577 — a payout row's fee as Lens B17.564 prices it: the plan's local payments free this month, then LENS_LOCAL_PAYMENT_FEE_MINOR each. */
+const LOCAL_FREE_PER_MONTH = 10
+const LOCAL_FEE_MINOR: Record<string, number> = { GBP: 20, EUR: 20, USD: 20 }
 /** B30.135 — the Test partner's cost of an international payment, in minor units of the sending currency, and its rates. */
 const INTL_COST_MINOR = 100
 const INTL_RATE: Record<string, string> = { 'GBP>EUR': '1.16', 'GBP>USD': '1.27', 'EUR>GBP': '0.86', 'USD>GBP': '0.79' }
@@ -1263,7 +1267,7 @@ export class PayeeDesk {
   }
 
   /** B30.17 — one payment out, as a payment or (B30.96) a payout row makes it: each refusal as Lens words it; only compliance-live-paid moves live money. */
-  private pay(ws: string, payees: Payee[], b: OwnerPayment): Payment | { status: number; error: string } {
+  private pay(ws: string, payees: Payee[], b: OwnerPayment, localFee = 0): Payment | { status: number; error: string } {
     const accounts = this.accounts.get(ws) ?? []
     const payments = this.payments.get(ws) ?? []
     const currency = (b.currency ?? '').toUpperCase()
@@ -1317,7 +1321,7 @@ export class PayeeDesk {
       }
       if (Date.parse(quote.expires_at) <= Date.now()) return { status: 409, error: `economy: no such quote, or it has expired or is for another payment: quote ${quote.id} expired at ${quote.expires_at}. Ask for a new one` }
     }
-    const debit = quote === undefined || this.broken('intl-fee-off-ledger') ? amount : quote.total_minor
+    const debit = quote === undefined || this.broken('intl-fee-off-ledger') ? amount + localFee : quote.total_minor
     const holds = funding === 'live' ? account.live_minor : account.test_minor
     if (holds < debit && !(funding === 'live' && this.broken('compliance-live-paid'))) {
       return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(debit, currency)}` }
@@ -1332,6 +1336,7 @@ export class PayeeDesk {
     const p: Payment = { id: `mpay_${randomUUID()}`, workspace_id: ws, account_id: account.id, payee_id: payee.id, payee_name: payee.name, amount_minor: amount, currency,
       funding, reference: b.reference ?? '', idempotency_key: b.idempotency_key, status: refused ? 'failed' : 'completed', created_at: new Date().toISOString(),
       ...(address === '' ? {} : { address, travel_rule: travelRule }),
+      ...(localFee > 0 ? { fee_minor: localFee } : {}),
       ...(quote === undefined ? {} : { quote_id: quote.id, partner_cost_minor: quote.partner_cost_minor, fee_minor: quote.fee_minor, arrives_minor: quote.arrives_minor,
         arrives_currency: quote.arrives_currency, rate: quote.rate }) }
     if (p.status === 'completed' && address === '') this.post(p, debit, quote)
@@ -1461,14 +1466,14 @@ export class PayeeDesk {
           const at = (name: string) => (col(name) >= 0 ? (f[col(name)] ?? '') : '')
           const amount = at('amount')
           const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(amount)
-          return { line: i + 2, payee_id: at('payee_id') || at('payee'), amount_minor: m === null ? 0 : Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0')),
+          return { line: i + 2, payee_id: at('payee_id') || at('payee'), amount_minor: m === null ? 0 : Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0')), fee_minor: 0,
             currency: at('currency').toUpperCase(), reference: at('reference'), status: 'valid',
             ...(m === null ? { detail: `amount "${amount}" is not a positive decimal amount with up to 2 decimal places, such as 12.34` } : {}) }
         })
       } else {
         const b = await this.body<{ rows?: Partial<StubRow>[]; idempotency_key?: string }>(req)
         key = key || (b.idempotency_key ?? '')
-        rows = (b.rows ?? []).map((r, i) => ({ line: i + 1, payee_id: r.payee_id ?? '', amount_minor: r.amount_minor ?? 0, currency: (r.currency ?? '').toUpperCase(), reference: r.reference ?? '', status: 'valid' }))
+        rows = (b.rows ?? []).map((r, i) => ({ line: i + 1, payee_id: r.payee_id ?? '', amount_minor: r.amount_minor ?? 0, fee_minor: 0, currency: (r.currency ?? '').toUpperCase(), reference: r.reference ?? '', status: 'valid' }))
       }
       if (key === '') return this.json(res, 400, { error: 'economy: invalid payout batch: a batch has an idempotency key' }), true
       const again = list.find((b) => b.idempotency_key === key)
@@ -1477,7 +1482,12 @@ export class PayeeDesk {
       const accounts = this.accounts.get(ws) ?? []
       const held: Record<string, number> = {}
       const totals: Record<string, number> = {}
+      const fees: Record<string, number> = {}
+      // B17.577 — each valid row priced as its payment out will be, after the local payments already made this month.
+      const month = new Date().toISOString().slice(0, 7)
+      let used = (this.payments.get(ws) ?? []).filter((p) => p.quote_id === undefined && p.address === undefined && p.status !== 'failed' && p.created_at.startsWith(month)).length
       for (const r of rows) {
+        const fee = used < LOCAL_FREE_PER_MONTH ? 0 : (LOCAL_FEE_MINOR[r.currency] ?? 0)
         const payee = payees.find((p) => p.id === r.payee_id)
         const account = accounts.find((a) => a.currency === r.currency && a.purpose === 'company' && a.status === 'open')
         held[r.currency] ??= account?.test_minor ?? 0
@@ -1486,18 +1496,24 @@ export class PayeeDesk {
         else if (payee.needs_confirmation) Object.assign(r, { status: 'invalid', detail: `the payee is not confirmed: ${payee.name}'s name was a ${payee.check.replace('_', ' ')}` })
         else if (r.amount_minor <= 0 || !CURRENCIES.includes(r.currency)) Object.assign(r, { status: 'invalid', detail: 'a positive amount in GBP, EUR or USD' })
         else if (account === undefined) Object.assign(r, { status: 'invalid', detail: `no ${r.currency} account to pay from — open one at /v1/money/accounts` })
-        else if (held[r.currency] < r.amount_minor) {
-          Object.assign(r, { status: 'invalid', detail: `the account holds ${money(held[r.currency], r.currency)} of test money after the rows before this one, and this row is ${money(r.amount_minor, r.currency)}` })
+        else if (held[r.currency] < r.amount_minor + fee) {
+          Object.assign(r, { status: 'invalid', detail: `the account holds ${money(held[r.currency], r.currency)} of test money after the rows before this one, and this row is ` +
+            `${money(r.amount_minor + fee, r.currency)} with its fee` })
         } else {
           r.payee_name = payee.name
-          held[r.currency] -= r.amount_minor
+          r.fee_minor = fee
+          used++
+          held[r.currency] -= r.amount_minor + fee
           totals[r.currency] = (totals[r.currency] ?? 0) + r.amount_minor
+          fees[r.currency] = (fees[r.currency] ?? 0) + fee
         }
       }
       const now = new Date().toISOString()
       const valid = rows.filter((r) => r.status === 'valid').length
+      // B17.577 — STUB_BREAK=payout-fees-unstated is a Lens without B17.564: the batch states no fees, and its rows are still charged them.
       const b: StubBatch = { id: `mpob_${randomUUID()}`, workspace_id: ws, funding: 'test', idempotency_key: key, status: 'awaiting_approval', rows, rows_total: rows.length,
-        rows_valid: valid, rows_invalid: rows.length - valid, totals_minor: totals, created_at: now, updated_at: now }
+        rows_valid: valid, rows_invalid: rows.length - valid, totals_minor: totals, fees_minor: fees, created_at: now, updated_at: now }
+      if (this.broken('payout-fees-unstated')) delete (b as Partial<StubBatch>).fees_minor
       this.batches.set(ws, [b, ...list])
       // B30.136 — STUB_BREAK=payout-upload-moved takes the valid rows' total off the account at upload, before any approval.
       if (this.broken('payout-upload-moved')) {
@@ -1524,7 +1540,7 @@ export class PayeeDesk {
       for (const r of b.rows) {
         if (r.status === 'invalid' || r.status === 'failed') continue
         const p = this.pay(ws, payees, { payee_id: r.payee_id, amount_minor: r.amount_minor, currency: r.currency, reference: r.reference,
-          idempotency_key: `payout:${b.id}:${r.line}${twice ? `:${randomUUID()}` : ''}` })
+          idempotency_key: `payout:${b.id}:${r.line}${twice ? `:${randomUUID()}` : ''}` }, r.fee_minor)
         if ('error' in p) Object.assign(r, { status: 'failed', detail: p.error })
         else Object.assign(r, { status: p.status, payment_id: p.id })
       }
