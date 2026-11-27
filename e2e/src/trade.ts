@@ -514,7 +514,8 @@ export function walletCashOut(seed: number): Scenario {
     id: 'wallet-cash-out',
     owner: 'talyvor-lens',
     own: true,
-    items: ['B28.67'],
+    // B17.533 — B28.339 is Lens's refusal of the unsigned cash-out the app's own call sends here.
+    items: ['B28.67', 'B28.339'],
     agents: 1,
     title: "a person with a passkey cashes an agent's credits out on Agent Wallets: unsigned it is refused and holds nothing; " +
       'signed on the screen, one cash_out line held from the agent at once, then paid by the test partner',
