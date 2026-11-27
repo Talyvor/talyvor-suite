@@ -7,7 +7,7 @@
 
 import type { AgentLine, AgentSpendAnalytics } from './lens.ts'
 import { type AnalyticsShown, agentAsks, fail, lxcText, openAgent, withBank } from './bank.ts'
-import type { Scenario } from './scenarios.ts'
+import { CannotTest, type Scenario } from './scenarios.ts'
 
 /** A figure as the card draws it ("0.75 LXC", or beside the person's currency) → µLXC; NaN when it has none. */
 export const shownULXC = (text: string): number => Math.round(Number(/([\d,.]+)\s*LXC/.exec(text)?.[1]?.replace(/,/g, '') ?? 'NaN') * 1e6)
@@ -105,6 +105,8 @@ export function agentAnalytics(seed: number): Scenario {
 /**
  * B28.326 — the same agent's day on Lens alone, as the owner's own software reads it: made with Lens's API, paid from its
  * own key, asked one question on it, and its analytics for the period put beside its statement's out and its postings.
+ * B17.581 — the question is asked on a model the run's catalog lists: the judge model, or else another of its provider's.
+ * A launch run reads no catalog (B61.49), so there the scenario is skipped with its reason before it makes anything.
  */
 export function agentAnalyticsLens(seed: number): Scenario {
   const paid = 500_000
@@ -117,8 +119,10 @@ export function agentAnalyticsLens(seed: number): Scenario {
     feature: 'Statements',
     title: "one agent's analytics on Lens: every posting out in one bucket by day, model and destination, summing to its statement's out",
     run: async (ctx) => {
-      const { lens } = ctx.env
+      const { lens, catalog, judgeModel, judgeProvider } = ctx.env
       const user = ctx.app.user
+      const asks = (catalog.find((m) => m.id === judgeModel) ?? catalog.find((m) => m.provider === judgeProvider && !m.deprecated))?.id
+      if (asks === undefined) throw new CannotTest(`the run's catalog lists no ${judgeProvider} model to ask, so the agent cannot be asked its question: a launch run reads no catalog (B61.49)`)
       const north = await lens.createAgent(user, `Analysed on Lens ${seed}`)
       const south = await lens.createAgent(user, `Paid on Lens ${seed}`)
       await lens.fundAgent(user, north.id, 3_000_000)
@@ -126,7 +130,7 @@ export function agentAnalyticsLens(seed: number): Scenario {
       if (!k.ok) return fail(`a key for ${north.name} was refused: ${k.status} ${k.error}`)
       const payment = await lens.payAsAgent(k.value.key, user.workspaceID, north.id, south.id, paid, `analytics ${seed}`)
       if (!payment.ok) return fail(`${north.name} paying ${south.name} was refused: ${payment.status} ${payment.error}`)
-      const asked = await agentAsks(ctx, k.value.key, 'What is 17 + 25? Answer with the number only.', `${north.name} asks with its own key`)
+      const asked = await agentAsks(ctx, k.value.key, 'What is 17 + 25? Answer with the number only.', `${north.name} asks with its own key`, asks)
       if (!asked.ok) return fail(`${north.name}'s question was refused: ${asked.status} ${asked.error}`)
       await lens.withdrawAgent(user, north.id, takenBack)
 
