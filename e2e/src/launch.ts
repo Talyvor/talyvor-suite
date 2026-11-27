@@ -116,7 +116,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'rooms-moderation', 'rooms-private', 'pocket-12', 'pocket-18',
   ],
   chat: [
-    'agent-spend-question', 'blank-retry-cut-off', 'chat-agent-task', 'chat-answer-versions', 'chat-approval-face-id',
+    'agent-spend-question', 'blank-retry-cut-off', 'charged-after-hang-up', 'chat-agent-task', 'chat-answer-versions', 'chat-approval-face-id',
     'chat-ask-above', 'chat-auto', 'chat-brand', 'chat-budget', 'chat-canvas', 'chat-card-freeze', 'chat-charged', 'chat-cheaper',
     'chat-compare-models', 'chat-connectors', 'chat-continue-cut-off', 'chat-custom-instructions', 'chat-docs-page',
     'chat-edit-resend', 'chat-export-import', 'chat-feature-spend', 'chat-file-bug', 'chat-files', 'chat-first-message',

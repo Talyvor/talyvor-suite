@@ -150,7 +150,7 @@ import { budgetIdsValidated } from './budgetIds.ts'
 import { providerKeyHidden } from './providerKeyHidden.ts'
 import { call, said, settingsConfigBudgets, settingsGuardrails, settingsOperatorOnly, settingsPrompts, settingsStoredAnswers, settingsSwitches, settingsTareDistill } from './settings.ts'
 import { creditsTopUp, evals, lensTokens, namedIdsIsolated, nodes, outputsAttribution, povi } from './economy.ts'
-import { ledgerCallOnce, ledgerMovesAtOnce, streamOutlives30s } from './concurrency.ts'
+import { chargedAfterHangUp, ledgerCallOnce, ledgerMovesAtOnce, streamOutlives30s } from './concurrency.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
 import { trackWebhookSigned } from './trackWebhooks.ts'
 import { docsWebhookSigned } from './docsWebhooks.ts'
@@ -5301,6 +5301,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 2) list.push(ledgerMovesAtOnce(), ledgerCallOnce())
   // B28.79 — a streamed answer longer than 30 s, once a run, on a workspace of its own: it streams to its end, billed once.
   if (i === 4) list.push(streamOutlives30s())
+  // B17.532 — a question on the workspace's own key hung up on the moment its answer arrives is still charged (B28.242), once a run,
+  // on a workspace of its own: one spend row, as one asked staying connected leaves, and the balance down by what the rows debit.
+  if (i === 4) list.push(chargedAfterHangUp())
   // B28.280 — Stripe's webhooks, once a run, each on a workspace of its own: an unsigned or forged event credits nothing,
   // and a signed one sent again credits once.
   if (i === 2) list.push(webhookUnsigned(), webhookReplayed())
