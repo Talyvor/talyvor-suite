@@ -142,7 +142,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   // The old gateway: priced answers, the cache and the pool, routing, the model catalog, Tare, guardrails, stored
   // answers, Lens's own settings and the LENS token.
   gateway: [
-    'across-accounts', 'brand-roi', 'byok-addon', 'capital', 'every-model', 'features-switches', 'features-wallets-first',
+    'across-accounts', 'brand-roi', 'budget-ids-validated', 'byok-addon', 'capital', 'every-model', 'features-switches', 'features-wallets-first',
     'file-bomb-bounded', 'follow-up-not-cached', 'gateway-auth', 'gateway-keys', 'gateway-mcp', 'gateway-providers',
     'gateway-sessions', 'injection-blocked', 'keys-not-forwarded', 'known-answer', 'lens-convert', 'lens-reads', 'lens-tokens',
     'lxc-convert-bonds', 'named-ids-isolated', 'nodes', 'one-digit-trap', 'outputs-attribution', 'pattern-mining-switch',
