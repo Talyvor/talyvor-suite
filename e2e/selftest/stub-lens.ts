@@ -39,6 +39,8 @@
 //   call-replay — an agent's byte-identical retry under one Idempotency-Key is charged again (B28.279)
 //   hangup-unbilled — an agent's streamed answer is spent from it only once the stream ends, so one it hangs up on
 //                 is never billed to it (B28.279)
+//   hangup-answer-unbilled — a question on the workspace's own key is charged only after its answer is written, and
+//                 not at all once the client has hung up (B28.242)
 //   stream-cut-30s — every stream is ended 30 s after its request, mid-answer, as Lens's server's WriteTimeout did (B28.79)
 //   move-replay, move-race — a fund or withdraw sent again under its key posts again; one landing beside another
 //                 answers and posts nothing (B28.279, stub-bank.ts)
@@ -1108,8 +1110,21 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
     }
     const outTok = tokens(answer)
     charge = Math.ceil(((inTok * model.input_per_1m + outTok * model.output_per_1m) / 1e6 / USD_PER_LXC) * 1e6)
-    fee = book(ws, -charge, 'spend', `${model.id} answer`)
-    tag(ws, req, (inTok * model.input_per_1m + outTok * model.output_per_1m) / 1e6)
+    const bill = () => {
+      fee = book(ws, -charge, 'spend', `${model.id} answer`)
+      tag(ws, req, (inTok * model.input_per_1m + outTok * model.output_per_1m) / 1e6)
+    }
+    // STUB_BREAK=hangup-answer-unbilled (B28.242) — charged on the request's own life after the answer is written, so a client
+    // gone by then is never charged.
+    if (broke('hangup-answer-unbilled') && agentCall === undefined && body.stream !== true) {
+      let gone = false
+      req.socket.once('close', () => {
+        gone = true
+      })
+      res.once('finish', () => setTimeout(() => {
+        if (!gone) bill()
+      }, 250))
+    } else bill()
     charged = BREAK === 'charge' ? charge + 1 : charge
     if (retryKey !== undefined) retries.set(retryKey, answer)
     if (keep) ws.answers.set(key, answer)

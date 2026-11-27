@@ -2,6 +2,8 @@
 // one's ledger back, and ask the judge. Every call a synthetic user makes uses that user's own token.
 
 import { randomUUID } from 'node:crypto'
+import { request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { confirmAll } from './confirmIdentity.ts'
 import type { Recorder, Tag } from './coverage.ts'
 import type { CatalogModel } from './oracles.ts'
@@ -1828,6 +1830,62 @@ export class LensClient {
         replayed: res.headers.get('X-Talyvor-Cache-Replay') === 'true',
         pooledULXC: res.headers.has('X-Talyvor-Pool-Charged-ULXC') ? Number(res.headers.get('X-Talyvor-Pool-Charged-ULXC')) : undefined,
         served: servedBy(res.headers),
+      },
+    }
+  }
+
+  /**
+   * B28.242 — one question through Lens's proxy on this user's account, as ask() sends it, on a connection of its own that is
+   * cut the moment the whole answer has arrived, before Lens has finished with the request. `hungUp` is false when the answer
+   * ended before it could be cut. Refused or answered, never thrown.
+   */
+  async askAndHangUp(user: SyntheticUser, provider: string, model: string, prompt: string, maxTokens: number): Promise<Proxied & { hungUp: boolean }> {
+    const key = await this.sessionKey(user)
+    const path = `/v1/proxy/${provider}/v1/messages`
+    const url = new URL(this.baseURL + path)
+    const payload = JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+    const t0 = Date.now()
+    const got = await new Promise<{ status: number; raw: string; headers: Record<string, string | string[] | undefined>; hungUp: boolean }>((resolve, reject) => {
+      const req = (url.protocol === 'https:' ? httpsRequest : httpRequest)(url, {
+        method: 'POST',
+        agent: false,
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'Content-Length': Buffer.byteLength(payload) },
+      }, (res) => {
+        let raw = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk: string) => {
+          raw += chunk
+          if (res.statusCode !== 200) return
+          try {
+            JSON.parse(raw)
+          } catch {
+            return
+          }
+          req.destroy()
+          resolve({ status: 200, raw, headers: res.headers, hungUp: true })
+        })
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, raw, headers: res.headers, hungUp: false }))
+        res.on('error', reject)
+      })
+      req.on('error', reject)
+      req.end(payload)
+    })
+    this.recorder?.hit(this.tag, { kind: 'lens', method: 'POST', path, status: got.status, ms: Date.now() - t0 })
+    const h = new Headers(Object.entries(got.headers).flatMap(([k, v]): [string, string][] => (v === undefined ? [] : [[k, [v].flat().join(', ')]])))
+    const ownKey = h.get('X-Talyvor-BYOK') === 'own-key'
+    if (got.status !== 200) return { status: got.status, ownKey, error: refusalOf(got.raw), hungUp: got.hungUp }
+    const body = JSON.parse(got.raw) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } }
+    return {
+      status: got.status,
+      ownKey,
+      hungUp: got.hungUp,
+      reply: {
+        text: (body.content ?? []).map((c) => c.text ?? '').join(''),
+        inputTokens: body.usage?.input_tokens ?? 0,
+        outputTokens: body.usage?.output_tokens ?? 0,
+        replayed: h.get('X-Talyvor-Cache-Replay') === 'true',
+        pooledULXC: h.has('X-Talyvor-Pool-Charged-ULXC') ? Number(h.get('X-Talyvor-Pool-Charged-ULXC')) : undefined,
+        served: servedBy(h),
       },
     }
   }

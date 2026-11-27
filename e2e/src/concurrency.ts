@@ -17,7 +17,7 @@ import { chargeULXC } from './app.ts'
 import { fail, lxcText } from './bank.ts'
 import { worstInputTokens } from './budget.ts'
 import { chargeOf, complete } from './code.ts'
-import type { AgentBook, AgentLine, Answered, JudgeReply } from './lens.ts'
+import type { AgentBook, AgentLine, Answered, JudgeReply, Proxied } from './lens.ts'
 import { RUN_SALT, listPriceUSD, statesNumber } from './oracles.ts'
 import { within } from './pricing.ts'
 import type { Scenario, ScenarioCtx } from './scenarios.ts'
@@ -305,6 +305,78 @@ export function streamOutlives30s(): Scenario {
       const charged = await billedOnce(ctx, agent.id, lines0, rows0, `the ${secs} s stream`)
       if (typeof charged === 'string') return fail(charged)
       return { pass: true, detail: `a ${secs} s stream reached message_stop (${s.stopReason}) with ${s.text.length} characters, and was billed once: ${charged} µLXC, one charge and one spend row` }
+    },
+  }
+}
+
+/**
+ * B28.242 — a question asked on the workspace's own key, as Chat asks it, and hung up on the moment its whole answer has
+ * arrived is still charged. A question asked the same way by a client that stays connected is the control: it must leave a
+ * spend row, or the hang-up shows nothing either way. Hung up on, it must leave one spend row too, and the workspace's balance must
+ * fall by exactly what its new rows debit.
+ */
+export function chargedAfterHangUp(): Scenario {
+  return {
+    id: 'charged-after-hang-up',
+    owner: 'talyvor-lens',
+    items: ['B28.242'],
+    own: true,
+    plan: 'business_studio',
+    feature: 'Chat',
+    title: "a question asked on the workspace's own key and hung up on the moment its whole answer has arrived is still charged: one spend row " +
+      'on the ledger, as one asked staying connected leaves, and the balance falls by exactly what the rows debit',
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const model = modelOf(ctx)
+      const asked = async (hangUp: boolean) => {
+        const what = hangUp ? 'the question hung up on' : 'the question asked staying connected'
+        const a = 1000 + Math.floor(Math.random() * 9000)
+        const b = 1000 + Math.floor(Math.random() * 9000)
+        const prompt = `What is ${a} + ${b}? Reply with the number only. (${RUN_SALT}-${Date.now().toString(36)})`
+        const rows0 = new Set((await lens.ledger(user)).map((r) => r.id))
+        const balance0 = await lens.lxcBalance(user)
+        const hold = ctx.env.cap.reserve(listPriceUSD(model, worstInputTokens(prompt.length), REPLY_MAX_TOKENS))
+        let r: Proxied & { hungUp?: boolean }
+        try {
+          const args = [user, ctx.env.judgeProvider, model.id, prompt, REPLY_MAX_TOKENS] as const
+          r = hangUp ? await lens.askAndHangUp(...args) : await lens.ask(...args)
+          ctx.env.cap.settle(hold, r.reply === undefined ? undefined : listPriceUSD(model, r.reply.inputTokens, r.reply.outputTokens))
+        } catch (e) {
+          ctx.env.cap.settle(hold, undefined)
+          throw e
+        }
+        if (r.reply === undefined) return `${what} was refused: ${r.status} ${r.error}`
+        if (!statesNumber(r.reply.text, a + b)) return `${what} was answered wrong: expected ${a + b}, got "${r.reply.text}"`
+        if (hangUp && !r.hungUp) throw new Error('the answer ended before the connection could be cut, so it shows nothing either way')
+        const fresh = async () => (await lens.ledger(user)).filter((x) => !rows0.has(x.id))
+        await within(fresh, (rs) => rs.some((x) => x.type === 'spend'), CHARGED_WITHIN_MS)
+        await new Promise((res) => setTimeout(res, SETTLE_GRACE_MS))
+        const rows = await fresh()
+        const balance1 = await lens.lxcBalance(user)
+        ctx.evidence.push({ question: prompt, answer: r.reply.text,
+          note: `${what} (${r.reply.served}); the ledger took ${rows.map((x) => `${x.type} ${x.amount_ulxc} "${x.description}"`).join(', ') || 'nothing'}; the balance went from ${balance0} to ${balance1} µLXC`,
+          ledger: rows.map((x) => ({ type: x.type, amount_ulxc: x.amount_ulxc, created_at: x.created_at })) })
+        const spends = rows.filter((x) => x.type === 'spend')
+        const debited = -rows.reduce((s, x) => s + x.amount_ulxc, 0)
+        return { spends, debited, fell: balance0 - balance1 }
+      }
+
+      const control = await asked(false)
+      if (typeof control === 'string') return fail(control)
+      if (control.spends.length === 0) throw new Error('the question asked staying connected left no spend row on the ledger, so a hang-up shows nothing either way')
+      const hung = await asked(true)
+      if (typeof hung === 'string') return fail(hung)
+      const wrong: string[] = []
+      if (hung.spends.length !== 1) {
+        wrong.push(hung.spends.length === 0
+          ? `hung up on the moment its answer arrived, the question left no spend row on the ledger: the answer went free (asked staying connected, the same kind of question left ${control.debited} µLXC)`
+          : `hung up on, the question left ${hung.spends.length} spend rows on the ledger, not one`)
+      } else if (hung.spends[0].amount_ulxc >= 0) wrong.push(`hung up on, the question's spend row is ${hung.spends[0].amount_ulxc} µLXC, not a debit`)
+      if (hung.fell !== hung.debited) wrong.push(`hung up on, the balance fell by ${hung.fell} µLXC and the new rows debit ${hung.debited}`)
+      if (wrong.length > 0) return fail(wrong.join('; '))
+      return { pass: true, detail: `the question hung up on the moment its answer arrived was charged as one asked staying connected is: one spend row, ` +
+        `${hung.debited} µLXC debited and the balance down by the same (staying connected: ${control.debited} µLXC)` }
     },
   }
 }
