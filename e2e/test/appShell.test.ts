@@ -6,7 +6,9 @@ import { appShell } from '../src/tour.ts'
 // sliding marker under the row, so the row itself is transparent. The page's second read is the shell.
 const CLOUD = 'rgb(24, 26, 31)'
 const INK = 'rgb(242, 243, 245)'
-function shell(marker: { bg: string; opacity: string; under: boolean } | null) {
+// B17.568 — the run of 27 Nov 2026: on the Shell's glass (B61.125) the cloud is the page colour at 68%, read in the sidebar.
+const GLASS_CLOUD = 'color(srgb 0.0588235 0.0627451 0.0745098 / 0.68)'
+function shell(marker: { bg: string; opacity: string; under: boolean } | null, cloud = CLOUD) {
   const seen = {
     rows: 7,
     bare: [],
@@ -14,7 +16,7 @@ function shell(marker: { bg: string; opacity: string; under: boolean } | null) {
     activeBg: 'rgba(0, 0, 0, 0)',
     activeInk: INK,
     marker,
-    cloud: CLOUD,
+    cloud,
     ink: INK,
     buttons: ['Menu', 'Search agents, payees, bills… or type a command', 'Pause every agent'],
     links: ['Settings and sign out'],
@@ -33,6 +35,11 @@ function shell(marker: { bg: string; opacity: string; under: boolean } | null) {
 describe('app-shell (B17.520)', () => {
   it('passes when the selected row sits on the cloud marker drawn under it', async () => {
     const result = await appShell().run(shell({ bg: CLOUD, opacity: '1', under: true }))
+    expect(result).toMatchObject({ pass: true })
+  })
+
+  it('passes when the marker is the glass cloud the sidebar resolves (B17.568)', async () => {
+    const result = await appShell().run(shell({ bg: GLASS_CLOUD, opacity: '1', under: true }, GLASS_CLOUD))
     expect(result).toMatchObject({ pass: true })
   })
 
