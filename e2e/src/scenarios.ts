@@ -144,6 +144,7 @@ import { lineage } from './lineage.ts'
 import { roomFromIssue } from './roomFromIssue.ts'
 import { roomDecideRun, roomInviteScreen } from './roomScreens.ts'
 import { budgetIdsValidated } from './budgetIds.ts'
+import { providerKeyHidden } from './providerKeyHidden.ts'
 import { call, said, settingsConfigBudgets, settingsGuardrails, settingsOperatorOnly, settingsPrompts, settingsStoredAnswers, settingsSwitches, settingsTareDistill } from './settings.ts'
 import { creditsTopUp, evals, lensTokens, namedIdsIsolated, nodes, outputsAttribution, povi } from './economy.ts'
 import { ledgerCallOnce, ledgerMovesAtOnce, streamOutlives30s } from './concurrency.ts'
@@ -5273,6 +5274,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 2) list.push(settingsConfigBudgets(), settingsOperatorOnly())
   // B28.246 — then a budget URL whose id is not a UUID answers 400, and deleting a budget the workspace has not 404.
   if (i === 2) list.push(budgetIdsValidated())
+  // B28.250 — and a provider's refusal of the workspace's own key, buffered or streamed, shows neither the key nor its address.
+  if (i === 2) list.push(providerKeyHidden())
   if (i === 4) list.push(settingsSwitches(), settingsGuardrails())
   if (i === 6) list.push(settingsTareDistill(), settingsStoredAnswers(), settingsPrompts())
   // B34.8 — evals, outputs and attribution, nodes, PoVI, LENS and credits bought, once a run, each on a workspace of its
