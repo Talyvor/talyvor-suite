@@ -175,6 +175,9 @@
 //   invoice-by-month    — the bill read for an invoice holds the calendar month's uses, not the invoice's
 //   invoice-total-off   — an invoice's gross leaves its tax out
 //
+// B17.537 adds the roles and the second approver (stub-second-approver.ts): above the line an agent's payment waits for two people.
+//   second-approver-one-approval — the first approval above the line approves the payment
+//
 // B17.509 adds every wallet list as a CSV (talyvor-lens B28.332): ?format=csv on the approvals, the schedules and an agent's
 // transfers answers the same list as name.csv, one row per item under a header of its fields. Its defect:
 //   list-csv-short — the CSV leaves out the list's last item
@@ -197,6 +200,7 @@ import { ScanDesk } from './stub-scan.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
 import { TrustLayerDesk } from './stub-trust-layer.ts'
+import { APPROVAL_ROLES, SecondApproverDesk, type TwoApprovals } from './stub-second-approver.ts'
 import type { Judge, RoomAgent } from './stub-rooms.ts'
 import { LaunchDesk } from './stub-launch.ts'
 
@@ -326,7 +330,7 @@ function statementView(st: PeriodStatement, url: URL): PeriodStatement | string 
 }
 
 interface Posting { posting_id: number; entry_id: string; at: string; ws: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string; model?: string }
-interface Approval {
+interface Approval extends TwoApprovals {
   id: string; ws: string; agent_id: string; amount_ulxc: number; model: string; status: string; created_at: string; decided_at?: string; fingerprint: string
   /** Who a payment goes to, and its memo (Lens economy.AgentApproval since B23.5); none for a request to a model. */
   payee?: { kind: string; id: string; name: string }; memo?: string
@@ -659,9 +663,13 @@ export class Bank {
   private readonly approvers = new Map<string, { id: string; approver: string; limit: number; mandate: string }>()
   /** B45.28 — what proves each approval: the owner's closed mandate, or the approver agent that approved it. */
   private readonly approvalProof = new Map<string, { owner_mandate?: string; approved_by_agent_id?: string }>()
+  /** B17.537 — the roles, role sessions and second-approver line (stub-second-approver.ts). */
+  readonly second: SecondApproverDesk
 
   constructor(d: BankDeps) {
     this.d = d
+    this.second = new SecondApproverDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
+      (ws) => (this.passkeys.get(ws) ?? []).map((k) => k.credential_id))
     this.tax = new TaxDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.verification = new VerificationDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.launch = new LaunchDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, id) => {
@@ -949,7 +957,9 @@ export class Bank {
         }
       }
     }
-    if (r.approval_above_ulxc > 0 && amount > r.approval_above_ulxc) {
+    // B28.315 — over the workspace's second-approver line a payment waits for two approvers, whatever the agent's rules ask.
+    const overLine = req.payment === true && this.second.over(agent.ws, amount)
+    if ((r.approval_above_ulxc > 0 && amount > r.approval_above_ulxc) || overLine) {
       const ok = this.approvals.find((a) => a.agent_id === agent.id && a.fingerprint === req.fingerprint && a.status === 'approved')
       if (ok !== undefined) {
         ok.status = 'used'
@@ -958,7 +968,7 @@ export class Bank {
       // B50.18 — an allowance lets a payment through, but not one already waiting for its own tap.
       // STUB_BREAK=allow-releases-waiting lets the waiting one through too.
       const allow = req.payee === undefined ? undefined : r.payee_allowances?.[req.payee.id]
-      if (allow !== undefined) {
+      if (allow !== undefined && !overLine) {
         const since = new Date().toISOString().slice(0, allow.per === 'day' ? 10 : 7)
         const paid = this.postings.filter((p) => p.account === `agent:${agent.id}` && p.kind === 'pay' && p.amount_ulxc < 0 && p.at >= since &&
           p.counterparty === `agent:${req.payee?.id}`).reduce((s, p) => s - p.amount_ulxc, 0)
@@ -967,7 +977,8 @@ export class Bank {
       }
       const a: Approval = { id: id('apr_'), ws: agent.ws, agent_id: agent.id, amount_ulxc: amount, model: req.model ?? '', status: 'pending',
         created_at: new Date().toISOString(), fingerprint: req.fingerprint,
-        ...(req.payee === undefined ? {} : { payee: { kind: 'agent', id: req.payee.id, name: req.payee.name } }), ...(req.memo ? { memo: req.memo } : {}) }
+        ...(req.payee === undefined ? {} : { payee: { kind: 'agent', id: req.payee.id, name: req.payee.name } }), ...(req.memo ? { memo: req.memo } : {}),
+        ...(overLine ? { over_second_approver_line: true } : {}) }
       this.approvals.unshift(a)
       return { status: 403, error: `economy: this request would cost up to ${lxc(amount)} LXC, above the agent's approval amount — approval ${a.id} must be approved by the workspace's owner before it is retried`,
         approval_id: a.id }
@@ -1357,6 +1368,22 @@ export class Bank {
       return this.workspaceRoute(req, res, ws, approve[2], new URL(path, this.d.base))
     }
     return json(res, 403, { error: 'auth: a Connect token may only pay from its own agent' }), true
+  }
+
+  /**
+   * B17.537 — a role session (Lens B28.342), minted on POST /v1/provision/roles: an Approver or an Admin reads and decides the
+   * workspace's approvals as that person, and every other route refuses it 403.
+   */
+  async roleSession(req: IncomingMessage, res: ServerResponse, bearer: string, path: string): Promise<boolean> {
+    if (await this.second.provision(req, res, path)) return true
+    const s = this.second.session(bearer)
+    if (s === undefined) return false
+    const m = /^\/v1\/workspaces\/([^/]+)(\/agents\/approvals(?:\/[^/]+\/(?:approve|deny))?)$/.exec(path)
+    const ws = this.d.workspace(s.ws)
+    if (m === null || m[1] !== s.ws || ws === undefined || !APPROVAL_ROLES.includes(s.role)) {
+      return this.d.json(res, 403, { error: "only the workspace's owner, an admin or a person whose role allows it may do this" }), true
+    }
+    return this.workspaceRoute(req, res, ws, m[2], new URL(path, this.d.base), undefined, `user:${s.person}`)
   }
 
   async agentPay(req: IncomingMessage, res: ServerResponse, key: string, path: string): Promise<boolean> {
@@ -2707,12 +2734,14 @@ export class Bank {
   }
 
   /** A route under /v1/workspaces/{ws}: answers true when it was one of the bank's or the marketplace's. */
-  async workspaceRoute(req: IncomingMessage, res: ServerResponse, ws: BankWorkspace, rest: string, url: URL, agent?: Agent): Promise<boolean> {
+  async workspaceRoute(req: IncomingMessage, res: ServerResponse, ws: BankWorkspace, rest: string, url: URL, agent?: Agent,
+    person = agent === undefined ? `user:${ws.id}` : ''): Promise<boolean> {
     const { json } = this.d
     const method = req.method ?? 'GET'
     const now = new Date().toISOString()
     let m: RegExpExecArray | null
     if (rest === '/agents' && method === 'GET') return json(res, 200, this.book(ws)), true
+    if (agent === undefined && await this.second.route(req, res, ws.id, rest)) return true
     if (await this.launch.route(req, res, ws.id, rest)) return true
     if (agent === undefined && await this.cryptoWallets.route(req, res, ws.id, rest)) return true
     if (await this.spendPermissions.route(req, res, ws.id, rest, agent?.id ?? '')) return true
@@ -2779,6 +2808,15 @@ export class Bank {
         if (refused !== undefined) return json(res, 403, { error: refused }), true
       } else if ((keys.length > 0 || this.devices.any(ws.id)) && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
         return json(res, 403, { error: 'economy: approvals in this workspace are signed: approve with a registered passkey' }), true
+      }
+      // B28.315 — over the second-approver line the first person's approval leaves it pending; the second, by another, approves it.
+      if (m[2] === 'approve' && a.over_second_approver_line === true) {
+        const two = this.second.approve(ws.id, a, person)
+        if (two === 'waiting') {
+          const { fingerprint: _f, ws: _w, ...out } = a
+          return json(res, 200, out), true
+        }
+        if (two !== undefined) return json(res, two.status, two.body), true
       }
       // B57.87 — STUB_BREAK=approval-signed-unkept answers a signed approve 200 and leaves the approval pending.
       if (!(m[2] === 'approve' && this.broken('approval-signed-unkept'))) {
