@@ -197,17 +197,37 @@ export function everyScreen(): Scenario {
 }
 
 /** B29.2, B58.16, B17.475 — the dark planes, as the browser paints them: the canvas is Pocket's page #0F1013
- *  (packages/ui/src/theme.css), the logo kit's dark page, and the sidebar is a solid page panel set apart by its
- *  hairline #2A2E36, as Pocket Live draws it (design/pocket-live DESIGN.md: "The sidebar stays a solid `page` panel
- *  with its hairline"). brand-v4's Obsidian and Surface are retired. */
-export const DARK_PLANES = { canvas: 'rgb(15, 16, 19)', sidebar: 'rgb(15, 16, 19)', hairline: 'rgb(42, 46, 54)' } as const
+ *  (packages/ui/src/theme.css), the logo kit's dark page.
+ *  B17.567 — since B61.125 (Pocket Live, 26 Nov pass, DESIGN.md section 6.0, which wins over the rest of section 6) the
+ *  sidebar beside the page is glass: the page colour at 30% over a 26 px blur, with a hairline of ink #F2F3F5 at 9% on
+ *  its right edge. The browser writes a colour-mixed plane as color(srgb …), so each plane is read as its four numbers. */
+export const DARK_PLANES = {
+  canvas: { rgba: [15, 16, 19, 1], says: 'rgb(15, 16, 19)' },
+  sidebar: { rgba: [15, 16, 19, 0.3], says: 'the page #0F1013 at 30%' },
+  hairline: { rgba: [242, 243, 245, 0.09], says: 'ink #F2F3F5 at 9%' },
+} as const
+export const SIDEBAR_BLUR = 'blur(26px)'
+
+/** rgb(…), rgba(…) or color(srgb …) as 0–255 channels and an alpha; null for anything else. */
+export function readColour(css: string): [number, number, number, number] | null {
+  const srgb = /^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)$/.exec(css)
+  if (srgb !== null) return [Number(srgb[1]) * 255, Number(srgb[2]) * 255, Number(srgb[3]) * 255, srgb[4] === undefined ? 1 : Number(srgb[4])]
+  const rgb = /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(css)
+  if (rgb !== null) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), rgb[4] === undefined ? 1 : Number(rgb[4])]
+  return null
+}
+
+function samePlane(css: string, want: readonly number[]): boolean {
+  const got = readColour(css)
+  return got !== null && got.every((v, i) => Math.abs(v - want[i]!) <= (i === 3 ? 0.01 : 1))
+}
 
 export function brandPlanes(): Scenario {
   return {
     id: 'brand-planes',
     owner: 'talyvor-suite',
-    items: ['B29.2', 'B58.16', 'B17.475'],
-    title: 'in the dark theme the page canvas and the sidebar are Pocket’s page, the sidebar set apart by its hairline',
+    items: ['B29.2', 'B58.16', 'B17.475', 'B17.567'],
+    title: 'in the dark theme the page canvas is Pocket’s page and the sidebar is its glass, set apart by its hairline',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
@@ -221,14 +241,16 @@ export function brandPlanes(): Scenario {
             canvas: bg(document.body),
             sidebar: bg(aside),
             hairline: aside === null || getComputedStyle(aside).borderRightWidth === '0px' ? 'no hairline' : getComputedStyle(aside).borderRightColor,
+            blur: aside === null ? 'no element' : getComputedStyle(aside).backdropFilter,
           }
         })
-        ctx.evidence.push({ note: `dark: canvas ${seen.canvas}, sidebar ${seen.sidebar}, its hairline ${seen.hairline}` })
+        ctx.evidence.push({ note: `dark: canvas ${seen.canvas}, sidebar ${seen.sidebar} over ${seen.blur}, its hairline ${seen.hairline}` })
         const wrong = (Object.keys(DARK_PLANES) as (keyof typeof DARK_PLANES)[])
-          .filter((k) => seen[k] !== DARK_PLANES[k])
-          .map((k) => `the ${k} is ${seen[k]}, not ${DARK_PLANES[k]}`)
+          .filter((k) => !samePlane(seen[k], DARK_PLANES[k].rgba))
+          .map((k) => `the ${k} is ${seen[k]}, not ${DARK_PLANES[k].says}`)
+        if (!seen.blur.includes(SIDEBAR_BLUR)) wrong.push(`the sidebar's glass is ${seen.blur}, not over a ${SIDEBAR_BLUR}`)
         return wrong.length === 0
-          ? { pass: true, detail: `dark canvas ${seen.canvas} and sidebar ${seen.sidebar} with its hairline ${seen.hairline}, as Pocket Live draws them` }
+          ? { pass: true, detail: `dark canvas ${seen.canvas} and the sidebar's glass ${seen.sidebar} over ${seen.blur} with its hairline ${seen.hairline}, as Pocket Live draws them` }
           : { pass: false, detail: wrong.join('; '), where: ['/'] }
       } finally {
         await page.close()
