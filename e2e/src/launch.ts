@@ -64,7 +64,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'daily-reconciliation', 'ledger-call-once', 'ledger-moves-at-once', 'money-accounts', 'money-layer-contract', 'openapi-wallets', 'status-money-rails',
     'status-truth', 'terms-credential-screens', 'wallet-brand', 'wallet-cash-out', 'wallet-currency', 'wallet-fx', 'wallet-pots', 'pocket-20',
   ],
-  cards: ['agent-cards', 'card-dispute-screen', 'physical-card', 'wallet-card', 'wallet-card-freeze', 'wallet-card-purchase'],
+  cards: ['agent-cards', 'card-dispute-screen', 'physical-card', 'single-use-card-screen', 'wallet-card', 'wallet-card-freeze', 'wallet-card-purchase'],
   payments: [
     'agent-approval', 'agent-approval-denied', 'agent-approval-push', 'approval-own-request', 'approval-reused', 'approvals-badge',
     'approvals-inbox', 'approve-always-allow', 'batch-approval-pays-once', 'bills-duplicate-changed-details', 'bills-inbox',
