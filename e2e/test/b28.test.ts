@@ -88,6 +88,13 @@ describe('B28.293 — every DONE B28 feature, with the scenarios that test it', 
     expect(b28ItemsFor(q, r, 'docs/e2e/report.md').filed).toEqual([])
   })
 
+  it('B28.461 (five wrong step-up codes and step-up waits) reads as no scenario can reach it, and files nothing', () => {
+    const q = '## B28.461 — A step-up code cannot be guessed: five wrong codes and step-up waits\nrepo: talyvor-lens · deps: B28.264 · status: DONE 26d15b5\n'
+    const r = b28Report(q, new Map(), [])
+    expect(r.features).toMatchObject([{ id: 'B28.461', state: 'cannot' }])
+    expect(b28ItemsFor(q, r, 'docs/e2e/report.md').filed).toEqual([])
+  })
+
   it("every item a scenario in the catalog names is a build item's id", () => {
     const named = [...scenarioItems().values()].flat()
     expect(named.length).toBeGreaterThan(0)

@@ -61,6 +61,7 @@ export const NO_SCENARIO: Readonly<Record<string, string>> = {
   'B28.442': "Track's check of the BFF's signed assertion; production serves Track only to the BFF, on 127.0.0.1, so no forged one can be sent from outside",
   'B28.243': "Lens's answer when its own database fails a key lookup; nothing a person or an agent sends makes Lens's store fail, and Lens's own tests inject that store error on every pull request",
   'B28.264': "the operator's own actions on Lens's global admin key with the operator's authenticator code (approving the LENS→LXC rate, revoking held payouts, granting LXC), which no person or agent holds; a probe of the refusal on the live Lens would, the night the gate went missing, take the action for real, so Lens's own tests prove the code-less refusal and the audit row on every pull request",
+  'B28.461': "the wait after five wrong step-up codes, on routes behind Lens's global admin key and the operator's authenticator code, which no person or agent holds; five wrong codes sent to the live Lens would lock the operator out of every step-up action for 15 minutes, every night, so Lens's own tests (internal/stepup, a real-Postgres test across two replicas, and cmd/lens/step_up_guesses_test.go) prove the count, the wait and its one audit row on every pull request",
   'B28.460': "the red team's own admin-gate-lens control in hostile.ts, which the red team runs against Lens's main every night; nothing a person or an agent does reaches it",
 }
 
