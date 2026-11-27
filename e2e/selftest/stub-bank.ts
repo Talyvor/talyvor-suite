@@ -2717,6 +2717,8 @@ export class Bank {
       if (!walletKindOK(wallet_kind, fiat_currency)) return json(res, 400, { error: WALLET_KIND_REFUSED }), true
       const a: Agent = { id: id('agt_'), ws: ws.id, name, owner_user_id: ws.id, created_at: now, keys: [], rules: noRules(), wallet_kind, fiat_currency }
       this.agents.set(a.id, a)
+      // B59.6, B48.1 — and Lens opens the wallets of its kind as it creates it (openNewAgentWallet): a `both` agent already holds its EUR account.
+      for (const asset of walletAssets(a)) this.payees.wallet(ws.id, a.id, asset)
       return json(res, 201, { ...a, rules: undefined, balance_ulxc: 0, spent_ulxc: 0 }), true
     }
     // B48.1 — the owner's wallet in each asset their agents' wallets are in.
