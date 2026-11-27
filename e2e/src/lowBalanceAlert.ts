@@ -71,7 +71,9 @@ export function lowBalanceAlert({ screen = true }: { screen?: boolean } = {}): S
       const page = screen ? await ctx.app.tab(`/agents/${encodeURIComponent(agent.id)}`) : undefined
       try {
         if (page !== undefined) {
-          const row = page.getByTestId('agent-page-low-balance').getByTestId('low-balance-GBP')
+          const card = page.getByTestId('agent-page-low-balance')
+          await card.waitFor({ timeout: TIMEOUT_MS })
+          const row = card.getByTestId('low-balance-GBP')
           await row.getByRole('textbox', { name: 'Low balance amount, GBP' }).fill('25.00', { timeout: TIMEOUT_MS })
           await row.getByRole('button', { name: 'Save', exact: true }).click()
           const saved = await row.getByText('Below', { exact: true }).waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
