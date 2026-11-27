@@ -197,6 +197,59 @@ export function requestBodyBounded(): Scenario {
   }
 }
 
+/** B28.435 — the most Lens reads of one JSON-RPC message to /mcp (internal/mcp maxRPCBody); past it, 413. */
+export const LENS_MCP_BODY_CAP = 4 << 20
+/** B28.435 — how long an 8 MiB message may take to send and be answered, from the nightly's machine to Lens. */
+const MCP_UPLOAD_MS = 120_000
+
+/**
+ * B28.435 — Lens bounds every request body it takes. On the workspace's own token, as the Claude connector or an agent's
+ * software calls it, Lens's /mcp lists its tools, the control; then the same tools/list padded to twice the 4 MiB Lens
+ * reads of one message is refused 413 (or cut off once Lens has answered it, as a bounded read may hang up on the rest),
+ * never decoded and answered; and /mcp lists its tools after.
+ *
+ * Its other halves are out of reach from outside: the synthetic routes are the harness's own, and a node's /inference,
+ * /attest and /challenge, the embedding node's /embed and the caps on what a node or the pair verifier answers Lens are the
+ * old gateway's nodes, held until the partner is live (Nick, 11 Nov). Lens's own b28435 tests prove each on every pull request.
+ */
+export function mcpBodyBounded(): Scenario {
+  return {
+    id: 'mcp-body-bounded',
+    owner: 'talyvor-lens',
+    feature: 'Talyvor Connect',
+    items: ['B28.435'],
+    title: `Lens's /mcp lists its tools; the same message padded to ${(2 * LENS_MCP_BODY_CAP) >> 20} MiB is refused 413, never decoded, and /mcp lists its tools after`,
+    run: async (ctx) => {
+      const { app, env } = ctx
+      const message = (id: number, pad?: string) => Buffer.from(JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/list', params: pad === undefined ? {} : { pad } }))
+      const send = (body: Buffer<ArrayBuffer>) => env.lens.upload(app.user.token, '/mcp', body, 'application/json', MCP_UPLOAD_MS)
+      const tools = (text: string): number => parsed<{ result?: { tools?: unknown[] } }>(text)?.result?.tools?.length ?? 0
+      const lists = async (when: string): Promise<string | undefined> => {
+        const r = await send(message(1))
+        ctx.evidence.push({ note: `tools/list on /mcp ${when}: ${r.status} in ${r.ms} ms, ${r.text.slice(0, 200)}` })
+        return r.status === 200 && tools(r.text) > 0 ? undefined : `tools/list on /mcp ${when} answered ${r.status} ${r.text.slice(0, 200)}, not its tools`
+      }
+      const control = await lists('before')
+      if (control !== undefined) return fail(`${control}, so a refusal of a bigger message proves nothing`)
+
+      const big = message(2, 'x'.repeat(2 * LENS_MCP_BODY_CAP))
+      const b = await send(big)
+      ctx.evidence.push({ note: `tools/list padded to ${big.length} bytes: ${b.status} in ${b.ms} ms, ${b.text.slice(0, 200)}` })
+      const wrong: string[] = []
+      const refused = b.status === 413 ? 'refused 413' : b.status === 0 && !/timeout|abort/i.test(b.text) ? `cut off (${b.text.slice(0, 80)})` : undefined
+      if (refused === undefined) {
+        wrong.push(`a ${big.length}-byte message to /mcp, over the ${LENS_MCP_BODY_CAP} bytes Lens reads of one, answered ${b.status} after ${b.ms} ms ` +
+          `${b.text.slice(0, 160)}${b.status === 200 ? `: decoded and answered${tools(b.text) > 0 ? ' with the tools' : ''}` : ', not 413'}`)
+      }
+      const still = await lists('after')
+      if (still !== undefined) wrong.push(still)
+      return wrong.length === 0
+        ? { pass: true, detail: `/mcp lists its tools; a ${big.length}-byte message ${refused} in ${b.ms} ms; and /mcp lists its tools after` }
+        : fail(wrong.join('; '))
+    },
+  }
+}
+
 // ─── money in pounds and euros, and LENS converted to LXC ─────────────────────
 
 /** The ECB's daily euro reference rates, read from the file the BFF and Lens read (fx.go, Lens internal/ecbrate). */

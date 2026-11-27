@@ -1630,7 +1630,12 @@ createServer(async (req, res) => {
     if (await physicalCards.route(req, res, ws.id, p)) return
     // B28.349 — Lens's MCP JSON-RPC route, on the workspace's own token: Chat's read-only wallet tool.
     if (p === '/mcp' && req.method === 'POST') {
-      const rpc = JSON.parse((await read(req)) || '{}') as Parameters<Bank['mcp']>[1] & { params?: { arguments?: Record<string, unknown> } }
+      const raw = await read(req)
+      // B28.435 — Lens reads at most 4 MiB of one message and answers 413; STUB_BREAK=mcp-unbounded decodes it whatever its size.
+      if (Buffer.byteLength(raw) > 4 << 20 && !broke('mcp-unbounded')) {
+        return json(res, 413, { jsonrpc: '2.0', id: null, error: { code: -32600, message: `Request too large: at most ${4 << 20} bytes` } })
+      }
+      const rpc = JSON.parse(raw || '{}') as Parameters<Bank['mcp']>[1] & { params?: { arguments?: Record<string, unknown> } }
       // STUB_BREAK=tool-fetch (B28.284) — a tool reaches every address its arguments name.
       if (broke('tool-fetch')) for (const v of Object.values(rpc.params?.arguments ?? {})) if (typeof v === 'string' && /^https?:\/\//.test(v)) await fetch(v).catch(() => undefined)
       const answer = bank.mcp(ws.id, rpc) as { result?: { content?: { type: string; text: string }[] } }
