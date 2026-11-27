@@ -185,6 +185,7 @@
 //   second-approver-one-approval — the first approval above the line approves the payment
 // B17.540 adds what each role may do, and a role taken away (stub-second-approver.ts):
 //   role-viewer-funds — a Viewer's fund moves the money
+//   role-finance-approves — B17.545: a Finance session decides approvals
 //
 // B17.509 adds every wallet list as a CSV (talyvor-lens B28.332): ?format=csv on the approvals, the schedules and an agent's
 // transfers answers the same list as name.csv, one row per item under a header of its fields. Its defect:

@@ -17,6 +17,7 @@
 // Finance and Admin fund and withdraw (moneyRoles), Approver and Admin decide approvals (approvalRoles); anything else is 403.
 // Its defect:
 //   role-viewer-funds — a Lens without B28.70's roles on the money routes: a Viewer's fund moves the money
+//   role-finance-approves — B17.545: a Lens whose Finance role also decides approvals (B28.342 keeps them the Approver's)
 
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -64,7 +65,7 @@ export class SecondApproverDesk {
 
   /** B17.540 — whether a session of role may send method to rest under its workspace (cmd/lens ownerOrRole). */
   may(role: string, method: string, rest: string): boolean {
-    if (/^\/agents\/approvals(?:\/[^/]+\/(?:approve|deny))?$/.test(rest)) return APPROVAL_ROLES.includes(role)
+    if (/^\/agents\/approvals(?:\/[^/]+\/(?:approve|deny))?$/.test(rest)) return APPROVAL_ROLES.includes(role) || (this.broken('role-finance-approves') && role === 'finance')
     if (/^\/agents\/[^/]+\/summary$/.test(rest) && method === 'GET') return ROLES.includes(role)
     if (/^\/agents\/[^/]+\/(?:fund|withdraw)$/.test(rest) && method === 'POST') return this.broken('role-viewer-funds') || MONEY_ROLES.includes(role)
     return false
