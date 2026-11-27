@@ -1579,6 +1579,7 @@ createServer(async (req, res) => {
     if (await bank.mandatePull(req, res, p)) return
     // B32.81 — the market_* MCP tools on an agent's own key.
     if (await bank.connect(req, res, bearer, p)) return // B52.34: Connect tokens and their mint
+    if (await bank.roleSession(req, res, bearer, p)) return // B17.537: role sessions and their mint
     if (await bank.agentMCP(req, res, bearer, p)) return
     if (await bank.agentPay(req, res, bearer, p)) return
     if (await bank.agentApprove(req, res, bearer, p)) return // B45.28: an approver agent, on its own key
