@@ -4,8 +4,9 @@
 // 14 or 15 (the Test partner's failed, returned and pending), one to a payee id that does not exist and one whose amount is "ten
 // pounds". The batch must answer 48 valid and those two invalid with their reasons, and move nothing: the account's balance is
 // where it was and its statement holds no payment out. Approved once, each valid row is paid: 48 payments out on the account's
-// statement and its balance down by exactly the batch's total. Approved again, it pays nothing twice: still 48, the balance where
-// the first approval left it.
+// statement and its balance down by exactly the batch's total and the fees it states beside it (B17.577: the plan's local
+// payments past the month's free ones cost its fee each, Lens B17.564). Approved again, it pays nothing twice: still 48, the
+// balance where the first approval left it.
 
 import { randomBytes, randomUUID } from 'node:crypto'
 import { fail } from './bank.ts'
@@ -19,8 +20,9 @@ const CAPABILITIES = ['currency_accounts', 'payments_in', 'payments_out']
 const gbp = (minor: number): string => `£${(minor / 100).toFixed(2)}`
 
 /** A payout batch as Lens answers it (economy.PayoutBatch). */
-interface Row { line: number; payee_id: string; amount_minor: number; currency: string; reference: string; status: string; payment_id?: string; detail?: string }
-interface Batch { id: string; status: string; rows?: Row[] | null; rows_total: number; rows_valid: number; rows_invalid: number; totals_minor: Record<string, number> | null }
+interface Row { line: number; payee_id: string; amount_minor: number; fee_minor?: number; currency: string; reference: string; status: string; payment_id?: string; detail?: string }
+interface Batch { id: string; status: string; rows?: Row[] | null; rows_total: number; rows_valid: number; rows_invalid: number; totals_minor: Record<string, number> | null
+  fees_minor?: Record<string, number> | null }
 interface Account { id: string; test_minor: number }
 interface Statement { lines: { entry_id?: string; line?: number; kind?: string; amount_minor: number }[] | null }
 
@@ -120,6 +122,7 @@ export function bulkPayouts(): Scenario {
           wrong.push(`it must count 50 rows, ${GOOD_ROWS} valid and 2 invalid; it counts ${batch.rows_total}, ${batch.rows_valid} and ${batch.rows_invalid}`)
         }
         if ((batch.totals_minor?.GBP ?? 0) !== total) wrong.push(`its total must be the good rows' ${gbp(total)}; it is ${JSON.stringify(batch.totals_minor)}`)
+        if (batch.fees_minor == null) wrong.push('it must state its fees beside its total (fees_minor); it states none')
         if (unknown?.status !== 'invalid' || !/payee/i.test(unknown.detail ?? '')) wrong.push(`the row to an unknown payee must be invalid naming the payee; it reads ${JSON.stringify(unknown)}`)
         if (words?.status !== 'invalid' || !/ten pounds/.test(words.detail ?? '')) wrong.push(`the row of "ten pounds" must be invalid naming its amount; it reads ${JSON.stringify(words)}`)
         const valid = got.filter((r) => r.status === 'valid')
@@ -133,7 +136,9 @@ export function bulkPayouts(): Scenario {
           return fail(`an upload awaiting approval moved money: the account ${gbp(before)} → ${gbp(afterUpload)}, with ${earlyOut.length} payments out on its statement`)
         }
 
-        // 5. Approved once: each valid row paid, 48 payments out, the balance down by exactly the total.
+        // 5. Approved once: each valid row paid, 48 payments out, the balance down by exactly the total and its stated fees.
+        const fees = batch.fees_minor?.GBP ?? 0
+        const leaves = total + fees
         const approved = await step<Batch>('POST', `/v1/money/payouts/${batch.id}/approve`, {}, `the owner approves batch ${batch.id}`)
         if (approved.status !== 200 || approved.value === undefined) return fail(`the owner's approval of batch ${batch.id} must answer 200; Lens answered ${said(approved)}`)
         const paid = (approved.value.rows ?? []).filter((r) => r.payment_id !== undefined && r.payment_id !== '')
@@ -143,8 +148,9 @@ export function bulkPayouts(): Scenario {
         const afterFirst = await holds("the company's account after the approval")
         const firstOut = await paidOut("the company's statement after the approval")
         const firstSum = firstOut.reduce((n, l) => n + l.amount_minor, 0)
-        if (afterFirst !== before - total || firstOut.length !== GOOD_ROWS || firstSum !== -total) {
-          return fail(`approved once, ${GOOD_ROWS} payments out of ${gbp(total)} in all must leave the account: ${gbp(before)} → ${gbp(afterFirst)}, ` +
+        if (afterFirst !== before - leaves || firstOut.length !== GOOD_ROWS || firstSum !== -leaves) {
+          return fail(`approved once, ${GOOD_ROWS} payments out of ${gbp(total)} and their ${gbp(fees)} of fees, ${gbp(leaves)} in all, must leave the account: ` +
+            `${gbp(before)} → ${gbp(afterFirst)}, ` +
             `with ${firstOut.length} payments out on its statement summing to ${gbp(-firstSum)}`)
         }
 
@@ -159,7 +165,7 @@ export function bulkPayouts(): Scenario {
         return {
           pass: true,
           detail: `a CSV of 50 payouts read ${GOOD_ROWS} valid and 2 invalid — the unknown payee ("${unknown?.detail}") and "ten pounds" ("${words?.detail}") — ` +
-            `and moved nothing; approved once, ${GOOD_ROWS} payments out took ${gbp(total)} from the company's account, ${gbp(before)} → ${gbp(afterFirst)}; ` +
+            `and moved nothing; approved once, ${GOOD_ROWS} payments out took ${gbp(total)} and ${gbp(fees)} of fees from the company's account, ${gbp(before)} → ${gbp(afterFirst)}; ` +
             `approved again, still ${GOOD_ROWS} and ${gbp(afterAgain)}`,
         }
       } catch (e) {
