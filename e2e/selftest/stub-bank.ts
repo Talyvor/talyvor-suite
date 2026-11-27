@@ -3141,7 +3141,9 @@ export class Bank {
             spent_ulxc: 0, forecast_ulxc: 0, runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: a.rules.monthly_limit_ulxc ?? 0 },
           approvals: [], statement: [], statement_time_zone: 'UTC',
           rules: latest === undefined ? null : { version: latest.version, saved_at: latest.created_at },
-          card: { status: 'none', last_declined: null }, currency_accounts: [],
+          // B17.515 — the agent's open accounts, as the Low balance alert card lists them.
+          card: { status: 'none', last_declined: null },
+          currency_accounts: this.payees.accountsOf(ws.id).filter((x) => x.purpose === 'agent' && x.agent_id === a.id && x.status === 'open'),
         }), true
       }
       if (action === '/rules' && method === 'GET') return json(res, 200, a.rules), true
