@@ -56,7 +56,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'agent-archive', 'agent-hourly-limit', 'agent-limit', 'agent-limit-boost', 'agent-model-limit', 'agent-open-fund',
     'agent-pause-all', 'agent-payee-daily-cap', 'agent-payee-lists', 'agent-request-rate', 'agent-resume-signed',
     'agent-rule-simulator', 'agent-rule-template', 'agent-rules-rollback', 'agent-rules-unbypassable', 'agent-wallets-empty',
-    'first-agent', 'kya-credential', 'sdk-wallet-quickstart', 'pocket-02', 'pocket-09', 'pocket-10',
+    'first-agent', 'kya-credential', 'request-body-bounded', 'sdk-wallet-quickstart', 'pocket-02', 'pocket-09', 'pocket-10',
     'phone-widget-pause', 'phone-stop-everything',
   ],
   wallets: [

@@ -2711,7 +2711,8 @@ export class Bank {
     }
     if (rest === '/agents' && method === 'POST') {
       // A workspace here is Hybrid (stub-launch.ts), whose new agent Lens makes both fiat and crypto (agentKindOf).
-      const { name = '', wallet_kind = 'both', fiat_currency: asked } = await this.body<{ name?: string; wallet_kind?: string; fiat_currency?: string }>(req)
+      const { name = '', wallet_kind: kind, fiat_currency: asked } = await this.body<{ name?: string; wallet_kind?: string; fiat_currency?: string }>(req)
+      const wallet_kind = kind || 'both' // the BFF sends "" when the owner picked none, and Lens opens the workspace's kind
       const fiat_currency = asked || 'EUR' // Lens's checkWalletKind reads "" as euros (B61.87 sends it empty when the account names none)
       if (name === '') return json(res, 400, { error: 'body must be {"name": "<agent name>"}' }), true
       if (!walletKindOK(wallet_kind, fiat_currency)) return json(res, 400, { error: WALLET_KIND_REFUSED }), true
