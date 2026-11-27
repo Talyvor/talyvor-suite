@@ -109,3 +109,46 @@ async function downloaded(ctx: ScenarioCtx, bank: AgentBankScreen, agent: Agent 
   ctx.evidence.push({ note: `${whose}'s statement from ${from} through ${through}: the PDF ${file.name} (${file.text.length} bytes) shows ${JSON.stringify(pdfBalances(file.text))}; the JSON ${JSON.stringify(json)}` })
   return { file, json }
 }
+
+/**
+ * B28.328 — the same PDF on Lens alone, as the owner's own software downloads it: an agent made with Lens's API, funded
+ * and some taken back, then its statement, and every agent wallet's, for yesterday and today with ?format=pdf, each held
+ * to the JSON statement for the same period, and the agent's closing to what Lens's book holds for it.
+ */
+export function statementPDFLens(seed: number): Scenario {
+  const funded = 2_000_000
+  const takenBack = 350_001
+  return {
+    id: 'statement-pdf-lens',
+    owner: 'talyvor-lens',
+    items: ['B28.328'],
+    agents: 1,
+    feature: 'Statements',
+    title: "an agent's statement, and every agent's, as a PDF from Lens opens and closes each account at the JSON statement's balance",
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const agent = await lens.createAgent(user, `Printed on Lens ${seed}`)
+      await lens.fundAgent(user, agent.id, funded)
+      await lens.withdrawAgent(user, agent.id, takenBack)
+
+      // Yesterday and today, UTC: the agent was made today in any time zone, so the period holds every posting it has.
+      const now = Date.now()
+      const [from, to] = [utcDay(now - DAY_MS), utcDay(now + DAY_MS)]
+      const held = agentIn(await bookOf(ctx), agent.id)?.balance_ulxc
+      if (held !== funded - takenBack) return fail(`${agent.name} was funded ${funded} µLXC and ${takenBack} taken back; Lens's book holds ${held ?? 'nothing'}`)
+      const account = `agent:${agent.id}`
+      const details: string[] = []
+      for (const path of [`agents/${agent.id}/statement`, 'agents/statement']) {
+        const got = await lens.as(user.token, 'GET', `/v1/workspaces/${user.workspaceID}/${path}?from=${from}&to=${to}&format=pdf`, undefined, { Accept: 'application/pdf' })
+        const name = /filename="([^"]+)"/.exec(got.headers.get('Content-Disposition') ?? '')?.[1] ?? `(no file name: ${got.status} ${got.headers.get('Content-Type') ?? ''})`
+        const json = await lens.agentPeriodBalances(user, path === 'agents/statement' ? undefined : agent.id, from, to)
+        ctx.evidence.push({ note: `GET ${path}?format=pdf from ${from} to ${to}: ${got.status} ${name} (${got.text.length} bytes) shows ${JSON.stringify(pdfBalances(got.text))}; the JSON ${JSON.stringify(json)}` })
+        const v = statementPDFVerdict({ name, text: got.text }, json, { account, held })
+        if (!v.pass) return v
+        details.push(v.detail)
+      }
+      return { pass: true, detail: details.join('; ') }
+    },
+  }
+}
