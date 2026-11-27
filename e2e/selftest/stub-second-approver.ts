@@ -2,6 +2,7 @@
 // second-approver scenario reads and writes:
 //
 //   GET/PUT /v1/workspaces/{ws}/roles               the roles the owner gave, by email; a role taken up names its user_id
+//   DELETE  /v1/workspaces/{ws}/roles?email=…       B17.540: the role taken away, 204, and every session it gave ended
 //   POST    /v1/provision/roles                     the BFF, on the provisioning secret: {"mode": "session"} mints a role session
 //   GET/PUT /v1/workspaces/{ws}/second-approver     who, and the amount above which an agent's payment needs them
 //   POST    /v1/workspaces/{ws}/second-approver/challenge
@@ -11,6 +12,11 @@
 // 403 second_approver_needed. A payment's µLXC is valued in dollars at Lens's $0.10 an LXC, rounded up; in any other currency it
 // counts as over. Its defect:
 //   second-approver-one-approval — a Lens without B28.40: the first approval above the line approves the payment
+//
+// B17.540 — what a role session may do (talyvor-lens B28.342, workspace_roles_handler.go): every role reads an agent's summary,
+// Finance and Admin fund and withdraw (moneyRoles), Approver and Admin decide approvals (approvalRoles); anything else is 403.
+// Its defect:
+//   role-viewer-funds — a Lens without B28.70's roles on the money routes: a Viewer's fund moves the money
 
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -24,10 +30,14 @@ export interface TwoApprovals { status: string; over_second_approver_line?: bool
 const ROLES = ['viewer', 'finance', 'approver', 'admin']
 /** The roles that may decide an approval (cmd/lens approvalRoles). */
 export const APPROVAL_ROLES = ['approver', 'admin']
+/** The roles that may move an agent's money (cmd/lens moneyRoles). */
+const MONEY_ROLES = ['finance', 'admin']
 
 export class SecondApproverDesk {
   private readonly roles = new Map<string, Role[]>()
-  private readonly sessions = new Map<string, { ws: string; person: string; role: string }>()
+  private readonly sessions = new Map<string, { ws: string; person: string; role: string; email: string }>()
+  /** B17.540 — the sessions a role taken away gave: refused 401 from then on. */
+  private readonly ended = new Set<string>()
   private readonly lines = new Map<string, Line>()
 
   private readonly json: Json
@@ -47,6 +57,19 @@ export class SecondApproverDesk {
     return this.sessions.get(bearer)
   }
 
+  /** B17.540 — whether bearer is a session whose role was taken away. */
+  endedSession(bearer: string): boolean {
+    return this.ended.has(bearer)
+  }
+
+  /** B17.540 — whether a session of role may send method to rest under its workspace (cmd/lens ownerOrRole). */
+  may(role: string, method: string, rest: string): boolean {
+    if (/^\/agents\/approvals(?:\/[^/]+\/(?:approve|deny))?$/.test(rest)) return APPROVAL_ROLES.includes(role)
+    if (/^\/agents\/[^/]+\/summary$/.test(rest) && method === 'GET') return ROLES.includes(role)
+    if (/^\/agents\/[^/]+\/(?:fund|withdraw)$/.test(rest) && method === 'POST') return this.broken('role-viewer-funds') || MONEY_ROLES.includes(role)
+    return false
+  }
+
   /** POST /v1/provision/roles on the provisioning secret: a person takes up the role their email holds in an account. */
   async provision(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
     if (path !== '/v1/provision/roles' || req.method !== 'POST') return false
@@ -63,7 +86,7 @@ export class SecondApproverDesk {
     role.signed_in = true
     role.user_id = person
     const token = `role_${randomBytes(16).toString('hex')}`
-    this.sessions.set(token, { ws: account_id, person, role: role.role })
+    this.sessions.set(token, { ws: account_id, person, role: role.role, email: role.email })
     return this.json(res, 200, { workspace_id: account_id, role: role.role, token, expires_at: new Date(Date.now() + 3600e3).toISOString() }), true
   }
 
@@ -82,6 +105,20 @@ export class SecondApproverDesk {
       if (had === undefined) list.push(given)
       this.roles.set(ws, list)
       return this.json(res, 200, given), true
+    }
+    if (rest === '/roles' && method === 'DELETE') {
+      const email = (new URL(req.url ?? '/', 'http://stub').searchParams.get('email') ?? '').toLowerCase()
+      const list = this.roles.get(ws) ?? []
+      if (!list.some((r) => r.email === email)) return this.json(res, 404, { error: 'that email has no role in this workspace' }), true
+      this.roles.set(ws, list.filter((r) => r.email !== email))
+      for (const [token, s] of this.sessions) {
+        if (s.ws === ws && s.email === email) {
+          this.sessions.delete(token)
+          this.ended.add(token)
+        }
+      }
+      res.writeHead(204).end()
+      return true
     }
     if (rest === '/second-approver' && method === 'GET') return this.json(res, 200, this.lines.get(ws) ?? { user_id: '', above_minor: 0, currency: '' }), true
     if ((rest === '/second-approver' && method === 'PUT') || (rest === '/second-approver/challenge' && method === 'POST')) {

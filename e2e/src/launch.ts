@@ -84,7 +84,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   ],
   connector: ['connect-approve', 'connect-contact', 'connect-mcp', 'connect-oauth', 'connect-pay', 'connect-recurring'],
   settings: [
-    'api-key-revoke', 'console-screens-draw', 'keys-unlisted', 'operator-compliance-boundary', 'seats-company', 'seats-studio',
+    'api-key-revoke', 'console-screens-draw', 'keys-unlisted', 'operator-compliance-boundary', 'seats-company', 'seats-studio', 'workspace-roles',
   ],
   support: ['help-complaint', 'help-no-dead-control', 'help-request', 'your-data-request'],
   legal: ['legal-pages-whole'],
