@@ -77,7 +77,9 @@ async function addPastTheSeats(page: Page, email: string): Promise<Added & { for
   const shown = ((await dialog.getByTestId('member-seats').innerText({ timeout: ACTION_TIMEOUT_MS }).catch(() => '')) ?? '').trim()
   const form = (await dialog.getByLabel('Email', { exact: true }).count()) > 0
   const plansLink = (await dialog.getByRole('link', { name: 'See plans' }).count()) > 0
-  await dialog.getByRole('button', { name: form ? 'Cancel' : 'Close', exact: true }).click()
+  // B17.580 — the dialog's round x is named Close too (CloseX's aria-label); the one with the word is its action.
+  const leave = form ? 'Cancel' : 'Close'
+  await dialog.getByRole('button', { name: leave, exact: true }).filter({ hasText: leave }).click()
   const origin = new URL(page.url()).origin
   const res = await page.request.post(`${origin}/api/members`, { headers: { Origin: origin }, data: { email, role: 'member' } })
   const body = (await res.json().catch(() => ({}))) as AddAnswer
