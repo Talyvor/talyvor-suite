@@ -100,6 +100,9 @@
 //   move-replay         — a move sent again under its key posts again
 //   move-race           — a withdrawal that lands while another move of the same agent is in flight answers 200 and posts nothing
 //
+// B28.324 adds Lens's statement search, filters and paging (cmd/lens writeStatementView): ?kind=, ?q=, ?limit=, ?cursor=. Its defect:
+//   statement-search-off — the period statement ignores ?kind=, ?q=, ?limit= and ?cursor=, as Lens did before B28.324
+//
 // B32.66 adds tax and weekly payouts (Lens B32.39–B32.42, stub-tax.ts): each billed use's tax on the bill, Talyvor's receipt
 // for each paid bill, the seller's weekly statements, and the synthetic payout run of talyvor-lens B32.99, which withholds a
 // seller with earnings and no tax details and pays one whose details are complete. Its defect, beside stub-tax.ts's two:
@@ -273,6 +276,44 @@ const BOOSTABLE = ['max_per_request_ulxc', 'hourly_limit_ulxc', 'daily_limit_ulx
 type BoostRule = (typeof BOOSTABLE)[number]
 /** B28.31 — Lens B28.307's agent_rules_versions: the rules as each change left them, newest first, by whom and how. */
 interface RulesVersion { version: number; rules: Rules; changed_by: string; change: string; created_at: string }
+interface PeriodLine { posting_id: number; entry_id: string; at: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string; balance_after_ulxc: number }
+interface PeriodStatement { lines: PeriodLine[]; next_cursor?: string }
+
+/**
+ * B28.324 — a period statement read as Lens's writeStatementView reads it: ?kind= (one or more, comma-separated) and ?q=
+ * keep only the lines of those kinds whose words hold q, any case; then ?limit= and ?cursor= page what is left newest
+ * first, each page's next_cursor the key of its last line. The accounts stay the whole period's.
+ */
+function statementView(st: PeriodStatement, url: URL): PeriodStatement | string {
+  const q = url.searchParams
+  let limit = 0
+  if (q.has('limit')) {
+    limit = Number(q.get('limit'))
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return 'limit must be between 1 and 1000'
+  }
+  const kinds = q.getAll('kind').flatMap((v) => v.split(',')).map((k) => k.trim())
+  if (kinds.some((k) => k === '' || k.length > 64)) return 'kind must be one or more line kinds, comma-separated'
+  const search = (q.get('q') ?? '').trim().toLowerCase()
+  if (search.length > 200) return 'q must be at most 200 characters'
+  let lines = st.lines.filter((l) => (kinds.length === 0 || kinds.includes(l.kind)) &&
+    (search === '' || [l.kind, l.account, l.counterparty, l.ref ?? '', l.entry_id].join('\n').toLowerCase().includes(search)))
+  if (limit === 0 && !q.has('cursor')) return { ...st, lines }
+  const key = (l: PeriodLine) => `${new Date(l.at).getTime() * 1000}.${l.posting_id}.0`
+  const newer = (a: PeriodLine, b: PeriodLine) => new Date(b.at).getTime() - new Date(a.at).getTime() || b.posting_id - a.posting_id
+  lines = [...lines].sort(newer)
+  const cursor = q.get('cursor') ?? ''
+  let start = 0
+  if (cursor !== '') {
+    const at = lines.findIndex((l) => key(l) === cursor)
+    if (at < 0) return 'cursor must be the next_cursor of a page of this statement'
+    start = at + 1
+  }
+  const end = limit > 0 ? Math.min(start + limit, lines.length) : lines.length
+  const page: PeriodStatement = { ...st, lines: lines.slice(start, end) }
+  delete page.next_cursor
+  return end < lines.length ? { ...page, next_cursor: key(lines[end - 1]) } : page
+}
+
 interface Posting { posting_id: number; entry_id: string; at: string; ws: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string; model?: string }
 interface Approval {
   id: string; ws: string; agent_id: string; amount_ulxc: number; model: string; status: string; created_at: string; decided_at?: string; fingerprint: string
@@ -1110,7 +1151,10 @@ export class Bank {
   private answerStatement(res: ServerResponse, st: object | string, url: URL): void {
     if (typeof st === 'string') return this.d.json(res, 400, { error: st })
     const format = url.searchParams.get('format')
-    if (format !== 'csv' && format !== 'pdf' && format !== 'journal') return this.d.json(res, 200, st)
+    if (format !== 'csv' && format !== 'pdf' && format !== 'journal') {
+      const view = this.broken('statement-search-off') ? st : statementView(st as PeriodStatement, url)
+      return typeof view === 'string' ? this.d.json(res, 400, { error: view }) : this.d.json(res, 200, view)
+    }
     const s = st as { from: string; to: string; accounts: { account: string; opening_ulxc: number; closing_ulxc: number }[];
       lines: { posting_id: number; entry_id: string; at: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string; balance_after_ulxc: number }[] }
     if (format === 'journal') return this.answerJournal(res, s)
@@ -3088,7 +3132,7 @@ export class Bank {
         return json(res, 200, a.rules), true
       }
       if (action === '/statement' && method === 'GET') {
-        if (['from', 'to', 'format'].some((k) => url.searchParams.has(k))) {
+        if (['from', 'to', 'format', 'cursor', 'kind', 'q'].some((k) => url.searchParams.has(k))) {
           return this.answerStatement(res, this.statement(ws.id, a.id, url), url), true
         }
         const own = this.postings.filter((p) => p.account === `agent:${a.id}`)
