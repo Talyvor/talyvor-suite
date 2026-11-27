@@ -77,7 +77,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   ],
   'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote', 'instant-transfer-send'],
   activity: [
-    'account-statements', 'agent-analytics', 'alert-channels', 'budgets-by-category', 'coach-week', 'daily-briefing',
+    'account-statements', 'agent-analytics', 'agent-analytics-lens', 'alert-channels', 'budgets-by-category', 'coach-week', 'daily-briefing',
     'ledger-reads-correctly', 'limit-alerts', 'month-plan', 'spend-notice-push', 'spending-screen', 'statement-journal',
     'statement-line-kinds', 'statement-paging', 'statement-pdf', 'statement-reconciles', 'statement-search', 'wallet-statements', 'pocket-21',
     'pocket-23', 'pocket-24', 'pocket-25',
