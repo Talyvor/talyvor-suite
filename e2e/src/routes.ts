@@ -11,7 +11,7 @@
 import { createECDH, randomBytes, randomUUID } from 'node:crypto'
 import type { AgentLine, AgentTransfer, Answered, Escrow, Listing, Loan, MoneyRequest, SyntheticUser } from './lens.ts'
 import { refusalOf } from './lens.ts'
-import { fail, lxcText } from './bank.ts'
+import { csvRows, fail, lxcText } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
 import { otherCompany, until } from './trade.ts'
 import { CannotTest, type Scenario, type ScenarioCtx, type Verdict } from './scenarios.ts'
@@ -35,6 +35,31 @@ export async function bff<T>(ctx: ScenarioCtx, method: string, path: string, bod
   }, { m: method, p: path, b: body === undefined ? null : body })
   if (r.status >= 200 && r.status < 300) return { ok: true, status: r.status, value: (r.text === '' ? null : JSON.parse(r.text)) as T }
   return { ok: false, status: r.status, error: refusalOf(r.text) }
+}
+
+/**
+ * B17.505 — a wallet list downloaded from the app as its Download CSV button does (B28.59: the BFF relays Lens's
+ * ?format=csv): it must answer 200 text/csv as key.csv, one row per item of the same route's JSON list, the same ids in
+ * the same order, holding every id in `want`. Undefined when it does, else what is wrong.
+ */
+async function listAsCsv(ctx: ScenarioCtx, what: string, path: string, key: string, want: readonly string[]): Promise<string | undefined> {
+  const listed = await bff<Record<string, { id: string }[] | null>>(ctx, 'GET', path)
+  if (!listed.ok) return `listing ${what} in the app was refused: ${listed.status} ${listed.error}`
+  const file = await ctx.app.page.evaluate(async (p) => {
+    const res = await fetch(p, { credentials: 'same-origin' })
+    return { status: res.status, type: res.headers.get('content-type'), disposition: res.headers.get('content-disposition'), text: await res.text() }
+  }, `${path}?format=csv`)
+  ctx.evidence.push({ note: `${what} downloaded as CSV in the app`, answer: `${file.status} ${file.type} ${file.disposition} ${file.text.slice(0, 400)}` })
+  if (file.status !== 200 || !(file.type ?? '').startsWith('text/csv') || file.disposition !== `attachment; filename="${key}.csv"`) {
+    return `${what} as CSV in the app must answer 200 text/csv as ${key}.csv; it answered ${file.status} ${file.type} ${file.disposition}`
+  }
+  const ids = (listed.value[key] ?? []).map((x) => x.id)
+  const [header = [], ...rows] = csvRows(file.text)
+  const got = rows.map((r) => r[header.indexOf('id')])
+  if (got.join(',') !== ids.join(',')) return `${what}' CSV in the app has ${rows.length} rows (${got.join(', ')}); its JSON list has ${ids.length} items (${ids.join(', ')})`
+  const missing = want.filter((id) => !got.includes(id))
+  if (missing.length > 0) return `${what}' CSV in the app must hold ${missing.join(', ')}; it holds ${got.join(', ')}`
+  return undefined
 }
 
 /** What a step answered, for the evidence. */
@@ -327,6 +352,7 @@ export function walletEscrowLens(seed: number, partner: number): Scenario {
  * The person gives an agent a handle in the app; the other company looks the handle up on Lens, finds that agent, and
  * sends to the handle: one posting each side. The person pauses the agent in the app: its send is refused and nothing
  * moves; resumed, the same send is one posting each side. Claimed in the app, Lens holds the person as its owner.
+ * B17.505 — its transfers, downloaded from the app as CSV, are its JSON list (B28.59); STUB_BREAK=list-csv-short FAILs it.
  */
 export function walletHandlePause(seed: number, partner: number): Scenario {
   const amount = 400_000
@@ -334,6 +360,7 @@ export function walletHandlePause(seed: number, partner: number): Scenario {
     id: 'wallet-handle-pause',
     owner: 'talyvor-lens',
     agents: 1,
+    items: ['B28.59'],
     partners: [partner],
     title: "a handle set in the app finds the agent on Lens and money sent to it lands, one posting each side; paused in the app, its send is refused and nothing moves; resumed, it is paid; claimed, Lens holds its owner",
     run: async (ctx) => {
@@ -372,9 +399,12 @@ export function walletHandlePause(seed: number, partner: number): Scenario {
       if (!resumed.ok) return fail(`resuming ${a.who} in the app was refused: ${resumed.status} ${resumed.error}`)
       const r = (await env.lens.agentBook(a.user)).agents.find((x) => x.id === a.agent)
       if (r?.paused_at !== undefined) return fail(`resumed in the app, Lens's book still has ${a.who} paused at ${r?.paused_at}`)
-      const sentBack = await bff(ctx, 'POST', `/api/agents/${a.agent}/send`, { to: b.agent, amount_ulxc: amount, memo: memoOf('resumed', seed) })
+      const sentBack = await bff<AgentTransfer>(ctx, 'POST', `/api/agents/${a.agent}/send`, { to: b.agent, amount_ulxc: amount, memo: memoOf('resumed', seed) })
       if (!sentBack.ok) return fail(`resumed, ${a.who}'s send was refused: ${sentBack.status} ${sentBack.error}`)
       wrong = await movedBy(ctx, sides, before, [-amount, amount], 'the same send once resumed')
+      if (wrong !== undefined) return fail(wrong)
+      // B17.505 — the agent's transfers downloaded from the app as CSV (B28.59): both sends, as its JSON list.
+      wrong = await listAsCsv(ctx, `${a.who}'s transfers`, `/api/agents/${a.agent}/transfers`, 'transfers', [sent.value.id, sentBack.value.id])
       if (wrong !== undefined) return fail(wrong)
 
       const claimed = await bff<{ agent_id: string; owner_user_id: string }>(ctx, 'POST', `/api/agents/${a.agent}/claim`)
@@ -382,7 +412,7 @@ export function walletHandlePause(seed: number, partner: number): Scenario {
       if (!claimed.ok || claimed.value.owner_user_id === '') return fail(`claiming ${a.who} in the app: ${said(claimed)}`)
       const owned = (await env.lens.agentBook(a.user)).agents.find((x) => x.id === a.agent)
       if (owned?.owner_user_id !== claimed.value.owner_user_id) return fail(`claimed by ${claimed.value.owner_user_id}, Lens's book has ${a.who} owned by ${owned?.owner_user_id ?? 'nobody'}`)
-      return { pass: true, detail: `@${handle} names ${a.who} on Lens and ${lxcText(amount)} LXC sent to it landed, one posting each side; paused: its send refused, nothing moved; resumed: the same send one posting each side; claimed: Lens holds its owner` }
+      return { pass: true, detail: `@${handle} names ${a.who} on Lens and ${lxcText(amount)} LXC sent to it landed, one posting each side; paused: its send refused, nothing moved; resumed: the same send one posting each side, and its transfers as CSV from the app are its JSON list; claimed: Lens holds its owner` }
     },
   }
 }
@@ -395,6 +425,7 @@ export function walletHandlePause(seed: number, partner: number): Scenario {
  * Lens's minute tick fills the agent to exactly its level from the workspace, one posting; removed in the app, Lens has
  * none. A pot locked in the app refuses to give its credits back or be unlocked early, and nothing moves; its lock past,
  * it gives them back.
+ * B17.505 — the schedules, downloaded from the app as CSV, are their JSON list (B28.59).
  */
 export function walletScheduleTopUpPot(seed: number, partner: number): Scenario {
   const amount = 300_000
@@ -404,6 +435,7 @@ export function walletScheduleTopUpPot(seed: number, partner: number): Scenario 
     id: 'wallet-schedule-topup-pot',
     owner: 'talyvor-lens',
     agents: 2,
+    items: ['B28.59'],
     partners: [partner],
     title: "recurring transfers made and stopped in the app and on Lens before they run pay nothing; an automatic top-up fills an empty agent to its level on Lens's tick, one posting; a locked pot refuses to give credits back",
     run: async (ctx) => {
@@ -438,6 +470,9 @@ export function walletScheduleTopUpPot(seed: number, partner: number): Scenario 
       ctx.evidence.push({ note: `both schedules as Lens lists them: ${JSON.stringify(live)}` })
       if (live.length !== 2 || live.some((s) => s.active)) return fail(`stopped, the two schedules read ${JSON.stringify(live)} on Lens`)
       let wrong = await movedBy(ctx, sides, before, [0, 0], 'two schedules stopped before their first run')
+      if (wrong !== undefined) return fail(wrong)
+      // B17.505 — the schedules downloaded from the app as CSV (B28.59), as their JSON list.
+      wrong = await listAsCsv(ctx, 'the schedules', '/api/agents/schedules', 'schedules', [s1.value.id])
       if (wrong !== undefined) return fail(wrong)
 
       // An automatic top-up on an empty agent.
@@ -489,7 +524,7 @@ export function walletScheduleTopUpPot(seed: number, partner: number): Scenario 
       if (!out2.ok) return fail(`the lock past, taking ${amount} µLXC out was refused: ${out2.status} ${out2.error}`)
       const empty = await potOf()
       if (empty?.balance_ulxc !== 0) return fail(`the lock past and emptied, the pot holds ${JSON.stringify(empty)}`)
-      return { pass: true, detail: `two recurring transfers, made and stopped in the app and on Lens, read inactive with no run, nothing moved; a top-up filled an empty agent to ${lxcText(to)} LXC on the tick, one posting, from the workspace's free credits, then removed; a locked pot refused to give back or be unlocked early and moved nothing, its lock past it did` }
+      return { pass: true, detail: `two recurring transfers, made and stopped in the app and on Lens, read inactive with no run, nothing moved, the schedules as CSV from the app their JSON list; a top-up filled an empty agent to ${lxcText(to)} LXC on the tick, one posting, from the workspace's free credits, then removed; a locked pot refused to give back or be unlocked early and moved nothing, its lock past it did` }
     },
   }
 }
@@ -507,6 +542,7 @@ function pushKeys(): { p256dh: string; auth: string } {
  * A send above the approval amount waits for a person; its passkey challenge is asked in the app, and denied there it
  * moves nothing on either side. A rule template applied on Lens is the agent's rules whole; a limit boosted in the app
  * and ended there before its time is gone from Lens. A device subscribed to approval pushes in the app, and removed.
+ * B17.505 — the approvals, downloaded from the app as CSV, are their JSON list (B28.59).
  */
 export function agentApprovalDenied(seed: number, partner: number): Scenario {
   const above = 1_000_000
@@ -515,6 +551,7 @@ export function agentApprovalDenied(seed: number, partner: number): Scenario {
     id: 'agent-approval-denied',
     owner: 'talyvor-lens',
     agents: 1,
+    items: ['B28.59'],
     partners: [partner],
     title: "a send above the approval amount waits; its challenge asked and declined in the app with a reason Lens keeps, nothing moves on either side; a rule template applied on Lens, a boost ended in the app, a push device added and removed",
     run: async (ctx) => {
@@ -531,6 +568,9 @@ export function agentApprovalDenied(seed: number, partner: number): Scenario {
       ctx.evidence.push({ note: `a send of ${amount} µLXC above ${above}: ${said(send)}` })
       const approval = (await env.lens.agentApprovals(a.user)).find((x) => x.agent_id === a.agent && x.amount_ulxc === amount && x.status === 'pending')
       if (approval === undefined) return fail(`a send above the approval amount filed no pending approval: ${said(send)}`)
+      // B17.505 — the approvals downloaded from the app as CSV (B28.59), as their JSON list.
+      const exported = await listAsCsv(ctx, 'the approvals', '/api/agents/approvals', 'approvals', [approval.id])
+      if (exported !== undefined) return fail(exported)
       const ch = await bff<{ challenge: string; allow_credentials: string[] }>(ctx, 'POST', `/api/agents/approvals/${approval.id}/challenge`)
       ctx.evidence.push({ note: `its challenge in the app: ${said(ch)}` })
       if (!ch.ok || ch.value.challenge === '') return fail(`asking the approval's passkey challenge in the app: ${said(ch)}`)
@@ -581,7 +621,7 @@ export function agentApprovalDenied(seed: number, partner: number): Scenario {
       const unsub = await bff<{ deleted?: boolean }>(ctx, 'DELETE', '/api/agents/push/subscriptions', { endpoint })
       ctx.evidence.push({ note: `the device removed in the app: ${said(unsub)}` })
       if (pub.ok && (!unsub.ok || unsub.value.deleted !== true)) return fail(`removing the device in the app: ${said(unsub)}`)
-      return { pass: true, detail: `a ${lxcText(amount)} LXC send above ${lxcText(above)} waited; its challenge asked and denied in the app, nothing moved on either side; template ${tpl.id} applied on Lens; a ${rule} boost ended in the app; ${pub.ok ? 'a push device added and removed' : 'pushes are not configured on Lens, and a device is refused so'}` }
+      return { pass: true, detail: `a ${lxcText(amount)} LXC send above ${lxcText(above)} waited; its challenge asked and denied in the app, nothing moved on either side, the approvals as CSV from the app their JSON list; template ${tpl.id} applied on Lens; a ${rule} boost ended in the app; ${pub.ok ? 'a push device added and removed' : 'pushes are not configured on Lens, and a device is refused so'}` }
     },
   }
 }
