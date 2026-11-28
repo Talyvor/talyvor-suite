@@ -62,7 +62,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   wallets: [
     'agent-balance-stored', 'agent-funding', 'agent-crypto-send', 'agent-crypto-spend-permission', 'agent-crypto-wallet', 'agent-topup-link', 'agent-wallet', 'agent-wallet-kinds', 'b30-capabilities', 'capability-terms', 'currency-convert-margin',
     'daily-reconciliation', 'ledger-call-once', 'ledger-moves-at-once', 'money-accounts', 'money-layer-contract', 'openapi-wallets', 'status-money-rails',
-    'status-truth', 'terms-credential-screens', 'wallet-brand', 'wallet-cash-out', 'wallet-currency', 'wallet-fx', 'wallet-pots', 'pocket-20',
+    'status-truth', 'terms-credential-screens', 'wallet-brand', 'wallet-cash-out', 'wallet-currency', 'wallet-fx', 'wallet-pots', 'wallets-together', 'pocket-20',
   ],
   cards: ['agent-card-replace', 'agent-cards', 'card-dispute-screen', 'physical-card', 'single-use-card-screen', 'wallet-card', 'wallet-card-freeze', 'wallet-card-purchase'],
   payments: [

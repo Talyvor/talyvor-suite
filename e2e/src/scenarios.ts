@@ -108,6 +108,7 @@ import { agentCryptoSpendPermission } from './spendPermission.ts'
 import { agentCryptoWallet } from './agentCryptoWallet.ts'
 import { agentCryptoSend } from './agentCryptoSend.ts'
 import { agentTopUpLink } from './agentTopUpLink.ts'
+import { walletsTogether } from './walletsTogether.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectChat } from './connectChat.ts'
 import { connectPay } from './connectPay.ts'
@@ -5779,6 +5780,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // of its own: Lens's quote and the link, nothing moved; the owner opens it on the agent's page, presses Move twice, and it is
   // on the agent's ledger once.
   if (i === 3) list.push(agentTopUpLink())
+  // B17.563 — the owner's money in one place, on Wallets (B48.19), once a run, on a workspace of its own: one agent's wallet dragged
+  // onto another's moves 25 USDC once as one entry; an agent's send to a new address is "1 waiting for you.", approved on Approvals
+  // with the passkey; and the month's CSV holds both agents' wallets.
+  if (i === 1) list.push(walletsTogether())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.
