@@ -12,7 +12,7 @@
 import type { Answered, LensClient, SyntheticUser, VerificationCheck, WorkspaceVerification } from './lens.ts'
 
 /** The scenarios whose workspace of its own starts unconfirmed: they play the identity check themselves. */
-export const UNCONFIRMED_SCENARIOS: ReadonlySet<string> = new Set(['verification-levels', 'verification-screen'])
+export const UNCONFIRMED_SCENARIOS: ReadonlySet<string> = new Set(['verification-levels', 'verification-screen', 'identity-gate'])
 
 /** A person the Test provider passes: no TESTFAIL, TESTSANCTION, TESTRETURN or TESTPENDING in the name. */
 export const PERSON = { name: 'Nightly Confirmed Owner', country: 'GB', date_of_birth: '1990-04-12' }

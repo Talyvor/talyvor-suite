@@ -95,6 +95,7 @@ import { marketBuyerCurrency } from './buyerCurrency.ts'
 import { marketReceipts } from './receipts.ts'
 import { buyerProtection } from './buyerProtection.ts'
 import { verificationLevels } from './verification.ts'
+import { identityGate } from './identityGate.ts'
 import { compliance } from './compliance.ts'
 import { invoicePayLink } from './invoices.ts'
 import { outsidePayees } from './payees.ts'
@@ -5517,6 +5518,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // email and phone make L1 and identity L2, each a Test check with its evidence reference and the live level still L0;
   // the record holds both checks; payments_out needs L2 and b2b_credit L3.
   if (i === 5) list.push(verificationLevels())
+  // B17.554 — the identity gate (Lens B61.52), once a run, on a workspace of its own that starts unconfirmed: the owner's money into
+  // its agent is refused 403 VERIFICATION_NEEDED with nothing posted, a Business at L2 too, and after the check posts exactly once.
+  if (i === 5) list.push(identityGate())
   // B30.122 — each money capability's terms, once a run, on a workspace of its own: all nineteen B30 capabilities listed,
   // versioned and unaccepted; fx's text a draft for legal review; accepting its version 201 naming the person, then listed
   // accepted; a version one higher 409.

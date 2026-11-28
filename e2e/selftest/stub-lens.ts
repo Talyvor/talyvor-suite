@@ -116,7 +116,8 @@
 //
 // B61.51: STUB_IDENTITY_GATE=on refuses every movement of money (MONEY_MOVES) by a workspace below the level its account
 // needs, Sandbox money included, as Lens B61.52 makes it: a synthetic workspace is a Business, so below L3 it is 403
-// VERIFICATION_NEEDED "Confirm who you are to move money." Looking stays open. Off, money moves at any level, as Lens today.
+// VERIFICATION_NEEDED "Confirm who you are to move money." Looking stays open. Off, money moves at any level, as a Lens before
+// B61.52: B17.554's identity-gate FAILs there. The self-test (selftest.sh) turns it on unless STUB_IDENTITY_GATE says otherwise.
 //
 // B26.24: every read the self-test makes is answered in the shape a real Lens answers it, held to
 // lens-shapes.json by test/stubLens.test.ts. A route this stub does not know is a 404 it logs as
@@ -158,7 +159,7 @@ const MONEY_MOVES: RegExp[] = [
   /^\/v1\/money\/(payments|payouts|cards|physical-cards|bills\/pay|earnings-payouts)$/,
   /^\/v1\/money\/accounts\/[^/]+\/test-money$/,
   /^\/v1\/money\/payment-requests\/[^/]+\/approve$/,
-  /^\/v1\/workspaces\/[^/]+\/agents\/[^/]+\/(pay|money\/instant-transfers)$/,
+  /^\/v1\/workspaces\/[^/]+\/agents\/[^/]+\/(pay|fund|money\/instant-transfers)$/,
 ]
 /** B28.279 — its defects may be planted together, comma-separated, as stub-bank.ts's are. */
 const broke = (name: string): boolean => BREAK.split(',').includes(name)
@@ -1609,7 +1610,9 @@ createServer(async (req, res) => {
     // B61.51 — the identity gate (STUB_IDENTITY_GATE above), on the owner's token, a workspace key or an agent's own key.
     if (IDENTITY_GATE && req.method === 'POST' && MONEY_MOVES.some((re) => re.test(p))) {
       const mover = (byToken.get(bearer) ?? byKey.get(bearer))?.id ?? bank.agentOfKey(bearer)?.ws.id
-      if (mover !== undefined && bank.verificationLevel(mover) < 'L3') return json(res, 403, { error: 'Confirm who you are to move money.', code: 'VERIFICATION_NEEDED' })
+      if (mover !== undefined && bank.verificationLevel(mover) < 'L3') {
+        return json(res, 403, { error: 'Confirm who you are to move money.', code: 'VERIFICATION_NEEDED', level: bank.verificationLevel(mover), level_needed: 'L3', account_type: 'business' })
+      }
     }
     if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
     if (p.startsWith('/v1/money/cards') && await bank.agentCards(req, res, p, bearer)) return

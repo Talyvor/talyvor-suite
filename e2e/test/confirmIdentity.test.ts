@@ -44,7 +44,7 @@ describe("the testers' people confirm who they are (B61.51)", () => {
     expect(got).toMatchObject({ asked: 1, confirmed: 1, failed: [] })
     expect(calls.filter((c) => c.startsWith('POST') || c.startsWith('PUT')))
       .toEqual(['POST /verification/contact', 'POST /verification/identity', 'PUT /business', 'POST /verification/company'])
-    expect(confirmLine(got, 1)).toMatch(/^identity: confirmed 1 of 1 synthetic user\(s\) .*; 1 workspace\(s\) of their own start unconfirmed for verification-levels and verification-screen$/)
+    expect(confirmLine(got, 1)).toMatch(/^identity: confirmed 1 of 1 synthetic user\(s\) .*; 1 workspace\(s\) of their own start unconfirmed for verification-levels and verification-screen and identity-gate$/)
   })
 
   it('a Personal stops at L2, with no company details or company check', async () => {
