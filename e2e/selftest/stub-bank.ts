@@ -188,6 +188,11 @@
 //   role-finance-approves — B17.545: a Finance session decides approvals
 // B17.557 adds the owner, an admin or Finance moving money between the company's account and an agent's (Lens B61.66):
 //   funding-any-role — a Viewer's session moves money between the company's account and an agent's
+// B17.558 adds a payment stopped because it is not the one its approval showed (Lens B62.1 and B62.9). The synthetic key re-points
+// an agent's approved payment out at another of the workspace's payees (POST /v1/synthetic/workspaces/{ws}/agents/approvals/{id}/payee,
+// talyvor-lens B62.12), so the same payment to that payee finds the approval: it is refused 403 with nothing moved, the approval
+// stays approved, and it reads back stopped {changed: "payee", at} on the list and on GET …/agents/approvals/{id}. Its defect:
+//   stopped-not-kept — the payment is stopped and nothing is kept, so the approval reads back no stopped
 //
 // B17.509 adds every wallet list as a CSV (talyvor-lens B28.332): ?format=csv on the approvals, the schedules and an agent's
 // transfers answers the same list as name.csv, one row per item under a header of its fields. Its defect:
@@ -592,6 +597,9 @@ export class Bank {
   private readonly keyByID = new Map<string, string>()
   private readonly postings: Posting[] = []
   private readonly approvals: Approval[] = []
+  /** B17.558 — the payee each payment out's approval showed the owner (Lens B62.1), and why a payment under one was stopped (B62.9). */
+  private readonly shownPayee = new Map<string, { kind: string; id: string; name: string }>()
+  private readonly stoppedPayment = new Map<string, { changed: string; at: string }>()
   private readonly allPaused = new Map<string, { at: string; reason: string }>()
   /** B28.26 — when each agent's admitted requests were held, as Lens counts its holds for the per-minute rule. */
   private readonly asked = new Map<string, number[]>()
@@ -706,9 +714,9 @@ export class Bank {
     // B56.28 — an account's statement holds its conversions (LaunchDesk) and its other postings (PayeeDesk) alike.
     this.payees.onLine = (id, l) => this.launch.post(id, l)
     // B30.127 — an agent's payment out from its own account is judged by its rules, at what it is worth in LXC.
-    this.payees.judgeAgentPayment = (ws, agentID, ulxc, fingerprint, memo) => {
+    this.payees.judgeAgentPayment = (ws, agentID, ulxc, fingerprint, memo, payee) => {
       const a = this.agents.get(agentID)
-      return a === undefined || a.ws !== ws ? undefined : this.judge(a, ulxc, { payment: true, fingerprint, memo })
+      return a === undefined || a.ws !== ws ? undefined : this.judge(a, ulxc, { payment: true, fingerprint, memo, ...(payee === undefined ? {} : { sent: { kind: 'outside', ...payee } }) })
     }
     this.permissionMandates = new PermissionMandateDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })))
@@ -898,7 +906,9 @@ export class Bank {
    * (429 for the requests-a-minute rule, checked after the models, B28.26);
    * a request above the approval amount files an approval, and an approved one goes through once.
    */
-  judge(agent: Agent, amount: number, req: { model?: string; provider?: string; listing?: string; payment?: boolean; payee?: Agent; memo?: string; fingerprint: string }):
+  judge(agent: Agent, amount: number, req: { model?: string; provider?: string; listing?: string; payment?: boolean; payee?: Agent; memo?: string; fingerprint: string
+    /** B17.558 — the outside payee a payment out would be sent to, which its approval must have shown (Lens B62.1). */
+    sent?: { kind: string; id: string; name: string } }):
     { status: number; error: string; approval_id?: string } | undefined {
     const rule = (s: string) => ({ status: 403, error: `the agent's spending rules refuse this request: ${s}` })
     const all = this.allPaused.get(agent.ws)
@@ -975,6 +985,13 @@ export class Bank {
     if ((r.approval_above_ulxc > 0 && amount > r.approval_above_ulxc) || overLine) {
       const ok = this.approvals.find((a) => a.agent_id === agent.id && a.fingerprint === req.fingerprint && a.status === 'approved')
       if (ok !== undefined) {
+        // B17.558 — Lens B62.1: not the payment the owner was shown, so nothing is sent and the approval stays approved; B62.9 keeps why.
+        const shown = this.shownPayee.get(ok.id)
+        if (shown !== undefined && req.sent !== undefined && (shown.kind !== req.sent.kind || shown.id !== req.sent.id)) {
+          if (!this.broken('stopped-not-kept')) this.stoppedPayment.set(ok.id, { changed: 'payee', at: new Date().toISOString() })
+          return { status: 403, error: `the agent's spending rules refuse this request: this payment is not the one you approved, so nothing was sent. ` +
+            `You approved ${lxc(amount)} LXC to ${shown.name}, and it would have sent ${lxc(amount)} LXC to ${req.sent.name}` }
+        }
         ok.status = 'used'
         return undefined
       }
@@ -993,6 +1010,7 @@ export class Bank {
         ...(req.payee === undefined ? {} : { payee: { kind: 'agent', id: req.payee.id, name: req.payee.name } }), ...(req.memo ? { memo: req.memo } : {}),
         ...(overLine ? { over_second_approver_line: true } : {}) }
       this.approvals.unshift(a)
+      if (req.sent !== undefined) this.shownPayee.set(a.id, req.sent)
       return { status: 403, error: `economy: this request would cost up to ${lxc(amount)} LXC, above the agent's approval amount — approval ${a.id} must be approved by the workspace's owner before it is retried`,
         approval_id: a.id }
     }
@@ -1994,10 +2012,32 @@ export class Bank {
    * B25.8 — Lens B25.7's synthetic-key routes that bring a test workspace's slow money due now (every stub
    * workspace is a test one): a loan's instalment, the buyer's bill paid and refunded, a purchase on a card.
    */
+  /** An approval as Lens answers it: B62.9's stopped while it is not used, and never its fingerprint. */
+  private approvalOut(a: Approval): Omit<Approval, 'fingerprint' | 'ws'> & { stopped?: { changed: string; at: string } } {
+    const { fingerprint: _f, ws: _w, ...out } = a
+    const stopped = a.status === 'used' ? undefined : this.stoppedPayment.get(a.id)
+    return stopped === undefined ? out : { ...out, stopped }
+  }
+
   async syntheticRoute(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
     const { json } = this.d
     const now = new Date().toISOString()
-    let m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/loans\/([^/]+)\/due$/.exec(path)
+    // B17.558 — talyvor-lens B62.12: a test workspace's approved payment out re-pointed at another of its payees, what the owner
+    // was shown kept, so the same payment to that payee finds the approval (the stub's fingerprint names the payee fourth).
+    let m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/agents\/approvals\/([^/]+)\/payee$/.exec(path)
+    if (m !== null && req.method === 'POST') {
+      const a = this.approvals.find((x) => x.id === m?.[2] && x.ws === m[1])
+      const { payee_id = '' } = await this.body<{ payee_id?: string }>(req)
+      const to = this.payees.payeesOf(m[1]).find((p) => p.id === payee_id)
+      const parts = a?.fingerprint.split('\0') ?? []
+      if (a === undefined || !this.shownPayee.has(a.id) || parts[0] !== 'payment_out') return json(res, 404, { error: "no agent's payment out of this test workspace has that approval" }), true
+      if (to === undefined) return json(res, 404, { error: 'economy: no such payee' }), true
+      if (a.status !== 'approved') return json(res, 409, { error: `the approval is ${a.status}, not approved` }), true
+      parts[3] = to.id
+      a.fingerprint = parts.join('\0')
+      return json(res, 200, { approval_id: a.id, payee_id: to.id }), true
+    }
+    m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/loans\/([^/]+)\/due$/.exec(path)
     if (m !== null) {
       const l = this.loans.find((x) => x.id === m?.[2] && (x.lender_workspace_id === m[1] || x.borrower_workspace_id === m[1]) && (x.status === 'active' || x.status === 'late'))
       if (l === undefined) return json(res, 404, { error: 'no active or late test loan of this workspace has that id' }), true
@@ -2815,7 +2855,12 @@ export class Bank {
       return json(res, 200, { wallets: assets.map((asset) => this.walletOf(ws.id, '', asset)) }), true
     }
     if (rest === '/agents/approvals') {
-      return this.list(res, url, 'approvals', 'approvals', this.approvals.filter((a) => a.ws === ws.id).map(({ fingerprint: _f, ws: _w, ...a }) => a))
+      return this.list(res, url, 'approvals', 'approvals', this.approvals.filter((a) => a.ws === ws.id).map((a) => this.approvalOut(a)))
+    }
+    // B17.558 — Lens B62.9: one approval, with why a payment it approved was stopped; another workspace's is 404.
+    if ((m = /^\/agents\/approvals\/([^/]+)$/.exec(rest)) !== null && method === 'GET') {
+      const a = this.approvals.find((x) => x.id === m?.[1] && x.ws === ws.id)
+      return a === undefined ? (json(res, 404, { error: 'economy: no such approval' }), true) : (json(res, 200, this.approvalOut(a)), true)
     }
     // B45.28 — what proves an approval, and the owner letting an approver agent approve another's requests, signed.
     if ((m = /^\/agents\/approvals\/([^/]+)\/evidence$/.exec(rest)) !== null && method === 'GET') {

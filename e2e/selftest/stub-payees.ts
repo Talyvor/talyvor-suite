@@ -1259,7 +1259,8 @@ export class PayeeDesk {
   }
 
   /** B30.127 — an agent's payment out judged by its rules at `valueULXC` (stub-bank.ts): a refusal, or undefined to pay it. */
-  judgeAgentPayment: (ws: string, agentID: string, valueULXC: number, fingerprint: string, memo: string) => { status: number; error: string } | undefined = () => undefined
+  judgeAgentPayment: (ws: string, agentID: string, valueULXC: number, fingerprint: string, memo: string, payee?: { id: string; name: string }) =>
+    { status: number; error: string } | undefined = () => undefined
 
   /**
    * B48.27 — POST /v1/money/payments on agent `agentID`'s own key: paid from its wallet in the currency. B30.127: or from its own
@@ -1277,7 +1278,8 @@ export class PayeeDesk {
     if (perMinor !== undefined && amount > 0 && !(this.payments.get(ws) ?? []).some((p) => p.idempotency_key === key)) {
       const fingerprint = ['payment_out', agentID, account.id, b.payee_id ?? '', amount, currency, 'test', b.reference ?? ''].join('\0')
       const payee = (this.payees.get(ws) ?? []).find((x) => x.id === b.payee_id)
-      const refused = this.judgeAgentPayment(ws, agentID, amount * perMinor, fingerprint, `${money(amount, currency)} to ${payee?.name ?? 'a payee'} (test money) — ${b.reference ?? ''}`)
+      const refused = this.judgeAgentPayment(ws, agentID, amount * perMinor, fingerprint, `${money(amount, currency)} to ${payee?.name ?? 'a payee'} (test money) — ${b.reference ?? ''}`,
+        payee === undefined ? undefined : { id: payee.id, name: payee.name })
       if (refused !== undefined) {
         if (this.broken('payment-above-moved') && /approv/.test(refused.error)) {
           account.test_minor -= amount

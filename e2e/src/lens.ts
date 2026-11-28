@@ -2187,6 +2187,14 @@ export class LensClient {
   async deliverTestCard(user: SyntheticUser, cardID: string, status: 'shipped' | 'delivered'): Promise<Answered<{ id: string; delivery: { status: string } }>> {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/physical-cards/${cardID}/delivery`, { status })
   }
+  /**
+   * B17.558 — a test workspace's approved payment out re-pointed at another of its payees, what the owner was shown kept, so the
+   * same payment to `payeeID` finds the approval (talyvor-lens B62.12): 404 until Lens has it.
+   */
+  async repointApproval(user: SyntheticUser, approvalID: string, payeeID: string): Promise<Answered<{ approval_id: string; payee_id: string }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/agents/approvals/${encodeURIComponent(approvalID)}/payee`, { payee_id: payeeID })
+  }
+
 
   /** B34.8 — a test workspace put on `plan` with the synthetic key, as Lens B35.1 lets the testers do. */
   async setTestPlan(user: SyntheticUser, plan: Plan): Promise<Answered<{ plan: { plan: string } }>> {
