@@ -1407,7 +1407,8 @@ export class Bank {
     const ws = a === undefined ? undefined : this.d.workspace(a.ws)
     if (a === undefined || ws === undefined) return false
     if (req.method === 'POST' && path === `/v1/workspaces/${a.ws}/agents/${a.id}/pay`) {
-      const b = await this.body<{ to_agent_id?: string; amount_ulxc?: number; memo?: string }>(req)
+      const b = await this.body<{ to_agent_id?: string; amount_ulxc?: number; amount_minor?: number; currency?: string; memo?: string }>(req)
+      if (b.amount_minor !== undefined || b.currency !== undefined) return this.payInCurrency(res, a, b, String(req.headers['idempotency-key'] ?? '')), true
       return this.pay(res, ws, a, b.to_agent_id ?? '', b.amount_ulxc ?? 0, b.memo ?? ''), true
     }
     const approve = /^\/v1\/workspaces\/([^/]+)(\/agents\/approvals\/[^/]+\/approve)$/.exec(path)
@@ -1415,6 +1416,35 @@ export class Bank {
       return this.workspaceRoute(req, res, ws, approve[2], new URL(path, this.d.base))
     }
     return json(res, 403, { error: 'auth: a Connect token may only pay from its own agent' }), true
+  }
+
+  /**
+   * B17.560 — Lens B61.18 on a Connect token: amount_minor of currency from agent `from`'s account in it into the other agent's,
+   * judged by the payer's rules at what it is worth (202 with the pending approval above its approval amount, nothing posted),
+   * then one agent_payment entry of two postings, once under the Idempotency-Key. STUB_BREAK=connect-currency-above-pays pays
+   * above the approval amount as if it were inside it.
+   */
+  private payInCurrency(res: ServerResponse, from: Agent, b: { to_agent_id?: string; amount_ulxc?: number; amount_minor?: number; currency?: string; memo?: string }, key: string): void {
+    const { json } = this.d
+    const currency = (b.currency ?? '').toUpperCase()
+    const amount = b.amount_minor ?? 0
+    const value = ulxcOfMinor(amount, currency, true)
+    if (!Number.isInteger(amount) || amount <= 0 || value === undefined || (b.amount_ulxc ?? 0) !== 0) {
+      return json(res, 400, { error: 'body must be {"to_agent_id": "<agent>", "amount_minor": <positive minor units>, "currency": "GBP|EUR|USD|USDC", "memo": "<optional>"}' })
+    }
+    const payee = this.agents.get(b.to_agent_id ?? '')
+    if (payee === undefined) return json(res, 404, { error: 'economy: no such agent in this workspace' })
+    if (payee.id === from.id) return json(res, 400, { error: 'economy: an agent cannot pay itself' })
+    const made = this.payees.agentPaymentUnder(from.ws, from.id, key)
+    if (made !== undefined) return json(res, 200, made)
+    const memo = b.memo ?? ''
+    const refused = this.judge(from, value, { payment: true, payee, memo, fingerprint: `pay\0${from.id}\0${payee.id}\0${amount}\0${currency}\0${memo}` })
+    if (refused?.approval_id !== undefined && !this.broken('connect-currency-above-pays')) {
+      return json(res, 202, { status: 'pending_approval', approval_id: refused.approval_id, amount_ulxc: value, message: refused.error })
+    }
+    if (refused !== undefined && refused.approval_id === undefined) return json(res, refused.status, { error: refused.error })
+    const [status, out] = this.payees.agentPayment(from.ws, from.id, payee.ws, payee.id, amount, currency, memo, key)
+    return json(res, status, out)
   }
 
   /**

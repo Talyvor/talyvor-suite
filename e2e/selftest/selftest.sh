@@ -19,6 +19,8 @@
 #                                                         # B61.56: its explorers explore the launch screens, each step
 #                                                         # at E2E_EXPLORER_STEP_USD; E2E_EXPLORER_STEP_USD=5 (above the
 #                                                         # $1 cap) must stop them at the cap: "0 of 2 explorers explored"
+#   STUB_BREAK=connect-currency-above-pays pnpm --filter @talyvor/e2e selftest   # B17.560: an assistant's payment above
+#                                                         # the agent's approval amount is paid; connect-chat must FAIL
 #   STUB_IDENTITY_GATE=off pnpm --filter @talyvor/e2e selftest   # B17.554: a stub Lens that moves money for an account
 #                                                         # that has not confirmed who it is; identity-gate must FAIL
 #   STUB_BREAK=passcode-change-unsaved pnpm --filter @talyvor/e2e selftest   # B17.556: Lens answers a passcode change
@@ -66,7 +68,7 @@ sleep 1
 env -i PATH="$PATH" HOME="$HOME" \
   BFF_AUTH_MODE=oidc BFF_ADDR="127.0.0.1:$bff_port" BFF_PUBLIC_BASE_URL="http://localhost:$bff_port" \
   OIDC_ISSUER="http://127.0.0.1:$stub_port" OIDC_ALLOWED_EMAILS='*' \
-  LENS_BASE_URL="http://127.0.0.1:$stub_port" LENS_PROVISION_SECRET=selftest LENS_SYNTHETIC_KEY=$key \
+  LENS_BASE_URL="http://127.0.0.1:$stub_port" LENS_PROVISION_SECRET=selftest LENS_SYNTHETIC_KEY=$key LENS_CONNECT_MINT_KEY=$connect_mint \
   TRACK_BASE_URL="http://127.0.0.1:$track_port" TRACK_GATEWAY_SECRET=$gateway \
   DOCS_BASE_URL="http://127.0.0.1:$docs_port" DOCS_GATEWAY_SECRET=$gateway \
   WEB_DIST="$root/apps/web/dist" "$tmp/bff" >"$tmp/bff.log" 2>&1 &
