@@ -192,6 +192,7 @@ const DRAWN_ONLY_WITH: Record<string, { data: string; drawnBy?: string }> = {
   'src/mandateAsked.ts button "Review"': { data: 'a mandate waiting for its owner' },
   'src/phoneKeyWeb.ts button "Add this device"': { data: 'a phone asking to be added' },
   'src/pocketProblems/keys.ts button "Let it approve"': { data: 'a phone asking to be added' },
+  'src/secondApproverPicker.ts button "Choose"': { data: 'an Approver or Admin who has signed in' },
 }
 
 const WEB_SRC = resolve(import.meta.dirname)
