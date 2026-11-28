@@ -826,6 +826,8 @@ export class Bank {
     const who = this.agentOfKey(key)
     if (m === null || who === undefined) return false
     if (who.ws.id !== m[1]) return this.d.json(res, 403, { error: 'forbidden' }), true
+    // B17.561 — a wallet the crypto wallet desk keeps answers its agent's own sends there.
+    if (await this.cryptoWallets.route(req, res, who.ws.id, m[2], who.agent.id)) return true
     return this.spendPermissions.route(req, res, who.ws.id, m[2], who.agent.id)
   }
 

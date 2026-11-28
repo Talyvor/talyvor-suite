@@ -7,12 +7,18 @@
 //   POST and GET …/agents/{id}/crypto-requests(/{req})                  a request to be paid, matched to an exact deposit
 //   POST …/agents/{id}/freeze and …/sweep                               the account frozen; the call that pays all it holds
 //   GET  …/agents/{id}/wallet/activity                                  the agent's ledger, newest first
+//   POST …/agents/{id}/crypto-sends/quote                               B17.561: the send before it is made, a new address named
+//   POST …/agents/{id}/crypto-sends on the agent's own key              B17.561: to an address the workspace never paid, it waits
+//   POST …/crypto-sends/{send}/approve(/challenge) and …/decline         B17.561: the owner's signed yes, or a test amount there
+//                                                                       first; or their no, which sends nothing
 // A wallet is kept here from the first of these routes its owner calls (or the first send it is paid by); until then its crypto
 // sends are B48.38's desk's, judged against the owner's spend permission, so that scenario's agents are answered as before. A send
 // between two agents posts to both ledgers at once, as the chain indexer does in its own time. Its defects:
 //   crypto-frozen-sends — a frozen agent's send still lands and moves its money
 //   crypto-request-unmatched — a deposit is never matched, so a paid request stays open
 //   crypto-sweep-short — the sweep's call pays 1 micro-USDC less than the account holds
+//   crypto-send-twice — Send pressed again under the same Idempotency-Key sends a second time (B17.561)
+//   crypto-decline-sends — the owner's decline sends the agent's payment anyway (B17.561)
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -21,7 +27,7 @@ interface Assertion { credential_id?: string; client_data_json?: string; authent
 interface Line { entry_id: string; account_id: string; kind: string; amount_minor: number; balance_after_minor: number; at: string }
 interface Account { address: string; credential_id: string; ws: string; frozen: boolean; lines: Line[] }
 interface Send { id: string; network: string; token: string; amount_minor: number; to: string; agent_id: string; direction: string; status: string
-  reason?: string; tx_hash?: string; created_at: string }
+  reason?: string; tx_hash?: string; new_address?: boolean; requested_by?: string; created_at: string }
 interface Request { id: string; agent_id: string; token: string; network: string; chain_id: number; asset: string; pay_to: string; amount_minor: number; memo: string
   expires_at: string; payer_address?: string; received_minor: number; created_at: string }
 
@@ -41,6 +47,9 @@ export class CryptoWalletDesk {
   /** Each send asked for, by its Idempotency-Key: the challenge it is signed over, then the send. */
   private readonly sendKeys = new Map<string, { challenge: string; send?: Send }>()
   private readonly requests = new Map<string, Request>()
+  /** B17.561 — the addresses each workspace has paid, and what each answer to a waiting send is signed over. */
+  private readonly paid = new Map<string, Set<string>>()
+  private readonly answerChallenges = new Map<string, string>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -76,16 +85,32 @@ export class CryptoWalletDesk {
     return a
   }
 
-  /** The owner's routes under /v1/workspaces/{ws}: `rest` is the path after it. True when `rest` was one of them. */
-  async route(req: IncomingMessage, res: ServerResponse, ws: string, rest: string): Promise<boolean> {
-    const m = /^\/agents\/([^/]+)\/(wallet-moves\/quote|wallet-moves\/[^/]+\/confirm|crypto-sends(?:\/challenge)?|crypto-requests(?:\/[^/]+)?|freeze|sweep|wallet\/activity)$/.exec(rest)
+  /**
+   * The routes under /v1/workspaces/{ws}: `rest` is the path after it, `agent` the agent whose own key asks ('' for the owner).
+   * True when `rest` was one of them.
+   */
+  async route(req: IncomingMessage, res: ServerResponse, ws: string, rest: string, agent = ''): Promise<boolean> {
+    const m = /^\/agents\/([^/]+)\/(wallet-moves\/quote|wallet-moves\/[^/]+\/confirm|crypto-sends(?:\/challenge|\/quote|\/[^/]+\/(?:approve(?:\/challenge)?|decline))?|crypto-requests(?:\/[^/]+)?|freeze|sweep|wallet\/activity)$/.exec(rest)
     if (m === null) return false
     const [, agentID, what] = m
     const method = req.method ?? 'GET'
     // An agent with no smart account, or one whose crypto sends are still B48.38's desk's: answered elsewhere, as before.
-    const acct = this.wallet(agentID, what !== 'crypto-sends')
+    const acct = this.wallet(agentID, agent === '' && (!what.startsWith('crypto-sends') || what === 'crypto-sends/challenge'))
     if (acct === undefined) return false
     if (acct.ws !== ws) return this.json(res, 404, { error: 'economy: no such agent in this workspace' }), true
+    if (agent !== '' && (agent !== agentID || !['crypto-sends', 'crypto-sends/quote'].includes(what))) {
+      return this.json(res, 403, { error: "only the agent's own key or the workspace's owner may send its money" }), true
+    }
+    if (what === 'crypto-sends/quote' && method === 'POST') {
+      const b = await this.body<{ to?: string; network?: string; token?: string; amount_minor?: number }>(req)
+      const to = (b.to ?? '').toLowerCase()
+      if (b.network !== NETWORK || b.token !== 'USDC' || !((b.amount_minor ?? 0) > 0) || !/^0x[0-9a-f]{40}$/.test(to)) return this.json(res, 400, { error: 'economy: invalid crypto send' }), true
+      return this.json(res, 200, { network: NETWORK, token: 'USDC', token_address: USDC, amount_minor: b.amount_minor, to, to_kind: this.agentAt(to) === undefined ? 'address' : 'agent',
+        new_address: !this.paidBy(ws).has(to), max_fee_wei: '0', fee_paid_by: 'workspace_gas_budget', arrival_seconds: 2 }), true
+    }
+    if (agent !== '' && what === 'crypto-sends' && method === 'POST') return this.agentSend(req, res, agentID, acct), true
+    const answer = /^crypto-sends\/([^/]+)\/(approve\/challenge|approve|decline)$/.exec(what)
+    if (answer !== null && method === 'POST') return this.answer(req, res, agentID, acct, answer[1], answer[2]), true
 
     if (what === 'wallet/activity' && method === 'GET') return this.json(res, 200, { lines: [...acct.lines].reverse() }), true
     if (what === 'wallet-moves/quote' && method === 'POST') {
@@ -109,7 +134,9 @@ export class CryptoWalletDesk {
       const b = await this.body<{ to?: string; network?: string; token?: string; amount_minor?: number }>(req)
       if (typeof k !== 'string' || k === '') return this.json(res, 400, { error: 'economy: invalid crypto send: an Idempotency-Key is required' }), true
       const challenge = randomBytes(32).toString('base64url')
-      this.sendKeys.set(`${agentID} ${k}`, { challenge })
+      // A send its key already began stays that send, however often its challenge is asked for again (B17.561).
+      const began = this.broken('crypto-send-twice') ? undefined : this.sendKeys.get(`${agentID} ${k}`)?.send
+      this.sendKeys.set(`${agentID} ${k}`, { challenge, send: began })
       return this.json(res, 200, { challenge, allow_credentials: [acct.credential_id], user_verification: 'required', quote: { ...b, token: 'USDC' } }), true
     }
     if (what === 'crypto-sends' && method === 'GET') return this.json(res, 200, { sends: [...(this.sends.get(agentID) ?? [])].reverse() }), true
@@ -157,11 +184,88 @@ export class CryptoWalletDesk {
     const amount = b.amount_minor ?? 0
     const to = (b.to ?? '').toLowerCase()
     if (b.network !== NETWORK || b.token !== 'USDC' || !(amount > 0) || !/^0x[0-9a-f]{40}$/.test(to)) return this.json(res, 400, { error: 'economy: invalid crypto send' })
-    const s: Send = { id: `csnd_${randomUUID()}`, network: NETWORK, token: 'USDC', amount_minor: amount, to, agent_id: agentID, direction: 'out', status: 'landed', created_at: new Date().toISOString() }
+    const s: Send = { id: `csnd_${randomUUID()}`, network: NETWORK, token: 'USDC', amount_minor: amount, to, agent_id: agentID, direction: 'out', status: 'landed',
+      requested_by: 'user:owner', created_at: new Date().toISOString() }
+    this.land(acct, s)
+    this.sends.set(agentID, [...(this.sends.get(agentID) ?? []), s])
+    this.sendKeys.set(`${agentID} ${k}`, { challenge: asked?.challenge ?? '', send: s })
+    return this.json(res, s.status === 'landed' ? 200 : 403, s)
+  }
+
+  /** B17.561 — the agent's own send, once per Idempotency-Key: to an address the workspace never paid, it waits for the owner. */
+  private async agentSend(req: IncomingMessage, res: ServerResponse, agentID: string, acct: Account): Promise<void> {
+    const k = req.headers['idempotency-key']
+    const b = await this.body<{ to?: string; network?: string; token?: string; amount_minor?: number }>(req)
+    const amount = b.amount_minor ?? 0
+    const to = (b.to ?? '').toLowerCase()
+    if (typeof k !== 'string' || k === '') return this.json(res, 400, { error: 'economy: invalid crypto send: an Idempotency-Key is required' })
+    if (b.network !== NETWORK || b.token !== 'USDC' || !(amount > 0) || !/^0x[0-9a-f]{40}$/.test(to)) return this.json(res, 400, { error: 'economy: invalid crypto send' })
+    const had = this.sendKeys.get(`agent ${agentID} ${k}`)?.send
+    if (had !== undefined) {
+      if (had.to !== to || had.amount_minor !== amount) return this.json(res, 409, { error: 'economy: that Idempotency-Key was used for another request' })
+      return this.json(res, this.code(had), had)
+    }
+    const s: Send = { id: `csnd_${randomUUID()}`, network: NETWORK, token: 'USDC', amount_minor: amount, to, agent_id: agentID, direction: 'out', status: 'awaiting_owner',
+      new_address: true, requested_by: `agent:${agentID}`, created_at: new Date().toISOString() }
+    if (this.paidBy(acct.ws).has(to)) Object.assign(s, { status: 'landed', new_address: false })
+    if (s.status === 'landed') this.land(acct, s)
+    this.sends.set(agentID, [...(this.sends.get(agentID) ?? []), s])
+    this.sendKeys.set(`agent ${agentID} ${k}`, { challenge: '', send: s })
+    return this.json(res, this.code(s), s)
+  }
+
+  /** B17.561 — the owner's answer to a send waiting for them: its challenge, a signed yes (or a test amount there first), or a no. */
+  private async answer(req: IncomingMessage, res: ServerResponse, agentID: string, acct: Account, sendID: string, what: string): Promise<void> {
+    const s = (this.sends.get(agentID) ?? []).find((x) => x.id === sendID && x.direction === 'out')
+    if (s === undefined) return this.json(res, 404, { error: 'economy: no such crypto send' })
+    if (s.status !== 'awaiting_owner') return this.json(res, 400, { error: `economy: invalid crypto send: this send is ${s.status}, not waiting for you` })
+    if (what === 'decline') {
+      if (this.broken('crypto-decline-sends')) this.land(acct, s)
+      else Object.assign(s, { status: 'refused', reason: 'the owner declined it' })
+      return this.json(res, this.code(s), s)
+    }
+    const { test_amount_minor: test = 0, assertion } = await this.body<{ test_amount_minor?: number; assertion?: Assertion }>(req)
+    if (test < 0 || test >= s.amount_minor) return this.json(res, 400, { error: 'economy: invalid crypto send: a test amount is less than the send' })
+    if (what === 'approve/challenge') {
+      const challenge = randomBytes(32).toString('base64url')
+      this.answerChallenges.set(`${s.id} ${test}`, challenge)
+      return this.json(res, 200, { challenge, allow_credentials: [acct.credential_id], user_verification: 'required' })
+    }
+    const refused = this.refused(acct.ws, this.answerChallenges.get(`${s.id} ${test}`) ?? '', assertion)
+    if (refused !== undefined) return this.json(res, 403, { error: refused })
+    this.answerChallenges.delete(`${s.id} ${test}`)
+    if (test > 0) {
+      // The test amount is the owner's own send to the same address; the agent's send keeps waiting.
+      const t: Send = { id: `csnd_${randomUUID()}`, network: NETWORK, token: 'USDC', amount_minor: test, to: s.to, agent_id: agentID, direction: 'out', status: 'landed',
+        requested_by: 'user:owner', created_at: new Date().toISOString() }
+      this.land(acct, t)
+      this.sends.set(agentID, [...(this.sends.get(agentID) ?? []), t])
+      return this.json(res, this.code(t), t)
+    }
+    this.land(acct, s)
+    return this.json(res, this.code(s), s)
+  }
+
+  private code(s: Send): number {
+    return s.status === 'landed' ? 200 : s.status === 'refused' ? 403 : 202
+  }
+
+  private paidBy(ws: string): Set<string> {
+    const paid = this.paid.get(ws) ?? new Set<string>()
+    this.paid.set(ws, paid)
+    return paid
+  }
+
+  /** `s` sent from `acct`: refused while it is frozen or holds too little, otherwise landed and posted to both ledgers. */
+  private land(acct: Account, s: Send): void {
+    const amount = s.amount_minor
+    const to = s.to
+    s.status = 'landed'
     if (acct.frozen && !this.broken('crypto-frozen-sends')) Object.assign(s, { status: 'refused', reason: 'smartaccount: the account is frozen' })
     else if (this.balance(acct) < amount) Object.assign(s, { status: 'refused', reason: 'the account does not hold that much USDC' })
     else {
       s.tx_hash = hex(32)
+      this.paidBy(acct.ws).add(to)
       this.post(acct, 'crypto_send_out', -amount)
       const toAgent = this.agentAt(to)
       const dest = toAgent === undefined ? undefined : this.wallet(toAgent, true)
@@ -173,9 +277,6 @@ export class CryptoWalletDesk {
         if (open !== undefined && !this.broken('crypto-request-unmatched')) open.received_minor = amount
       }
     }
-    this.sends.set(agentID, [...(this.sends.get(agentID) ?? []), s])
-    this.sendKeys.set(`${agentID} ${k}`, { challenge: asked?.challenge ?? '', send: s })
-    return this.json(res, s.status === 'landed' ? 200 : 403, s)
   }
 
   private balance(a: Account): number {
