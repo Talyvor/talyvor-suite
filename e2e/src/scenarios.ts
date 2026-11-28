@@ -166,6 +166,7 @@ import { roomDecideRun, roomInviteScreen } from './roomScreens.ts'
 import { budgetIdsValidated } from './budgetIds.ts'
 import { providerKeyHidden } from './providerKeyHidden.ts'
 import { call, said, settingsConfigBudgets, settingsGuardrails, settingsOperatorOnly, settingsPrompts, settingsStoredAnswers, settingsSwitches, settingsTareDistill } from './settings.ts'
+import { scheduledPromptLoggingNone } from './scheduledPromptLoggingNone.ts'
 import { creditsTopUp, evals, lensTokens, namedIdsIsolated, nodes, outputsAttribution, povi } from './economy.ts'
 import { chargedAfterHangUp, ledgerCallOnce, ledgerMovesAtOnce, streamOutlives30s } from './concurrency.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
@@ -5308,6 +5309,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.250 — and a provider's refusal of the workspace's own key, buffered or streamed, shows neither the key nor its address.
   if (i === 2) list.push(providerKeyHidden())
   if (i === 4) list.push(settingsSwitches(), settingsGuardrails())
+  // B17.574 (for B28.265) — then, on a workspace of its own with Request logging none: a prompt scheduled on an agent is
+  // asked and charged on its statement, and Lens keeps no answer from it.
+  if (i === 4) list.push(scheduledPromptLoggingNone(i))
   if (i === 6) list.push(settingsTareDistill(), settingsStoredAnswers(), settingsPrompts())
   // B34.8 — evals, outputs and attribution, nodes, PoVI, LENS and credits bought, once a run, each on a workspace of its
   // own: what Lens runs is checked on what it stores, and what it has switched off refuses and moves nothing.
