@@ -732,7 +732,8 @@ export class Bank {
     this.cryptoWallets = new CryptoWalletDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
       (agentID) => this.spendPermissions.account(agentID), (address) => this.spendPermissions.agentAt(address),
-      (agentID) => { const a = this.agents.get(agentID); return a === undefined || a.archived_at !== undefined ? undefined : a.ws })
+      (agentID) => { const a = this.agents.get(agentID); return a === undefined || a.archived_at !== undefined ? undefined : a.ws },
+      (ws, agentID) => this.payees.wallet(ws, agentID, 'USDC'))
     this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => this.recoveryCodes.has(ws) ? undefined : this.newRecoveryCode(ws))
     this.earningsPayouts = new EarningsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID, asset) => this.payees.wallet(ws, agentID, asset))

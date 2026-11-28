@@ -40,6 +40,8 @@ export function softPasskey(rpID: string) {
   const credentialID = id.toString('base64url')
   return {
     credentialID,
+    /** B17.563 — its private key as PKCS #8 DER in base64, for a browser's virtual authenticator to sign with the same key. */
+    pkcs8: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'),
     register(challenge: string, name: string) {
       const len = Buffer.alloc(2)
       len.writeUInt16BE(id.length)
