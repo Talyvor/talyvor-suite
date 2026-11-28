@@ -236,6 +236,8 @@ export interface BankDeps {
   credit: (ws: string, ulxc: number, type: string, description: string, metadata?: object) => void
   /** B26.24 — answers a route the stub does not know: a 404 the self-test names */
   miss: (req: IncomingMessage, res: ServerResponse, path: string) => void
+  /** B17.555 — the plan workspace `ws` is on and its account's type (talyvor-lens B61.92) */
+  planOf: (ws: string) => { plan: string; account_type: 'personal' | 'business' }
 }
 
 interface Rules {
@@ -695,7 +697,7 @@ export class Bank {
       const filed: Approval = { id: id('apr_'), ws, agent_id: a.id, amount_ulxc: ulxc, model: '', status: 'pending', created_at: new Date().toISOString(), fingerprint, memo }
       this.approvals.unshift(filed)
       return { status: 403, error: `economy: this Instant transfer is to an account the agent has never sent one to — approval ${filed.id} must be approved by the workspace's owner before it is sent again` }
-    })
+    }, d.planOf)
     this.payees = new PayeeDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
       { read: d.read, base: d.base, appURL: d.appURL })

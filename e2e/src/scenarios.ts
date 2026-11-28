@@ -192,6 +192,7 @@ import { instantTransferOffered, instantTransferQuote, instantTransferSend } fro
 import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from './helpScreen.ts'
 import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
 import { decidedLaddersVerdict, planChange, pricingApproved } from './planLadders.ts'
+import { planPersonal, planSoloFreeExchange } from './planPersonal.ts'
 import { standingOrders } from './standingOrders.ts'
 import { allowances } from './allowances.ts'
 import { agentCardAccount } from './agentCardAccount.ts'
@@ -5282,6 +5283,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 4) list.push(docsTeamGrant(i))
   if (i === 5) list.push(apiKeyRevoke(i), byokAddon(i))
   if (i === 7) list.push(planChange(i))
+  // B17.555 — a Personal account's plan (Lens B61.92), once a run, each on a Solo person of its own: Settings, Plan draws the
+  // person's ladder as Lens states it; and Solo's free exchange line (B61.58), the free part converted with no margin and the
+  // next conversion charged Solo's margin once, on the agent's statements.
+  if (i === 7) list.push(planPersonal(), planSoloFreeExchange())
   if (i === 8) list.push(providerKeys(i))
   // B34.6 — every way into Lens's gateway, once a run, each on a workspace of its own: the provider routes and both
   // compatible prefixes, the workspace's keys and their rotation, MCP, tokens and session keys, and sessions.

@@ -1,6 +1,7 @@
 // B61.48 SELF-TEST — the stand-in Lens's launch areas that had no scenario: Instant transfer, Help and the account's kind.
 //
-// GET /v1/workspaces/{ws}/account answers a synthetic workspace as Lens makes one: business, hybrid (migration 0373).
+// GET /v1/workspaces/{ws}/account answers a synthetic workspace as Lens makes one: business, hybrid (migration 0373); B17.555 —
+// a Personal one the testers asked for (Lens B61.92) personal.
 //
 // Instant transfer (Lens B59.14, B59.15), as instant-transfer-quote reads it:
 //   POST …/money/instant-transfers/quote {send_minor, send_currency, receive_currency, to}   201, locked for 30 seconds: the fee
@@ -16,10 +17,10 @@
 //   GET  …/money/instant-transfers/{id}   the transfer
 //
 // B56.29 — currency conversion (Lens B56.23), as currency-convert-margin reads it:
-//   POST …/agents/{id}/money/convert/quote {sell_currency, buy_currency, sell_minor}   201: business_studio's margin (FX_MARGIN_BPS,
-//        here 60, as the stub's public fees state it) on what is sold above what the month still converts free (FX_FREE_MINOR,
-//        here 100000 a workspace in the currency sold), rounded up, and the rest bought at the Test partner's reference rate
-//        (£1 = $1.25, €1 = $1.10), rounded down
+//   POST …/agents/{id}/money/convert/quote {sell_currency, buy_currency, sell_minor}   201: the plan's margin (FX_MARGIN_BPS,
+//        business_studio's 60 and personal_solo's 100, as the stub's public fees state them) on what is sold above what the
+//        month still converts free (FX_FREE_MINOR, 100000 on either, a workspace in the currency sold), rounded up, and the rest
+//        bought at the Test partner's reference rate (£1 = $1.25, €1 = $1.10), rounded down
 //   POST …/agents/{id}/money/convert {quote_id} and an Idempotency-Key   one fx_conversion entry: the agent's account in the
 //        currency sold down by sell_minor, its account in the currency bought up by buy_minor; more than it holds refused 409;
 //        the same key again answers the same conversion and moves nothing
@@ -70,9 +71,12 @@ const KINDS = ['support', 'complaint', 'account_closure', 'data_export', 'data_d
 const FIATS = ['GBP', 'EUR', 'USD']
 /** What a cent or a penny is worth in µLXC, as the stub's other payments count it. */
 const ULXC_PER_MINOR = 10_000
-/** B56.29 — business_studio's fx_margin_bps and fx_free_minor (talyvor-lens internal/fees), and the Test partner's USD per unit. */
-const FX_MARGIN_BPS = 60
-const FX_FREE_MINOR = 100_000
+/** B56.29, B17.555 — each plan's fx_margin_bps and fx_free_minor, -1 no limit (talyvor-lens internal/fees Defaults), and the
+ *  Test partner's USD per unit. */
+export const FX_MARGIN_BPS: Record<string, number> = { personal_solo: 100, personal_crew: 50, personal_fleet: 0,
+  business_studio: 60, business_company: 60, business_group: 60, business_custom: 15 }
+export const FX_FREE_MINOR: Record<string, number> = { personal_solo: 100_000, personal_crew: 300_000, personal_fleet: -1,
+  business_studio: 100_000, business_company: 1_500_000, business_group: 6_000_000, business_custom: 0 }
 const USD_PER_UNIT: Record<string, number> = { GBP: 1.25, EUR: 1.1, USD: 1 }
 
 interface Conversion { id: string; workspace_id: string; agent_id: string; from_account_id: string; to_account_id: string; sell_minor: number; sell_currency: string
@@ -99,21 +103,24 @@ export class LaunchDesk {
   /** B61.67 — the workspace's money accounts, and its agents' rules. */
   private readonly accounts: (ws: string) => MoneyAccount[]
   private readonly judge: InstantJudge
+  /** B17.555 — the plan the workspace converts on, and its account's type. */
+  private readonly planOf: (ws: string) => { plan: string; account_type: 'personal' | 'business' }
 
   constructor(json: LaunchDesk['json'], body: LaunchDesk['body'], broken: LaunchDesk['broken'], mayInstant: LaunchDesk['mayInstant'],
-    accounts: LaunchDesk['accounts'], judge: InstantJudge) {
+    accounts: LaunchDesk['accounts'], judge: InstantJudge, planOf: LaunchDesk['planOf']) {
     this.json = json
     this.body = body
     this.broken = broken
     this.mayInstant = mayInstant
     this.accounts = accounts
     this.judge = judge
+    this.planOf = planOf
   }
 
   /** One of the routes above, under /v1/workspaces/{ws}: `rest` is what follows it. False for any other. */
   async route(req: IncomingMessage, res: ServerResponse, ws: string, rest: string): Promise<boolean> {
     if (rest === '/account' && req.method === 'GET') {
-      return this.json(res, 200, { workspace_id: ws, account_type: 'business', money_kind: 'hybrid', country: '', registration_number: '' }), true
+      return this.json(res, 200, { workspace_id: ws, account_type: this.planOf(ws).account_type, money_kind: 'hybrid', country: '', registration_number: '' }), true
     }
     if (rest === '/business' && (req.method === 'GET' || req.method === 'PUT')) return this.business(req, res, ws), true
     if (rest === '/requests') return this.request(req, res, ws), true
@@ -258,13 +265,16 @@ export class LaunchDesk {
     if (from === undefined || to === undefined) {
       return this.json(res, 404, { error: `economy: no such money account: the agent has no open ${from === undefined ? sellCur : buyCur} account to convert with` })
     }
-    const free = Math.min(sell, Math.max(0, FX_FREE_MINOR - (this.freeUsed.get(`${ws}\n${sellCur}`) ?? 0)))
-    const margin = this.broken('fx-margin-dropped') ? 0 : Math.ceil(((this.broken('fx-margin-on-free') ? sell : sell - free) * FX_MARGIN_BPS) / 10_000)
+    const { plan } = this.planOf(ws)
+    const bps = FX_MARGIN_BPS[plan] ?? 0
+    const line = FX_FREE_MINOR[plan] ?? 0
+    const free = line === -1 ? sell : Math.min(sell, Math.max(0, line - (this.freeUsed.get(`${ws}\n${sellCur}`) ?? 0)))
+    const margin = this.broken('fx-margin-dropped') ? 0 : Math.ceil(((this.broken('fx-margin-on-free') ? sell : sell - free) * bps) / 10_000)
     const rate = USD_PER_UNIT[sellCur] / USD_PER_UNIT[buyCur]
     const buy = Math.floor((sell - margin) * rate)
     const now = Date.now()
     const c: Conversion = { id: `mfx_${randomUUID()}`, workspace_id: ws, agent_id: agentID, from_account_id: from.id, to_account_id: to.id, sell_minor: sell,
-      sell_currency: sellCur, margin_bps: FX_MARGIN_BPS, margin_minor: margin, free_minor: free, buy_minor: buy, buy_currency: buyCur, reference_rate: rate.toFixed(8),
+      sell_currency: sellCur, margin_bps: bps, margin_minor: margin, free_minor: free, buy_minor: buy, buy_currency: buyCur, reference_rate: rate.toFixed(8),
       rate: (buy / sell).toFixed(8), funding: 'test', status: 'quoted', expires_at: new Date(now + QUOTE_LIFE_MS).toISOString(), created_at: new Date(now).toISOString() }
     this.conversions.set(c.id, c)
     return this.json(res, 201, c)
