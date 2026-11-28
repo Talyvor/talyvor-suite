@@ -93,6 +93,8 @@
 //   pool-dead   — GET /v1/pooling says pooling is on, and the pool serves nothing (B58.15)
 //   old-plans   — GET /v1/public/plans serves the 5 Oct four (Free, Team, Business, Enterprise) on the company ladder
 //                 and none for a person, as Lens before B61.57 (B61.61)
+//   personal-as-business — a Personal account's GET …/plan names it a business, so Settings, Plan draws the company ladder
+//                 for a person, as Lens before B61.92 (B17.555)
 //
 // B17.6 adds the Agent Bank and the marketplace (stub-bank.ts): agents with keys of their own, whose
 // requests through the proxy are judged by their rules and spent from their own balance.
@@ -128,6 +130,7 @@ import { readFileSync } from 'node:fs'
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http'
 import { Bank, SIM_QUOTES } from './stub-bank.ts'
 import { INTL_FEE_MINOR } from './stub-payees.ts'
+import { FX_FREE_MINOR, FX_MARGIN_BPS } from './stub-launch.ts'
 import { DOC_CAP, auditWebhook, docxDocument, nodesAvailable, nodesRoute } from './stub-guards.ts'
 import { roomAgentTool, roomListingRoute, roomsModeratorRoute, roomsRoute, setRoomWallets } from './stub-rooms.ts'
 import { lensOpenAPI, lensPage } from './stub-openapi.ts'
@@ -290,6 +293,8 @@ interface Workspace {
   plan?: { id: string; cancel: boolean; byok?: boolean }
   /** B35.7 — the plan the testers created it on (talyvor-lens B35.1), read after a subscription. */
   syntheticPlan?: string
+  /** B17.555 — a Personal account the testers made (talyvor-lens B61.92); a Business unset. */
+  personal?: boolean
   allowance?: { granted_ulxc: number; consumed_ulxc: number; remaining_ulxc: number; fee_usd_cents: number; period_start?: string; period_end?: string }
   earnings: Earned[]
   /** B28.370 — the workspace's named prompts, by name (talyvor-lens /v1/prompts), each at its one version. */
@@ -391,6 +396,10 @@ function tag(ws: Workspace, req: IncomingMessage, usd: number): void {
 function gatedAs(ws: Workspace): string {
   return ws.syntheticPlan ?? (ws.plan === undefined ? undefined : successor(ws.plan.id)) ?? BUSINESS_LADDER[0]
 }
+
+/** B17.555 — the account's type (talyvor-lens B61.92), and the ladder its plans come from. */
+const accountType = (ws: Workspace | undefined): 'personal' | 'business' => (ws?.personal === true ? 'personal' : 'business')
+const ladderOf = (ws: Workspace): string[] => (ws.personal === true ? PERSONAL_LADDER : BUSINESS_LADDER)
 
 /** What the workspace spent this calendar month, in dollars (Lens spend/current-month). */
 function monthUSD(ws: Workspace): number {
@@ -732,6 +741,11 @@ const QUOTES = { simulated: true, market_data: 'European Central Bank euro forei
   rate_date: '2026-10-02', quotes: SIM_QUOTES }
 
 const bank = new Bank({ brk: BREAK, workspace: (id) => workspaces.get(id), runModel, json, read, miss,
+  // B17.555 — the plan a workspace converts on, and its type.
+  planOf: (id) => {
+    const ws = workspaces.get(id)
+    return { plan: ws === undefined ? BUSINESS_LADDER[0] : gatedAs(ws), account_type: accountType(ws) }
+  },
   moderatorKey: process.env.STUB_MODERATOR_KEY ?? '', adminKey: process.env.STUB_ADMIN_KEY ?? '', base: BASE, appURL: APP_URL,
   credit: (id, ulxc, type, description, metadata) => {
     const ws = workspaces.get(id)
@@ -1451,17 +1465,24 @@ createServer(async (req, res) => {
         const ws = workspaces.get(decodeURIComponent(onPlan[1]))
         if (ws === undefined) return json(res, 404, { error: 'not a synthetic workspace' })
         const { plan = '' } = JSON.parse((await read(req)) || '{}') as { plan?: string }
-        // talyvor-lens B61.57 — any business plan, or a 5 Oct name taken as its successor.
-        const on = BUSINESS_LADDER.includes(plan) ? plan : successor(plan)
+        // talyvor-lens B61.57 — any plan of its own ladder (B61.92), or a 5 Oct name taken as a business's successor.
+        const on = ladderOf(ws).includes(plan) ? plan : ws.personal === true ? undefined : successor(plan)
         if (on === undefined) return json(res, 400, { error: `plan must be one of ${[...PERSONAL_LADDER, ...BUSINESS_LADDER].join(', ')}` })
         ws.syntheticPlan = on
         return json(res, 200, { workspace_id: ws.id, plan: { plan: on } })
       }
-      const asked = JSON.parse((await read(req)) || '{}') as { count?: number; plan?: string }
+      const asked = JSON.parse((await read(req)) || '{}') as { count?: number; plan?: string; account_type?: string }
       const count = asked.count ?? 100
-      // talyvor-lens B61.57 — Studio unnamed, a business plan as named, a 5 Oct name as its successor; the answer names
-      // the plan made.
-      const plan = asked.plan === undefined || asked.plan === '' ? BUSINESS_LADDER[0] : BUSINESS_LADDER.includes(asked.plan) ? asked.plan : successor(asked.plan)
+      // talyvor-lens B61.92 — account_type business (the default) or personal, each on its own ladder.
+      const type = asked.account_type ?? 'business'
+      if (type !== 'business' && type !== 'personal') return json(res, 400, { error: 'account_type must be business or personal' })
+      const ladder = type === 'personal' ? PERSONAL_LADDER : BUSINESS_LADDER
+      // talyvor-lens B61.57 — the ladder's first unnamed, a plan of it as named, a 5 Oct name as its successor; the answer
+      // names the plan made, and a plan of the other ladder is refused.
+      const plan = asked.plan === undefined || asked.plan === '' ? ladder[0] : ladder.includes(asked.plan) ? asked.plan : type === 'business' ? successor(asked.plan) : undefined
+      if (plan === undefined && [...PERSONAL_LADDER, ...BUSINESS_LADDER].includes(asked.plan ?? '')) {
+        return json(res, 400, { error: `a ${type} account's plan must be one of ${ladder.join(', ')}` })
+      }
       if (plan === undefined) return json(res, 400, { error: `plan must be one of ${[...PERSONAL_LADDER, ...BUSINESS_LADDER].join(', ')}` })
       const expires = new Date(Date.now() + 24 * 3600e3).toISOString().replace(/\.\d+Z$/, 'Z')
       const out = []
@@ -1469,12 +1490,13 @@ createServer(async (req, res) => {
         const id = 's' + randomBytes(20).toString('hex').slice(0, 26)
         const ws = newWorkspace(id, 'tok-' + randomBytes(16).toString('hex'))
         ws.syntheticPlan = plan
+        if (type === 'personal') ws.personal = true
         book(ws, GRANT_ULXC, 'admin_grant', 'synthetic test credits')
         workspaces.set(id, ws)
         byToken.set(ws.token, ws)
         out.push({ workspace_id: id, token: ws.token, expires_at: expires })
       }
-      return json(res, 201, { created: out.length, plan, workspaces: out })
+      return json(res, 201, { created: out.length, account_type: type, plan, workspaces: out })
     }
     // talyvor-lens B45.7 — the BFF's sign-in, on its provisioning secret: the identity's workspace, and on its first sight a
     // first agent with its key and STUB_STARTER_TEST_MONEY_ULXC of test money (1 LXC unset; Lens's default is 0).
@@ -1549,14 +1571,15 @@ createServer(async (req, res) => {
     if (scanReport !== null) return bank.scan.report(res, scanReport[1])
     if (p === '/v1/public/fees') {
       return json(res, 200, { market_take_bps: 1500, services_take_bps: 500, compute_take_bps: 500, lending_fee_bps: 100,
-        platform_fee_bps: PLATFORM_FEE_BPS, fx_margin_bps: { personal_solo: 100, personal_crew: 50, personal_fleet: 0,
-          business_studio: 60, business_company: 60, business_group: 60, business_custom: 15 },
+        platform_fee_bps: PLATFORM_FEE_BPS, fx_margin_bps: FX_MARGIN_BPS,
+        // B61.58 — what each plan converts free a month (stub-launch.ts converts by it).
+        fx_free_minor: FX_FREE_MINOR,
         intl_payment_fee_minor: INTL_FEE_MINOR, intl_free_per_month: { personal_solo: 0, personal_crew: 0, personal_fleet: 0, business_studio: 0,
           business_company: 5, business_group: 25, business_custom: 0 }, intl_discount_bps: { personal_solo: 0, personal_crew: 0, personal_fleet: 2000,
           business_studio: 0, business_company: 0, business_group: 0, business_custom: 0 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100,
         // talyvor-lens B56.8 — fees.Charged, as Lens's main has it.
         charged: { market_take_bps: true, services_take_bps: true, compute_take_bps: true, lending_fee_bps: false, platform_fee_bps: true,
-          fx_margin_bps: broke('label-charged'), intl_payment_fee_minor: true, merchant_fee_bps: false, merchant_a2a_fee_bps: false } })
+          fx_margin_bps: broke('label-charged'), fx_free_minor: true, intl_payment_fee_minor: true, merchant_fee_bps: false, merchant_a2a_fee_bps: false } })
     }
     // B28.127 — a shared chat, read with no credential: its title, turns and when it was shared, or 404.
     const sharedChat = /^\/v1\/public\/chat-shares\/([A-Za-z0-9_-]+)$/.exec(p)
@@ -1610,8 +1633,11 @@ createServer(async (req, res) => {
     // B61.51 — the identity gate (STUB_IDENTITY_GATE above), on the owner's token, a workspace key or an agent's own key.
     if (IDENTITY_GATE && req.method === 'POST' && MONEY_MOVES.some((re) => re.test(p))) {
       const mover = (byToken.get(bearer) ?? byKey.get(bearer))?.id ?? bank.agentOfKey(bearer)?.ws.id
-      if (mover !== undefined && bank.verificationLevel(mover) < 'L3') {
-        return json(res, 403, { error: 'Confirm who you are to move money.', code: 'VERIFICATION_NEEDED', level: bank.verificationLevel(mover), level_needed: 'L3', account_type: 'business' })
+      // B17.555 — a Personal account needs L2, a Business L3.
+      const type = accountType(mover === undefined ? undefined : workspaces.get(mover))
+      const needed = type === 'personal' ? 'L2' : 'L3'
+      if (mover !== undefined && bank.verificationLevel(mover) < needed) {
+        return json(res, 403, { error: 'Confirm who you are to move money.', code: 'VERIFICATION_NEEDED', level: bank.verificationLevel(mover), level_needed: needed, account_type: type })
       }
     }
     if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
@@ -2028,7 +2054,7 @@ createServer(async (req, res) => {
         const byok = ws.plan?.byok ?? false
         const gates = planGates()[gated]
         // talyvor-lens B61.57 — and the plan as people read it, its ladder, whether a contract sets it, and its price.
-        return json(res, 200, { plan: gated, name: PLAN_NAMES[gated], account_type: 'business', on_contract: false,
+        return json(res, 200, { plan: gated, name: PLAN_NAMES[gated], account_type: broke('personal-as-business') ? 'business' : accountType(ws), on_contract: false,
           price_minor: PLAN_PRICES_MINOR[gated] ?? null, gated_as: gated, byok_add_on: byok, own_provider_keys_allowed: byok || gates.own_provider_keys === 'included',
           gates, agents_used: bank.activeAgents(ws.id) })
       }
@@ -2043,7 +2069,8 @@ createServer(async (req, res) => {
         const count = (n: number) => `${n} ${n === 1 ? 'agent' : 'agents'}`
         if (!(to in PLAN_NAMES)) return refuse(400, `There is no plan called "${to}".`)
         if (to === 'business_custom') return refuse(409, 'Custom is set by a contract with Talyvor.')
-        if (!BUSINESS_LADDER.includes(to)) return refuse(409, 'A business account chooses Studio, Company or Group.')
+        if (ws.personal === true && !PERSONAL_LADDER.includes(to)) return refuse(409, 'A personal account chooses Solo, Crew or Fleet.')
+        if (ws.personal !== true && !BUSINESS_LADDER.includes(to)) return refuse(409, 'A business account chooses Studio, Company or Group.')
         if (to === from) return refuse(409, `This account is already on ${PLAN_NAMES[to]}.`)
         if (allows !== -1 && agents > allows) return refuse(409, `${PLAN_NAMES[to]} allows ${count(allows)}, and this account has ${agents}. Archive ${count(agents - allows)} first.`)
         ws.syntheticPlan = to

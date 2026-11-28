@@ -146,7 +146,7 @@ export function changedVerdict(after: Pick<WorkspacePlan, 'plan' | 'gates'>, to:
 // ─── the screens ─────────────────────────────────────────────────────────────
 
 /** Each `<prefix><id>` card inside `scope`, by id and its text, in the order the page draws them. */
-async function cardsIn(page: Page, scope: string, prefix: string): Promise<{ id: string; text: string }[]> {
+export async function cardsIn(page: Page, scope: string, prefix: string): Promise<{ id: string; text: string }[]> {
   const cards = page.getByTestId(scope).locator(`[data-testid^="${prefix}"]`)
   await cards.first().waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
   const out: { id: string; text: string }[] = []
