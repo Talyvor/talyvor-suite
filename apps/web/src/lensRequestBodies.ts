@@ -1162,6 +1162,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/alerts/channels", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensAlertChannelBody",
   },
+  // B28.74 — a signed webhook for wallet events, added in Settings › Wallet webhooks (Lens B28.344).
+  {
+    route: "POST /v1/money/event-webhooks",
+    file: "apps/bff/money_webhooks.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyEventWebhooks(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/wallet_webhooks_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/event-webhooks", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWalletWebhookBody",
+  },
   // B28.61 — a low-balance alert for an agent, set on the agent's page (Lens B28.334).
   {
     route: "PUT /v1/money/low-balance",

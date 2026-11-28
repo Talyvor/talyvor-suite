@@ -129,6 +129,7 @@ describe('sharing consent', () => {
       '/settings/verification',
       '/settings/payout-details',
       '/settings/terms',
+      '/settings/wallet-webhooks',
       '/settings/webhooks',
       '/settings/email-branding',
       '/settings/help',

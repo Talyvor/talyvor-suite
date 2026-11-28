@@ -59,6 +59,7 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/settings/payout-details': '/settings/payout-details',
   '/settings/terms': '/settings/terms',
   '/settings/webhooks': '/settings/webhooks',
+  '/settings/wallet-webhooks': '/settings/wallet-webhooks',
   '/settings/email-branding': '/settings/email-branding',
   '/settings/connect': '/settings/connect',
   '/settings/help': '/settings/help',

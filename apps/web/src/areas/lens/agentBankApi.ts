@@ -492,6 +492,34 @@ export interface AlertChannel {
   created_at: string
 }
 
+/** B28.74 — one https endpoint the workspace's wallet events are sent to, signed (Lens B28.344). */
+export interface WalletWebhook {
+  id: string
+  url: string
+  /** none: every event */
+  events: string[] | null
+  /** its signing secret, only in the answer that added or rotated it */
+  secret?: string
+  added_by?: string
+  created_at: string
+  rotated_at?: string
+}
+
+/** B28.74 — one wallet event queued, delivered or failed to one endpoint. */
+export interface WalletWebhookEvent {
+  id: string
+  webhook_id: string
+  type: string
+  ref: string
+  occurred_at: string
+  status: 'queued' | 'delivered' | 'failed'
+  attempts: number
+  next_attempt_at?: string
+  last_error?: string
+  delivered_at?: string
+  created_at: string
+}
+
 /** B28.66 — one alert sent, or to be sent, to one channel. */
 export interface AlertDelivery {
   id: string
@@ -1422,6 +1450,13 @@ export const agentBankApi = {
   addAlertChannel: (kind: AlertChannel['kind'], url: string) => send<AlertChannel>('POST', '/api/money/alerts/channels', { kind, url }),
   removeAlertChannel: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/alerts/channels/${e(id)}`),
   alertDeliveries: () => getJSON<{ deliveries: AlertDelivery[] | null }>('/api/money/alerts/deliveries', { deliveries: 'list' }),
+  // B28.74 — signed webhooks for wallet events (Lens B28.344).
+  walletWebhooks: () =>
+    getJSON<{ webhooks: WalletWebhook[] | null; event_types: string[] | null }>('/api/money/event-webhooks', { webhooks: 'list' }),
+  addWalletWebhook: (url: string, events: string[]) => send<WalletWebhook>('POST', '/api/money/event-webhooks', { url, events }),
+  rotateWalletWebhook: (id: string) => send<WalletWebhook>('POST', `/api/money/event-webhooks/${e(id)}/rotate`),
+  removeWalletWebhook: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/event-webhooks/${e(id)}`),
+  walletWebhookEvents: () => getJSON<{ events: WalletWebhookEvent[] | null }>('/api/money/event-webhooks/events', { events: 'list' }),
   // B28.61 — a low-balance alert for an agent's balance in a currency (Lens B28.334).
   lowBalance: () => getJSON<{ thresholds: BalanceThreshold[] | null }>('/api/money/low-balance', { thresholds: 'list' }),
   setLowBalance: (agent_id: string, currency: string, threshold_minor: number) =>

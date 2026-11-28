@@ -856,6 +856,18 @@ const BY_PATH: Record<string, unknown> = {
         body: 'Your spending is at 50% of this month’s budget: £250.00 of £500.00.', status: 'sent', attempts: 1, created_at: '2026-09-27T12:10:05Z', sent_at: '2026-09-27T12:10:38Z' },
     ],
   },
+  '/api/money/event-webhooks': {
+    webhooks: [{ id: 'wwh_1', url: 'https://ops.example.com/talyvor', events: [], added_by: 'u1', created_at: '2026-09-20T09:00:00Z' }],
+    event_types: ['transfer.created', 'approval.requested', 'approval.decided', 'alert.limit', 'alert.unusual_spend', 'balance.low'],
+  },
+  '/api/money/event-webhooks/events': {
+    events: [
+      { id: 'msg_2', webhook_id: 'wwh_1', type: 'approval.requested', ref: 'apr_1', occurred_at: '2026-09-27T12:20:00Z', data: {},
+        status: 'queued', attempts: 1, next_attempt_at: '2026-09-27T12:25:00Z', last_error: 'answered 503', created_at: '2026-09-27T12:20:10Z' },
+      { id: 'msg_1', webhook_id: 'wwh_1', type: 'transfer.created', ref: 'atr_1', occurred_at: '2026-09-27T12:10:00Z', data: {},
+        status: 'delivered', attempts: 1, delivered_at: '2026-09-27T12:10:41Z', created_at: '2026-09-27T12:10:05Z' },
+    ],
+  },
   '/api/agents/approvals': {
     approvals: [
       {
