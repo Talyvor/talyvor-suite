@@ -45,7 +45,7 @@ async function runAgainstStub(broken: string, scenario: Scenario = mcpSDKAgentPa
 describe('mcp-sdk-agent-pay (B40.25)', () => {
   it("passes on a Lens whose agent_pay posts its entry to both agents' statements", async () => {
     const { verdict } = await runAgainstStub('')
-    expect(verdict.detail).toMatch(/^the MCP SDK client listed 2 tools, each annotated; agent_balance read 1000000 µLXC and agent_pay's entry \S+ is two postings, −250000 on SDK payer 7's statement and \+250000 on SDK payee 7's, summing to zero$/)
+    expect(verdict.detail).toMatch(/^the MCP SDK client listed 3 tools, each annotated; agent_balance read 1000000 µLXC and agent_pay's entry \S+ is two postings, −250000 on SDK payer 7's statement and \+250000 on SDK payee 7's, summing to zero$/)
     expect(verdict.pass).toBe(true)
   })
 

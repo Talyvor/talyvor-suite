@@ -1527,7 +1527,8 @@ export class Bank {
    * notification, ping, tools/list), agent_balance and agent_pay (talyvor-lens internal/mcp/agent_tools.go).
    * STUB_BREAK=agent-pay-unposted answers agent_pay with an entry and posts nothing. B50.16: agent_pay's idempotency_key, as
    * Lens B50.15 takes it: a retry of the same payment answers the first and posts nothing; another payment under the key is
-   * refused. STUB_BREAK=agent-pay-replay ignores the key, so every retry pays again.
+   * refused. STUB_BREAK=agent-pay-replay ignores the key, so every retry pays again. B17.562: wallet_topup_link (Lens B48.39),
+   * the owner asked for a top-up of the agent's USDC wallet, quoted by the crypto wallet desk; nothing moves.
    */
   async agentMCP(req: IncomingMessage, res: ServerResponse, key: string, path: string): Promise<boolean> {
     const who = this.agentOfKey(key)
@@ -1567,7 +1568,12 @@ export class Bank {
     if (rpc.method === 'ping') return reply({}), true
     if (rpc.method === 'tools/list') {
       const tool = (n: string, title: string, moves: boolean) => ({ name: n, inputSchema: { type: 'object' }, annotations: { title, readOnlyHint: !moves, destructiveHint: moves } })
-      return reply({ tools: [tool('agent_balance', 'Your balance and rules', false), tool('agent_pay', 'Pay an agent', true)] }), true
+      return reply({ tools: [tool('agent_balance', 'Your balance and rules', false), tool('agent_pay', 'Pay an agent', true),
+        { name: 'wallet_topup_link', inputSchema: { type: 'object' }, annotations: { title: 'Ask your owner for a top-up', readOnlyHint: false, destructiveHint: false } }] }), true
+    }
+    if (name === 'wallet_topup_link') {
+      const out = this.cryptoWallets.topUpLink(who.ws.id, who.agent.id, a)
+      return (out.ok ? text(out.body) : reply({ content: [{ type: 'text', text: out.error }], isError: true })), true
     }
     if (name === 'agent_balance') return text({ agent: (this.book(who.ws) as { agents: { id: string }[] }).agents.find((x) => x.id === who.agent.id) }), true
     if (name === 'agent_pay') {
@@ -3252,7 +3258,8 @@ export class Bank {
         return json(res, 200, { agent_id: a.id, swept_ulxc: swept, revoked_keys: revoked, archived_at: now }), true
       }
       if (action === '/keys' && method === 'POST') {
-        const key = 'tlv_' + randomBytes(24).toString('hex')
+        // As talyvor-lens internal/auth mints one: tlv_ and 64 hex characters (the BFF's /mcp knows an agent's key by it).
+        const key = 'tlv_' + randomBytes(32).toString('hex')
         const keyID = id('key_')
         this.keys.set(key, a)
         this.keyByID.set(keyID, key)
