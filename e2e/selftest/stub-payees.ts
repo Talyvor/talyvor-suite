@@ -46,6 +46,9 @@
 // B30.128 — and an outside business's pulls on its mandate's key (Lens B30.19, B30.129): each within both maxima moves the
 // agent's account into the mandate's hold and pays it out to the saved payee; over one is 403, revoked 409. Its defect:
 //   mandate-month-ignored  — the monthly maximum is not asked: a pull over it is posted
+// B17.559 — and an agent's own key asking for a mandate (Lens B55.24): requested, pulling nothing until the owner approves it,
+// and then the Talyvor company it names pulls on its own key, the agent's account into the company's. Its defect:
+//   mandate-ask-active     — the agent's ask is active at once, with no owner's approval
 // B30.96 — and the Pay screen's other desks: a payment names the account it pays from (account_id); mandates (POST and GET
 // /v1/money/mandates, POST …/{id}/revoke, Lens B30.19: an outside business's grant answers its pull_key once); and bulk
 // payouts (POST /v1/money/payouts as text/csv or JSON rows, GET …, GET …/{id}, POST …/{id}/approve, Lens B30.21): every row
@@ -1441,9 +1444,11 @@ export class PayeeDesk {
    * B30.96 — mandates on an agent's account (Lens B30.19): granted, listed, revoked. Pulls are not served here. B55.56: the
    * owner's grant comes as {grant, assertion} (or the grant alone) and, once the workspace has a passkey, is made only with
    * an assertion over POST /v1/money/mandates/challenge's challenge for exactly that grant; a requested mandate is approved
-   * the same way, over its own challenge, or declined.
+   * the same way, over its own challenge, or declined. B17.559: an agent's own key (`asker`) only asks, for its own account:
+   * the mandate is requested and pulls nothing until the owner approves it. A Talyvor company pulls on its own key.
    */
-  private async mandateRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string, payees: Payee[]): Promise<boolean> {
+  private async mandateRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string, payees: Payee[], asker = ''): Promise<boolean> {
+    if (asker === '' && await this.companyPull(req, res, ws, path)) return true
     const list = this.mandates.get(ws) ?? []
     if (path === '/v1/money/mandates' && req.method === 'GET') {
       const status = new URL(req.url ?? '/', 'http://stub').searchParams.get('status') ?? ''
@@ -1471,7 +1476,7 @@ export class PayeeDesk {
     if (path === '/v1/money/mandates' && req.method === 'POST') {
       const raw = await this.body<MandateGrant & { grant?: MandateGrant; assertion?: Assertion }>(req)
       const g = raw.grant ?? raw
-      const refused = signed(grantKey(g), raw.assertion)
+      const refused = asker === '' ? signed(grantKey(g), raw.assertion) : undefined
       if (refused !== undefined) return this.json(res, 403, { error: refused }), true
       const bad = (msg: string) => this.json(res, 400, { error: `economy: invalid mandate: ${msg}` })
       const company = (g.payee_workspace_id ?? '').trim()
@@ -1479,7 +1484,7 @@ export class PayeeDesk {
       if ((company === '') === (business === '')) return bad('name the payee: a Talyvor company by payee_workspace_id, or an outside business by payee_business_id'), true
       if (business !== '' && (g.payee_id ?? '') === '') return bad("an outside business's pulls are paid out to a saved payee: give payee_id"), true
       if (company === ws) return bad('an agent cannot grant its own company a mandate'), true
-      const account = (this.accounts.get(ws) ?? []).find((a) => a.id === g.account_id && a.purpose === 'agent')
+      const account = (this.accounts.get(ws) ?? []).find((a) => a.id === g.account_id && a.purpose === 'agent' && (asker === '' || a.agent_id === asker))
       if (account === undefined) return this.json(res, 404, { error: "economy: no such money account: a mandate is on an agent's account" }), true
       const pull = g.max_per_pull_minor ?? 0
       const month = g.max_per_month_minor ?? 0
@@ -1491,7 +1496,8 @@ export class PayeeDesk {
         ...(company === '' ? { payee_business_id: business, payee_id: g.payee_id } : { payee_workspace_id: company }),
         ...(company === '' ? { hold_account_id: `macc_hold_${randomUUID()}` } : {}),
         payee_name: (g.payee_name ?? '').trim() || payee?.name || company, max_per_pull_minor: pull, max_per_month_minor: month, pulled_this_month_minor: 0,
-        expires_at: new Date(g.expires_at ?? '').toISOString(), status: 'active', created_at: new Date().toISOString() }
+        // STUB_BREAK=mandate-ask-active — an agent's ask is made active at once, with no owner's approval.
+        expires_at: new Date(g.expires_at ?? '').toISOString(), status: asker === '' || this.broken('mandate-ask-active') ? 'active' : 'requested', created_at: new Date().toISOString() }
       this.mandates.set(ws, [m, ...list])
       if (business === '') return this.json(res, 201, m), true
       const key = `tlvm_${randomBytes(16).toString('hex')}`
@@ -1822,6 +1828,54 @@ export class PayeeDesk {
     this.invoicePaidBy.set(madeKey, entry)
     Object.assign(inv, { paid_minor: inv.total_minor, due_minor: 0, status: 'paid', paid_at: now })
     return this.json(res, 200, { invoice: this.invoice(inv), entry }), true
+  }
+
+  /** B17.559 — POST /v1/money/mandates on an agent's own key: the agent asks for a mandate on its own account. */
+  async agentMandate(req: IncomingMessage, res: ServerResponse, ws: string, agentID: string, path: string): Promise<boolean> {
+    if (path !== '/v1/money/mandates' || req.method !== 'POST') return false
+    return this.mandateRoute(req, res, ws, path, this.payees.get(ws) ?? [], agentID)
+  }
+
+  /**
+   * B17.559 — POST /v1/money/mandates/{id}/pull by the Talyvor company the mandate names, on its own key (Lens PullMandate):
+   * one entry, the agent's account to the company's account in its currency. Requested, declined or revoked it is 409, over
+   * either maximum 403, each moving nothing; a retry under the same key answers the same pull.
+   */
+  private async companyPull(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const pulled = /^\/v1\/money\/mandates\/([^/]+)\/pull$/.exec(path)
+    if (pulled === null || req.method !== 'POST') return false
+    const m = [...this.mandates.values()].flat().find((x) => x.id === pulled[1] && x.payee_workspace_id === ws)
+    if (m === undefined) return this.json(res, 404, { error: 'economy: no such mandate' }), true
+    const b = await this.body<{ amount_minor?: number; idempotency_key?: string; memo?: string }>(req)
+    const amount = b.amount_minor ?? 0
+    if (!Number.isInteger(amount) || amount <= 0) return this.json(res, 400, { error: `economy: invalid mandate: a pull takes some money, not ${amount}` }), true
+    if (!b.idempotency_key) return this.json(res, 400, { error: 'economy: invalid mandate: a pull needs an idempotency key of up to 200 characters' }), true
+    const seen = this.pulls.get(`${m.id}\n${b.idempotency_key}`)
+    if (seen !== undefined) return this.json(res, seen.amount === amount ? 201 : 409, seen.amount === amount ? seen.answer : { error: 'economy: idempotency key reused with a different request' }), true
+    if (m.status === 'requested') return this.json(res, 409, { error: 'economy: the owner has not approved this mandate yet, so it pulls nothing' }), true
+    if (m.status !== 'active') return this.json(res, 409, { error: `economy: the mandate was ${m.status}` }), true
+    if (Date.parse(m.expires_at) <= Date.now()) return this.json(res, 409, { error: 'economy: the mandate has expired' }), true
+    if (amount > m.max_per_pull_minor || m.pulled_this_month_minor + amount > m.max_per_month_minor) {
+      return this.json(res, 403, { error: `economy: the pull is over the mandate's limit: ${amount} ${m.currency}` }), true
+    }
+    const from = (this.accounts.get(m.workspace_id) ?? []).find((a) => a.id === m.account_id)
+    const to = (this.accounts.get(ws) ?? []).find((a) => a.currency === m.currency && a.purpose === 'company' && a.status === 'open')
+    if (from === undefined) return this.json(res, 404, { error: 'economy: no such money account' }), true
+    if (to === undefined) return this.json(res, 409, { error: `economy: the payee has no open company account in the mandate's currency (${m.currency})` }), true
+    if (from.test_minor < amount) return this.json(res, 409, { error: `economy: the account does not hold enough to pay this pull: it holds ${from.test_minor} test ${m.currency}` }), true
+    const entry = { id: `me_${randomUUID()}`, workspace_id: m.workspace_id, capability: 'currency_accounts', kind: 'mandate_pull', idempotency_key: `mandate_pull:${m.id}:${b.idempotency_key}`,
+      funding: 'test', memo: (b.memo ?? '').trim() || `Pulled by ${m.payee_name} under mandate ${m.id}`, created_at: new Date().toISOString(),
+      postings: [{ account_id: from.id, amount_minor: -amount, currency: m.currency, funding: 'test' }, { account_id: to.id, amount_minor: amount, currency: m.currency, funding: 'test' }] }
+    from.test_minor -= amount
+    from.balance_minor -= amount
+    to.test_minor += amount
+    to.balance_minor += amount
+    this.line(m.workspace_id, from, 'mandate_pull', -amount, entry.id)
+    this.line(ws, to, 'mandate_pull', amount, entry.id)
+    m.pulled_this_month_minor += amount
+    const answer = { mandate_id: m.id, amount_minor: amount, currency: m.currency, pulled_this_month_minor: m.pulled_this_month_minor, entry }
+    this.pulls.set(`${m.id}\n${b.idempotency_key}`, { amount, answer })
+    return this.json(res, 201, answer), true
   }
 
   /**
