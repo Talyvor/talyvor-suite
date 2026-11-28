@@ -23,15 +23,17 @@ export function dollarsCell(ulxc: number): string {
 }
 
 /**
- * The PDF's opening and closing balances, in row order: each cell is one string the page shows, and an opening or
- * closing row is its date, its account, the word, then the balance. Lens's table PDF (B48.14) also draws the row's
- * empty WITH and AMOUNT cells as `()`; the page shows nothing there, so they are not read.
+ * The PDF's opening and closing balances, in section order: each cell is one string the page shows. Lens's statement
+ * (B61.131) heads each section's first page with a band, OPENING BALANCE then its figure … CLOSING BALANCE then its
+ * figure, in economy.LXCMoney's format. The table's rows and HOW THIS ADDS UP repeat the words below it, so only the
+ * band is read (B17.583).
  */
 export function pdfBalances(pdf: string): { opening: string[]; closing: string[] } {
   const cells = [...pdf.matchAll(/\(((?:[^()\\]|\\.)*)\) Tj/g)].map((m) => m[1].replace(/\\([()\\])/g, '$1')).filter((c) => c !== '')
   const out = { opening: [] as string[], closing: [] as string[] }
   for (let i = 0; i + 1 < cells.length; i++) {
-    if (cells[i] === 'opening' || cells[i] === 'closing') out[cells[i] as 'opening' | 'closing'].push(cells[i + 1])
+    if (cells[i] === 'OPENING BALANCE') out.opening.push(cells[i + 1])
+    if (cells[i] === 'CLOSING BALANCE') out.closing.push(cells[i + 1])
   }
   return out
 }
