@@ -387,6 +387,7 @@ function ChangeNumberDialog({ onClose }: { onClose: () => void }) {
       <Dialog open onClose={onClose} title={DOOR_WORDS.codeTitle}>
         <p>{DOOR_WORDS.sentTo(step.shown)}</p>
         <DigitBoxes
+          key="code"
           label="The code"
           oneTimeCode
           disabled={busy}
@@ -421,7 +422,9 @@ function ChangeNumberDialog({ onClose }: { onClose: () => void }) {
     return (
       <Dialog open onClose={onClose} title={SECURITY_WORDS.oldPasscode}>
         <p>{SECURITY_WORDS.numberPasscodeLead}</p>
+        {/* Its own boxes: the code's would carry their six digits into the passcode (B17.556). */}
         <DigitBoxes
+          key="passcode"
           label="Passcode"
           masked
           disabled={busy}

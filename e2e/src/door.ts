@@ -11,14 +11,18 @@
 //        after, on the same code, signs in.
 //   door-phone-lock — the phone's way through the BFF (no Origin, a Bearer token): a session that reads; closed, it
 //        answers 423 on every route but unlock; a wrong passcode leaves it locked, the right one opens it.
+//   door-security — B17.556: Settings › Security, signed in with the passkey: the passcode changed (the old one, the
+//        new one twice), then the number (a new test number, its code read from the screen, the new passcode). At the
+//        door the new number and the new passcode sign in on the account, the old passcode is refused, and the old
+//        number has no person. Later scenarios use the new number and passcode.
 //   door-wait — locked again, five wrong passcodes at the lock and Lens makes every try wait 15 minutes, the right
 //        passcode included; the session stays locked.
 // Nothing signs in through Google. A later scenario that needs what an earlier one made (the person, the passkey) is a
 // SKIP naming it when that one did not make it, so one fault is filed once.
 //
 // LENS'S LIMITS ARE MET, NOT DODGED. One number gets a text at most every 30 seconds and one address 5 an hour
-// (talyvor-lens phonesignin TextGap, LENS_PHONE_CHECKS_PER_ADDRESS_HOUR): the run asks for four codes, waits out a
-// 30-second gap, and reports a longer wait as a SKIP with Lens's own sentence.
+// (talyvor-lens phonesignin TextGap, LENS_PHONE_CHECKS_PER_ADDRESS_HOUR): the run asks for four codes, and door-security
+// three more, waits out a 30-second gap, and reports a longer wait as a SKIP with Lens's own sentence.
 
 import { createHash, randomInt } from 'node:crypto'
 import type { BrowserContext, CDPSession, Page, Response } from 'playwright'
@@ -78,6 +82,17 @@ const WORDS = {
   fasterTitle: 'Sign in faster next time',
   makePasskey: 'Make a passkey',
   notNow: 'Not now',
+}
+/** apps/web Security.tsx SECURITY_WORDS: Settings › Security. */
+const SECURITY = {
+  path: '/settings/security',
+  changePasscode: 'Change passcode',
+  oldPasscode: 'Enter your passcode',
+  newPasscode: 'Choose a new passcode',
+  passcodeChanged: 'Your passcode is changed',
+  changeNumber: 'Change number',
+  newNumber: 'Your new phone number',
+  sendCode: 'Send code',
 }
 /** Door.tsx DOOR_WORDS.sandboxCode. */
 const SANDBOX_CODE = /In Sandbox no text is sent\. Your code is (\d{3}) (\d{3})\./
@@ -202,6 +217,14 @@ async function codeFromScreen(ctx: ScenarioCtx, page: Page, phone: string): Prom
     page.getByRole('heading', { name: WORDS.passcodeTitle }).waitFor({ timeout: STEP_MS }).then(() => true),
   ])
   return { hasPerson: next }
+}
+
+/** The test numbers door-security moves the person onto, in order: one, and the next if a night before holds it. */
+export function newPhones(salt: number, taken: readonly string[] = doorPhones(salt)): string[] {
+  const first = Number.parseInt(createHash('sha256').update(`door-new-${salt}`).digest('hex').slice(0, 8), 16)
+  const out: string[] = []
+  for (let n = 0; out.length < 2; n++) if (!taken.includes(testPhone(first + n))) out.push(testPhone(first + n))
+  return out
 }
 
 /** Shared by one run's door scenarios: what the earlier ones made. */
@@ -467,6 +490,163 @@ function doorPhoneLock(run: DoorRun): Scenario {
   }
 }
 
+/** A browser signed in as the run's person: the passkey door-passcode made, or else the number, its code and the passcode. */
+async function signedIn(ctx: ScenarioCtx, run: DoorRun, p: DoorPerson): Promise<Door> {
+  const door = await openDoor(ctx, run.key)
+  try {
+    const page = door.page
+    if (run.key !== undefined) {
+      const [finished] = await Promise.all([posted(page, '/auth/passkey/finish'), page.getByRole('button', { name: WORDS.passkey }).click({ timeout: STEP_MS })])
+      if (finished.status() !== 200) throw new Error(`the passkey sign-in was refused ${finished.status()}: ${JSON.stringify(await bodyOf(finished))}`)
+    } else {
+      if (!(await codeFromScreen(ctx, page, p.phone)).hasPerson) throw new Error(`${p.phone}'s code led to "${WORDS.chooseTitle}", as if it had no account`)
+      const [signed] = await Promise.all([posted(page, '/auth/phone/signin'), typeDigits(page, 'Passcode', p.passcode)])
+      if (signed.status() !== 200) throw new Error(`the passcode sign-in was refused ${signed.status()}: ${JSON.stringify(await bodyOf(signed))}`)
+      await page.getByRole('button', { name: WORDS.notNow }).click({ timeout: STEP_MS })
+    }
+    const me = await whoAmI(page)
+    if (!me.authenticated || me.workspace_id !== p.accountID) throw new Error(`signed in, the session is on ${me.workspace_id ?? 'nothing'}, not ${p.accountID}`)
+    return door
+  } catch (e) {
+    await door.close()
+    throw e
+  }
+}
+
+/** The dialog titled `title` once it is open. */
+async function dialogTitled(page: Page, title: string) {
+  const d = page.getByRole('dialog', { name: title })
+  await d.waitFor({ timeout: STEP_MS })
+  return d
+}
+
+/**
+ * Settings › Security's Change number: `phone` typed, Send code, the code read from the dialog's Sandbox note, then the
+ * passcode. Answers Lens's answer to the change as the BFF relays it.
+ */
+async function changeNumberOnScreen(ctx: ScenarioCtx, page: Page, phone: string, passcode: string): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (!isTestPhone(phone)) throw new Error(`${phone} is not a test number`)
+  let d = await dialogTitled(page, SECURITY.newNumber)
+  await d.getByRole('textbox', { name: SECURITY.newNumber }).fill(nationalOf(phone), { timeout: STEP_MS })
+  for (let tries = 0; ; tries++) {
+    const [started] = await Promise.all([posted(page, '/auth/phone/start'), d.getByRole('button', { name: SECURITY.sendCode }).click()])
+    if (started.status() === 200) break
+    const body = await bodyOf(started)
+    const said = typeof body.error === 'string' ? body.error : `${started.status()}`
+    if (started.status() !== 429) throw new Error(`asking for a code for the new number ${phone} was refused ${started.status()}: ${said}`)
+    const wait = waitOf(started, body)
+    if (tries > 0 || wait > GAP_MS) throw new CannotTest(`Lens limits the codes this run may ask for: "${said}"`)
+    ctx.evidence.push({ note: `Lens asked the run to wait ${Math.ceil(wait / 1000)} s before another code for ${phone}: "${said}"` })
+    await page.waitForTimeout(wait + 1_000)
+  }
+  d = await dialogTitled(page, WORDS.codeTitle)
+  const line = d.getByText(SANDBOX_CODE)
+  if (!(await line.waitFor({ timeout: STEP_MS }).then(() => true, () => false))) {
+    throw new CannotTest('this server sends real texts, so there is no Sandbox code on Change number for the testers to read')
+  }
+  const m = SANDBOX_CODE.exec(await line.innerText())
+  if (m === null) throw new Error(`the Sandbox code line reads "${await line.innerText()}"`)
+  ctx.evidence.push({ note: `Change number, ${phone}: the dialog showed the Sandbox code ${m[1]} ${m[2]}` })
+  const [finished] = await Promise.all([posted(page, '/auth/phone/finish'), typeDigits(page, 'The code', m[1] + m[2])])
+  if (finished.status() !== 200) throw new Error(`the code Change number showed was refused ${finished.status()}: ${JSON.stringify(await bodyOf(finished))}`)
+  await dialogTitled(page, SECURITY.oldPasscode)
+  const [changed] = await Promise.all([posted(page, '/auth/phone/change-number'), typeDigits(page, 'Passcode', passcode)])
+  const body = await bodyOf(changed)
+  ctx.evidence.push({ note: `POST /auth/phone/change-number to ${phone}: ${changed.status()} ${JSON.stringify(body)}` })
+  return { status: changed.status(), body }
+}
+
+function doorSecurity(run: DoorRun): Scenario {
+  return {
+    id: 'door-security',
+    owner: 'talyvor-suite',
+    feature: 'Session and sign-in',
+    items: ['B61.104', 'B61.105', 'B61.106'],
+    title: 'Settings › Security: the passcode changed (the old one, the new one twice) and the number changed (its code read from the ' +
+      'screen, the passcode); then the new number and the new passcode sign in, the old passcode is refused and the old number has no account',
+    run: async (ctx) => {
+      const p = personOf(run)
+      const wrong: string[] = []
+      const fresh = wrongPasscode(p.phone, p.passcode)
+      const door = await signedIn(ctx, run, p)
+      let newPhone = ''
+      try {
+        const page = door.page
+        await page.goto(`${door.origin}${SECURITY.path}`, { waitUntil: 'domcontentloaded' })
+
+        // The passcode: the old one, then the new one typed twice.
+        await page.getByRole('button', { name: SECURITY.changePasscode }).click({ timeout: STEP_MS })
+        await dialogTitled(page, SECURITY.oldPasscode)
+        await typeDigits(page, 'Passcode', p.passcode)
+        await dialogTitled(page, SECURITY.newPasscode)
+        await typeDigits(page, 'Passcode', fresh)
+        await dialogTitled(page, WORDS.againTitle)
+        const [changed] = await Promise.all([posted(page, '/auth/passcode/change'), typeDigits(page, 'Passcode', fresh)])
+        const said = await bodyOf(changed)
+        ctx.evidence.push({ note: `POST /auth/passcode/change: ${changed.status()} ${JSON.stringify(said)}` })
+        if (changed.status() !== 200) return fail(`Change passcode with the old one and a new one typed twice was answered ${changed.status()} ${JSON.stringify(said)}`)
+        run.person = { ...p, passcode: fresh }
+        if (!(await page.getByText(SECURITY.passcodeChanged).waitFor({ timeout: STEP_MS }).then(() => true, () => false))) {
+          wrong.push(`after the change the page does not say "${SECURITY.passcodeChanged}"`)
+        }
+
+        // The number: a new test number, its code from the screen, then the (new) passcode.
+        await page.getByRole('button', { name: SECURITY.changeNumber }).click({ timeout: STEP_MS })
+        for (const candidate of newPhones(RUN_SALT, [p.phone, ...doorPhones(RUN_SALT)])) {
+          const moved = await changeNumberOnScreen(ctx, page, candidate, fresh)
+          if (moved.status === 200) {
+            newPhone = candidate
+            if (moved.body.phone !== candidate) wrong.push(`the number change answered the number ${String(moved.body.phone)}, not ${candidate}`)
+            break
+          }
+          if (moved.body.reason !== 'held') return fail(`Change number to ${candidate} with the new passcode was answered ${moved.status} ${JSON.stringify(moved.body)}`)
+          ctx.evidence.push({ note: `${candidate} belongs to a person from a night before; the next test number is tried` })
+        }
+        if (newPhone === '') throw new CannotTest(`both test numbers door-security tried belong to people from nights before`)
+        run.person = { ...p, phone: newPhone, passcode: fresh }
+      } finally {
+        await door.close()
+      }
+
+      // At the door: the new number, the old passcode refused, the new one signs in.
+      const atNew = await openDoor(ctx)
+      try {
+        const page = atNew.page
+        const { hasPerson } = await codeFromScreen(ctx, page, newPhone)
+        if (!hasPerson) return fail(`after the change, the new number ${newPhone}'s code led to "${WORDS.chooseTitle}", as if it had no account`)
+        const [old] = await Promise.all([posted(page, '/auth/phone/signin'), typeDigits(page, 'Passcode', p.passcode)])
+        const oldSaid = await bodyOf(old)
+        ctx.evidence.push({ note: `the old passcode at ${newPhone}: ${old.status()} ${JSON.stringify(oldSaid)}` })
+        if (old.status() === 200) wrong.push(`the old passcode still signs in on ${newPhone} after it was changed`)
+        else {
+          if (old.status() !== 400 || oldSaid.reason !== 'wrong_passcode') wrong.push(`the old passcode was answered ${old.status()} ${JSON.stringify(oldSaid)}, not 400 wrong_passcode`)
+          const [signed] = await Promise.all([posted(page, '/auth/phone/signin'), typeDigits(page, 'Passcode', fresh)])
+          ctx.evidence.push({ note: `the new passcode at ${newPhone}: ${signed.status()}` })
+          if (signed.status() !== 200) wrong.push(`the new number and the new passcode were refused ${signed.status()}: ${JSON.stringify(await bodyOf(signed))}`)
+          else {
+            const me = await whoAmI(page)
+            if (!me.authenticated || me.workspace_id !== p.accountID) wrong.push(`signed in with the new number, the session is on ${me.workspace_id ?? 'nothing'}, not ${p.accountID}`)
+          }
+        }
+      } finally {
+        await atNew.close()
+      }
+
+      // The old number: its code leads to choosing a passcode, as a number with no account does. Nothing is chosen.
+      const atOld = await openDoor(ctx)
+      try {
+        const { hasPerson } = await codeFromScreen(ctx, atOld.page, p.phone)
+        ctx.evidence.push({ note: `the old number ${p.phone} after the change: ${hasPerson ? `"${WORDS.passcodeTitle}"` : `"${WORDS.chooseTitle}"`}` })
+        if (hasPerson) wrong.push(`the old number ${p.phone} still asks "${WORDS.passcodeTitle}", so it still signs the person in`)
+      } finally {
+        await atOld.close()
+      }
+      return verdictOf(wrong, `Settings › Security changed the passcode and moved ${p.phone} to ${newPhone}; the new number and passcode signed in on ` +
+        `${p.accountID}, the old passcode was refused and the old number has no account`)
+    },
+  }
+}
+
 function doorWait(run: DoorRun): Scenario {
   return {
     id: 'door-wait',
@@ -509,8 +689,8 @@ function doorWait(run: DoorRun): Scenario {
 /** The door's scenarios, once a run, in the order they build on each other. */
 export function doorScenarios(): Scenario[] {
   const run: DoorRun = {}
-  return [doorJoin(run), doorPasscode(run), doorPasskey(run), doorWrongPasscode(run), doorPhoneLock(run), doorWait(run)]
+  return [doorJoin(run), doorPasscode(run), doorPasskey(run), doorWrongPasscode(run), doorPhoneLock(run), doorSecurity(run), doorWait(run)]
 }
 
 /** The ids, for the launch list (launch.ts). */
-export const DOOR_SCENARIOS = ['door-join', 'door-passcode', 'door-passkey', 'door-wrong-passcode', 'door-phone-lock', 'door-wait'] as const
+export const DOOR_SCENARIOS = ['door-join', 'door-passcode', 'door-passkey', 'door-wrong-passcode', 'door-phone-lock', 'door-security', 'door-wait'] as const

@@ -174,6 +174,26 @@ describe('Settings, Security: your phone number', () => {
     ])
   })
 
+  it('starts the passcode in empty boxes, so a passcode typed a digit at a time is the one sent (B17.556)', async () => {
+    const sent = mockBff({
+      '/auth/phone/start': () => ({ body: { expires_at: '2026-11-20T12:10:00Z', sandbox: true, sandbox_code: '482913' } }),
+      '/auth/phone/finish': () => ({ body: { check: 'chk_9', has_person: false, expires_at: '2026-11-20T12:10:00Z' } }),
+      '/auth/phone/change-number': () => ({ body: { changed: true, phone: '+447700900999' } }),
+    })
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'Change number' }))
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Your new phone number' }), { target: { value: '07700 900999' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }))
+    await screen.findByRole('dialog', { name: 'Enter the code' })
+    paste('482913')
+    await screen.findByRole('dialog', { name: 'Enter your passcode' })
+    const box = (i: number) => screen.getByLabelText<HTMLInputElement>(`Passcode, digit ${i + 1} of 6`)
+    expect([0, 1, 2, 3, 4, 5].map((i) => box(i).value)).toEqual(['', '', '', '', '', ''])
+    for (const [i, d] of [...'418263'].entries()) fireEvent.change(box(i), { target: { value: d } })
+    await screen.findByText('Your number is now +447700900999')
+    expect(sent.filter((r) => r.url === '/auth/phone/change-number')).toEqual([{ url: '/auth/phone/change-number', body: { check: 'chk_9', passcode: '418263' } }])
+  })
+
   it('goes back to the number in Lens’s words when another person holds it', async () => {
     mockBff({
       '/auth/phone/start': () => ({ body: { expires_at: '2026-11-20T12:10:00Z', sandbox: true, sandbox_code: '482913' } }),

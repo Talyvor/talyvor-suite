@@ -50,7 +50,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'csrf-every-write', 'csrf-refused', 'device-key-approval', 'device-keys-bff', 'passkey-enrol-signed', 'passkey-recovery', 'phone-bearer',
     'phone-key-web', 'session-sign-out', 'signin-board', 'verification-levels', 'verification-screen', 'wallet-onboarding', 'identity-gate',
     'pocket-01', 'pocket-11', 'pocket-22', 'door-join', 'door-passcode', 'door-passkey', 'door-wrong-passcode',
-    'door-phone-lock', 'door-wait',
+    'door-phone-lock', 'door-security', 'door-wait',
   ],
   agents: [
     'agent-archive', 'agent-hourly-limit', 'agent-limit', 'agent-limit-boost', 'agent-model-limit', 'agent-open-fund',
