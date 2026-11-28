@@ -186,6 +186,8 @@
 // B17.540 adds what each role may do, and a role taken away (stub-second-approver.ts):
 //   role-viewer-funds — a Viewer's fund moves the money
 //   role-finance-approves — B17.545: a Finance session decides approvals
+// B17.557 adds the owner, an admin or Finance moving money between the company's account and an agent's (Lens B61.66):
+//   funding-any-role — a Viewer's session moves money between the company's account and an agent's
 //
 // B17.509 adds every wallet list as a CSV (talyvor-lens B28.332): ?format=csv on the approvals, the schedules and an agent's
 // transfers answers the same list as name.csv, one row per item under a header of its fields. Its defect:
@@ -1396,12 +1398,15 @@ export class Bank {
    * workspace's approvals as that person, and every other route refuses it 403.
    * B17.540 — every role reads an agent's summary, and Finance and Admin fund and withdraw; a session whose role was taken
    * away is refused 401.
+   * B17.557 — and Finance and Admin move money between the company's account and an agent's (Lens B61.66).
    */
   async roleSession(req: IncomingMessage, res: ServerResponse, bearer: string, path: string): Promise<boolean> {
     if (await this.second.provision(req, res, path)) return true
     if (this.second.endedSession(bearer)) return this.d.json(res, 401, { error: 'auth: that role was taken away' }), true
     const s = this.second.session(bearer)
     if (s === undefined) return false
+    // B17.557 — Lens B61.66: Finance and Admin move money between the company's account and an agent's, as the owner does.
+    if (/^\/v1\/money\/accounts\/[^/]+\/funding$/.test(path) && req.method === 'POST' && this.second.mayFund(s.role)) return this.payees.route(req, res, s.ws, path)
     const m = /^\/v1\/workspaces\/([^/]+)(\/.*)$/.exec(path)
     const ws = this.d.workspace(s.ws)
     if (m === null || m[1] !== s.ws || ws === undefined || !this.second.may(s.role, req.method ?? 'GET', m[2])) {

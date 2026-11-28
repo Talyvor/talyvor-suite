@@ -40,6 +40,7 @@ import { agentCardReplace } from './agentCardReplace.ts'
 import { passkeyRecovery } from './passkeyRecovery.ts'
 import { workspaceRoles } from './workspaceRoles.ts'
 import { workspaceRolesLens } from './workspaceRolesLens.ts'
+import { agentFunding } from './agentFunding.ts'
 import { phoneTeamRoles } from './phoneTeamRoles.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
 import { moneyMandates } from './moneyMandates.ts'
@@ -5570,6 +5571,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B17.545 — the four roles on Lens's API (B28.342), once a run, on a workspace of its own: only Finance's fund posts, only the
   // Approver's approval lets the waiting payment post once on each account, and an Admin's try at giving a role is refused.
   if (i === 3) list.push(workspaceRolesLens())
+  // B17.557 — Add money and Take back on the agent's page (B61.84, Lens B61.66), once a run, on a workspace of its own: $10.00 in and
+  // $4.00 back each post once on the company's and the agent's statements, and a Viewer's move is refused 403 with nothing posted.
+  if (i === 7) list.push(agentFunding())
   // B30.136 — bulk payouts, once a run, on a workspace of its own: a CSV of 50 payouts from the company's GBP account reads 48
   // valid and two invalid with their reasons and moves nothing; approved once, 48 payments out leave the account, its balance
   // down by exactly the total; approved again, nothing is paid twice.
