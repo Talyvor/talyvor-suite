@@ -315,3 +315,65 @@ func TestMoneyLowBalanceReachesLens(t *testing.T) {
 		t.Fatalf("Lens got %q; want %q", got, want)
 	}
 }
+
+// B28.33 — an agent's monthly allowance is set, listed, read month by month and stopped through Lens's /v1/money/allowances
+// routes: only {agent_id, currency, amount_minor, day_of_month, sweep_back} goes up, never funding, and Lens's refusal comes
+// back in its own words.
+func TestMoneyAllowancesReachLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, strings.TrimSpace(r.Method+" "+r.URL.RequestURI()+" "+string(b)))
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPut && strings.Contains(string(b), `"day_of_month":31`):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"economy: money allowance: the day of the month is 1 to 28, not 31"}`))
+		case r.Method == http.MethodPut:
+			_, _ = w.Write([]byte(`{"id":"mal_1","agent_id":"agt_1","currency":"GBP","amount_minor":2000,"day_of_month":3,"sweep_back":true,"funding":"test","next_run_at":"2026-12-03T00:00:00Z"}`))
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(r.URL.Path, "/runs"):
+			_, _ = w.Write([]byte(`{"runs":[{"allowance_id":"mal_1","period":"2026-11","swept_minor":750,"funded_minor":2000,"status":"funded"}]}`))
+		default:
+			_, _ = w.Write([]byte(`{"allowances":[]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	if rec := doJSON(a, http.MethodPut, "/api/money/allowances", `{"agent_id":"agt_1","currency":"GBP","amount_minor":2000,"day_of_month":3,"sweep_back":true,"funding":"live"}`); rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), `"id":"mal_1"`) {
+		t.Fatalf("set = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPut, "/api/money/allowances", `{"agent_id":"agt_1","currency":"GBP","amount_minor":2000,"day_of_month":31}`); rec.Code != http.StatusBadRequest ||
+		!strings.Contains(rec.Body.String(), "1 to 28") {
+		t.Fatalf("day 31 = %d %s; want 400 in Lens's words", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodGet, "/api/money/allowances?agent_id=agt_1&workspace_id=ws_other", ""); rec.Code != http.StatusOK {
+		t.Fatalf("list = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodGet, "/api/money/allowances/mal_1/runs", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"funded_minor":2000`) {
+		t.Fatalf("runs = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodDelete, "/api/money/allowances/mal_1", ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("stop = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/allowances/mal_1/runs", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST runs = %d; want 405", rec.Code)
+	}
+	want := []string{
+		`PUT /v1/money/allowances {"agent_id":"agt_1","currency":"GBP","amount_minor":2000,"day_of_month":3,"sweep_back":true}`,
+		`PUT /v1/money/allowances {"agent_id":"agt_1","currency":"GBP","amount_minor":2000,"day_of_month":31,"sweep_back":false}`,
+		"GET /v1/money/allowances?agent_id=agt_1",
+		"GET /v1/money/allowances/mal_1/runs",
+		"DELETE /v1/money/allowances/mal_1",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens got %q; want %q", got, want)
+	}
+}

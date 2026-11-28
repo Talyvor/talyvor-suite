@@ -842,6 +842,13 @@ const BY_PATH: Record<string, unknown> = {
   '/api/money/low-balance/alerts': {
     alerts: [{ id: 'lba_1', agent_id: 'agt_research', currency: 'USD', hour_start: '2026-10-05T08:00:00Z', balance_minor: 40_000, threshold_minor: 50_000, created_at: '2026-10-05T08:01:00Z' }],
   },
+  '/api/money/allowances': {
+    allowances: [{ id: 'mal_1', agent_id: 'agt_research', currency: 'USD', amount_minor: 20_000, day_of_month: 1, sweep_back: true, funding: 'test',
+      next_run_at: '2026-11-01T00:00:00Z', created_at: '2026-09-28T10:00:00Z' }],
+  },
+  '/api/money/allowances/mal_1/runs': {
+    runs: [{ allowance_id: 'mal_1', period: '2026-10', swept_minor: 4_500, funded_minor: 20_000, status: 'funded', created_at: '2026-10-01T00:01:00Z' }],
+  },
   '/api/money/alerts/channels': {
     channels: [
       { id: 'ach_1', kind: 'push', created_at: '2026-09-18T09:00:00Z' },

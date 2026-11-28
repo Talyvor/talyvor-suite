@@ -278,6 +278,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/money/alerts/channels/x1"},
 		{method: http.MethodPut, path: "/api/money/low-balance", body: `{"agent_id":"a1","currency":"GBP","threshold_minor":2000}`}, // B28.61
 		{method: http.MethodDelete, path: "/api/money/low-balance/x1"},
+		{method: http.MethodPut, path: "/api/money/allowances", body: `{"agent_id":"a1","currency":"GBP","amount_minor":2000,"day_of_month":1}`}, // B28.33
+		{method: http.MethodDelete, path: "/api/money/allowances/x1"},
 		{method: http.MethodPost, path: "/api/agents/x1/scan-watches", body: `{"series":["eia.stocks.cushing-crude"],"rule":"range"}`},                                   // B52.28
 		{method: http.MethodDelete, path: "/api/scan/watches/x1"},                                                                                                        // B52.28                                                                                      // B41.39
 		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                                                // B53.8
