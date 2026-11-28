@@ -9,6 +9,8 @@ import { type CurrencyAccount, type MoneyAllowance, agentBankApi, refusalText } 
 // pound, euro and dollar accounts the owner sets an amount paid in from the company's account on a day of the month, and
 // whether what the agent did not spend goes back first (Lens B28.309, PUT /api/money/allowances). Lens pays each month
 // once, however often its tick runs; the card lists the months it paid, from GET /api/money/allowances/{id}/runs.
+// B57.229: drawn as B57.201 drew the Low balance alert above it (w-budgets' Your budgets): a white card under its own
+// heading, a hairline between the accounts and between the months paid, and Stop the danger button named for what it stops.
 
 export const ALLOWANCES_KEY = ['allowances']
 
@@ -41,9 +43,9 @@ function AllowanceMonths({ allowance }: { allowance: MoneyAllowance }) {
   if (runs.isError) return <InlineFailure error={runs.error} failed="Couldn’t load the months it paid" />
   if (months.length === 0) return null
   return (
-    <div className="mt-1 pl-1" data-testid={`allowance-months-${allowance.currency}`}>
+    <div className="pb-2" data-testid={`allowance-months-${allowance.currency}`}>
       {months.map((r) => (
-        <p key={r.period} className="text-caption text-ink-3" data-testid={`allowance-month-${allowance.currency}-${r.period}`}>
+        <p key={r.period} className="border-t border-line py-1.5 text-caption text-ink-3" data-testid={`allowance-month-${allowance.currency}-${r.period}`}>
           {monthWords(r.period)}:{' '}
           {r.status === 'funded' ? (
             <span className="font-figure">
@@ -117,16 +119,23 @@ function AccountAllowance({ agentId, account, allowance }: { agentId: string; ac
               >
                 Change
               </Button>
-              <Button type="button" variant="outline" size="sm" disabled={stop.isPending} onClick={() => stop.mutate(allowance.id)}>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                aria-label={`Stop the allowance on the ${accountWords(account.currency)}`}
+                disabled={stop.isPending}
+                onClick={() => stop.mutate(allowance.id)}
+              >
                 Stop
               </Button>
             </span>
           }
         />
-        <p className="pl-1 text-caption text-ink-3">Next paid on {dayWords(allowance.next_run_at)}</p>
+        <p className="pb-2 text-caption text-ink-3">Next paid on {dayWords(allowance.next_run_at)}</p>
         <AllowanceMonths allowance={allowance} />
         {stop.isError ? (
-          <p role="alert" className="text-body text-ink-2">
+          <p role="alert" className="pb-2.5 text-body text-ink-2">
             {refusalText(stop.error)}
           </p>
         ) : null}

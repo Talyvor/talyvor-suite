@@ -101,7 +101,7 @@
   "src/areas/lens/AgentWalletActions.test.tsx": 6,
   "src/areas/lens/AgentWalletLimits.test.tsx": 3,
   "src/areas/lens/AlertChannels.test.tsx": 3,
-  "src/areas/lens/AllowanceCard.test.tsx": 4,
+  "src/areas/lens/AllowanceCard.test.tsx": 5,
   "src/areas/lens/AlwaysAllow.test.tsx": 3,
   "src/areas/lens/ApprovalInbox.test.tsx": 19,
   "src/areas/lens/ApprovalSheet.test.tsx": 18,

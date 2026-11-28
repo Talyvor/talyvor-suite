@@ -90,10 +90,22 @@ describe('monthly allowance on an agent’s page (B28.33)', () => {
     const { sent } = mockBff()
     renderCard()
     await setTwentyOnTheThird()
-    fireEvent.click(await screen.findByRole('button', { name: 'Stop' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop the allowance on the Pound account' }))
 
     expect(await screen.findByLabelText('Allowance amount, GBP')).toBeTruthy()
     expect(sent[1]).toBe('DELETE /api/money/allowances/mal_1 {}')
+  })
+
+  // B57.229 — drawn as B57.201 drew the Low balance alert above it: a white card under its own heading, a hairline between
+  // the months Lens paid, and Stop the danger button named for the account it stops.
+  it('is drawn in Pocket: a heading, the months as hairline rows, and Stop the danger button named for its account', async () => {
+    mockBff([{ allowance_id: 'mal_1', period: '2026-11', swept_minor: 0, funded_minor: 2000, status: 'funded', created_at: '2026-11-03T00:01:00Z' }])
+    renderCard()
+    expect(await screen.findByRole('heading', { name: 'Monthly allowance' })).toBeTruthy()
+    await setTwentyOnTheThird()
+    const stop = await screen.findByRole('button', { name: 'Stop the allowance on the Pound account' })
+    expect(stop.className).toContain('text-danger')
+    expect((await screen.findByTestId('allowance-month-GBP-2026-11')).className).toContain('border-line')
   })
 
   it('offers no allowance on a USDC account, which Lens does not pay', async () => {
