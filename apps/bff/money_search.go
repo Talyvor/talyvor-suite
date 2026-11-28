@@ -133,6 +133,67 @@ func (a *app) handleMoneyLowBalanceAlerts(w http.ResponseWriter, r *http.Request
 	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/low-balance/alerts", nil, "low-balance alerts")
 }
 
+// B28.33 — an agent's monthly allowance, with optional sweep-back, on this session's own token (Lens B28.309, built by B30.27).
+//
+//	GET    /api/money/allowances?agent_id=     the allowances, each with the day it is next paid and, once stopped, when
+//	PUT    /api/money/allowances               {agent_id, currency, amount_minor, day_of_month, sweep_back} — set or change
+//	                                           the agent's allowance in that currency, paid from the company's account
+//	DELETE /api/money/allowances/{id}          stop it; its months stay
+//	GET    /api/money/allowances/{id}/runs     each month: what was swept back, what was paid in
+//
+// Lens pays each month once, however often its tick runs, and decides who may set one (the owner or an admin).
+func (a *app) handleMoneyAllowances(w http.ResponseWriter, r *http.Request, t tenant) {
+	switch r.Method {
+	case http.MethodGet:
+		path := "/v1/money/allowances"
+		if id := r.URL.Query().Get("agent_id"); id != "" {
+			path += "?" + url.Values{"agent_id": {id}}.Encode()
+		}
+		a.lensRelay(w, r, t.token, http.MethodGet, path, nil, "allowances")
+	case http.MethodPut:
+		var in struct {
+			AgentID     string `json:"agent_id"`
+			Currency    string `json:"currency"`
+			AmountMinor int64  `json:"amount_minor"`
+			DayOfMonth  int    `json:"day_of_month"`
+			SweepBack   bool   `json:"sweep_back"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensMoneyAllowanceBody: created_at, funding, id, next_run_at, stopped_at, workspace_id
+		body, _ := json.Marshal(in)
+		a.lensRelay(w, r, t.token, http.MethodPut, "/v1/money/allowances", body, "allowances")
+	default:
+		methodNotAllowed(w, "GET, PUT")
+	}
+}
+
+func (a *app) handleMoneyAllowance(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, ok := pathID(w, "allowance id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodDelete, "/v1/money/allowances/"+url.PathEscape(id), nil, "allowance")
+}
+
+func (a *app) handleMoneyAllowanceRuns(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	id, ok := pathID(w, "allowance id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/allowances/"+url.PathEscape(id)+"/runs", nil, "allowance runs")
+}
+
 // B41.20 — the payments that recur, on this session's own token.
 //
 //	GET /api/money/spending/subscriptions   each card payment or payment out that recurs weekly or monthly, with its next date,

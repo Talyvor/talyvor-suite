@@ -16,6 +16,7 @@ import { AgentFundingButtons } from './AgentFunding'
 import { AgentMoneySection } from './AgentMoney'
 import { TopUpLink } from './AgentWalletActions'
 import { LowBalanceCard } from './LowBalanceCard'
+import { AllowanceCard } from './AllowanceCard'
 import { DownloadFailed, dayIn, lineWhat, lineWhen, useMonthFile } from './AgentStatement'
 import { approvalSheetTo } from './ApprovalSheet'
 import { PAYEES_KEY } from './Pay'
@@ -31,6 +32,7 @@ import { merchantCategoriesText } from './merchantCategories'
 // B57.111: its spend by day, model and destination, across the page under the statement and the rules.
 // B61.84: its Balance card's Add money and Take back move money between the company's account and the agent's.
 // B28.61: under the Balance card, the agent's low-balance alert for each of its accounts.
+// B28.33: under that, its monthly allowance for each of its pound, euro and dollar accounts.
 // B48.44: opened from its wallet_topup_link (?top_up=<move>), above the Balance card, the top-up it asked for.
 
 /** Under BOOK_KEY, so every pause, resume, move and archive that refreshes the book refreshes the page too. */
@@ -479,6 +481,7 @@ export function AgentSummaryView({ id }: { id: string }) {
               <TopUpLink agent={s.agent} />
               <BalanceCard s={s} />
               {s.agent.archived_at ? null : <LowBalanceCard agent={s.agent} accounts={s.currency_accounts ?? []} />}
+              {s.agent.archived_at ? null : <AllowanceCard agent={s.agent} accounts={s.currency_accounts ?? []} />}
               {(s.approvals ?? [])
                 .filter((a) => a.status === 'pending')
                 .map((a) => (

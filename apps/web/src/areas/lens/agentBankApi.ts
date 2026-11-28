@@ -533,6 +533,43 @@ export interface LowBalanceAlert {
   created_at: string
 }
 
+/** B28.33 — Lens economy.MoneyAllowance (B28.309, built by B30.27): an agent's monthly allowance in a currency, paid from the
+ *  company's account on day_of_month; with sweep_back, what the agent still holds is paid back first. */
+export interface MoneyAllowance {
+  id: string
+  agent_id: string
+  currency: string
+  amount_minor: number
+  /** 1 to 28 */
+  day_of_month: number
+  sweep_back: boolean
+  funding: string
+  next_run_at: string
+  /** set once it is stopped; no month after it is paid */
+  stopped_at?: string
+  created_at: string
+}
+
+/** B28.33 — Lens economy.MoneyAllowanceRun: one month of an allowance, paid once however often Lens's tick runs. */
+export interface MoneyAllowanceRun {
+  allowance_id: string
+  /** YYYY-MM */
+  period: string
+  swept_minor: number
+  funded_minor: number
+  status: 'funded' | 'refused'
+  detail?: string
+  created_at: string
+}
+
+export interface MoneyAllowanceRequest {
+  agent_id: string
+  currency: string
+  amount_minor: number
+  day_of_month: number
+  sweep_back: boolean
+}
+
 export interface LimitAlert {
   id: string
   kind: 'budget' | 'card' | 'agent_limit'
@@ -1428,6 +1465,12 @@ export const agentBankApi = {
     send<BalanceThreshold>('PUT', '/api/money/low-balance', { agent_id, currency, threshold_minor }),
   removeLowBalance: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/low-balance/${e(id)}`),
   lowBalanceAlerts: () => getJSON<{ alerts: LowBalanceAlert[] | null }>('/api/money/low-balance/alerts', { alerts: 'list' }),
+  // B28.33 — an agent's monthly allowance, with optional sweep-back (Lens B28.309).
+  allowances: (agentId: string) =>
+    getJSON<{ allowances: MoneyAllowance[] | null }>(`/api/money/allowances?agent_id=${e(agentId)}`, { allowances: 'list' }),
+  setAllowance: (a: MoneyAllowanceRequest) => send<MoneyAllowance>('PUT', '/api/money/allowances', a),
+  stopAllowance: (id: string) => send<void>('DELETE', `/api/money/allowances/${e(id)}`),
+  allowanceRuns: (id: string) => getJSON<{ runs: MoneyAllowanceRun[] | null }>(`/api/money/allowances/${e(id)}/runs`, { runs: 'list' }),
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
