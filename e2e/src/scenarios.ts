@@ -107,6 +107,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { agentCryptoSpendPermission } from './spendPermission.ts'
 import { agentCryptoWallet } from './agentCryptoWallet.ts'
 import { agentCryptoSend } from './agentCryptoSend.ts'
+import { agentTopUpLink } from './agentTopUpLink.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectChat } from './connectChat.ts'
 import { connectPay } from './connectPay.ts'
@@ -5774,6 +5775,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // sent again under one key it lands once on the history and the ledger; the agent's send to a new address waits, a test amount
   // lands then the send, and a declined one moves nothing.
   if (i === 5) list.push(agentCryptoSend())
+  // B17.562 — an agent asks its owner for a top-up through wallet_topup_link on the app's /mcp (B48.46), once a run, on a workspace
+  // of its own: Lens's quote and the link, nothing moved; the owner opens it on the agent's page, presses Move twice, and it is
+  // on the agent's ledger once.
+  if (i === 3) list.push(agentTopUpLink())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.

@@ -60,7 +60,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'phone-widget-pause', 'phone-stop-everything',
   ],
   wallets: [
-    'agent-balance-stored', 'agent-funding', 'agent-crypto-send', 'agent-crypto-spend-permission', 'agent-crypto-wallet', 'agent-wallet', 'agent-wallet-kinds', 'b30-capabilities', 'capability-terms', 'currency-convert-margin',
+    'agent-balance-stored', 'agent-funding', 'agent-crypto-send', 'agent-crypto-spend-permission', 'agent-crypto-wallet', 'agent-topup-link', 'agent-wallet', 'agent-wallet-kinds', 'b30-capabilities', 'capability-terms', 'currency-convert-margin',
     'daily-reconciliation', 'ledger-call-once', 'ledger-moves-at-once', 'money-accounts', 'money-layer-contract', 'openapi-wallets', 'status-money-rails',
     'status-truth', 'terms-credential-screens', 'wallet-brand', 'wallet-cash-out', 'wallet-currency', 'wallet-fx', 'wallet-pots', 'pocket-20',
   ],

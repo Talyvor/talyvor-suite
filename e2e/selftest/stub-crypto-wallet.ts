@@ -11,6 +11,8 @@
 //   POST …/agents/{id}/crypto-sends on the agent's own key              B17.561: to an address the workspace never paid, it waits
 //   POST …/crypto-sends/{send}/approve(/challenge) and …/decline         B17.561: the owner's signed yes, or a test amount there
 //                                                                       first; or their no, which sends nothing
+//   wallet_topup_link on the agent's own key's /mcp (stub-bank.ts)    B17.562: a card top-up quoted for the owner, nothing moved
+//   GET  …/agents/{id}/wallet-moves/{move}                              B17.562: that quote read back by id, as its link opens it
 // A wallet is kept here from the first of these routes its owner calls (or the first send it is paid by); until then its crypto
 // sends are B48.38's desk's, judged against the owner's spend permission, so that scenario's agents are answered as before. A send
 // between two agents posts to both ledgers at once, as the chain indexer does in its own time. Its defects:
@@ -19,6 +21,8 @@
 //   crypto-sweep-short — the sweep's call pays 1 micro-USDC less than the account holds
 //   crypto-send-twice — Send pressed again under the same Idempotency-Key sends a second time (B17.561)
 //   crypto-decline-sends — the owner's decline sends the agent's payment anyway (B17.561)
+//   topup-link-moves-early — wallet_topup_link credits the wallet at the quote, before the owner confirms (B17.562)
+//   topup-confirm-twice — a top-up confirmed again credits the wallet again (B17.562)
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -38,11 +42,15 @@ const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 const GBP_USDC = 1.25
 const hex = (n: number) => `0x${randomBytes(n).toString('hex')}`
 const word = (s: string) => s.toLowerCase().replace(/^0x/, '').padStart(64, '0')
+/** How long a quote's price is held. */
+const QUOTE_MS = 15 * 60_000
+
+interface Move { id: string; agent: string; sell_minor: number; buy_minor: number; status: string; entry_id?: string; created_at: string; expires_at: string }
 
 export class CryptoWalletDesk {
   /** The wallets kept here, by agent. */
   private readonly accounts = new Map<string, Account>()
-  private readonly moves = new Map<string, { id: string; agent: string; sell_minor: number; buy_minor: number; status: string; entry_id?: string }>()
+  private readonly moves = new Map<string, Move>()
   private readonly sends = new Map<string, Send[]>()
   /** Each send asked for, by its Idempotency-Key: the challenge it is signed over, then the send. */
   private readonly sendKeys = new Map<string, { challenge: string; send?: Send }>()
@@ -90,7 +98,7 @@ export class CryptoWalletDesk {
    * True when `rest` was one of them.
    */
   async route(req: IncomingMessage, res: ServerResponse, ws: string, rest: string, agent = ''): Promise<boolean> {
-    const m = /^\/agents\/([^/]+)\/(wallet-moves\/quote|wallet-moves\/[^/]+\/confirm|crypto-sends(?:\/challenge|\/quote|\/[^/]+\/(?:approve(?:\/challenge)?|decline))?|crypto-requests(?:\/[^/]+)?|freeze|sweep|wallet\/activity)$/.exec(rest)
+    const m = /^\/agents\/([^/]+)\/(wallet-moves\/quote|wallet-moves\/[^/]+(?:\/confirm)?|crypto-sends(?:\/challenge|\/quote|\/[^/]+\/(?:approve(?:\/challenge)?|decline))?|crypto-requests(?:\/[^/]+)?|freeze|sweep|wallet\/activity)$/.exec(rest)
     if (m === null) return false
     const [, agentID, what] = m
     const method = req.method ?? 'GET'
@@ -114,16 +122,14 @@ export class CryptoWalletDesk {
 
     if (what === 'wallet/activity' && method === 'GET') return this.json(res, 200, { lines: [...acct.lines].reverse() }), true
     if (what === 'wallet-moves/quote' && method === 'POST') {
-      const { route = '', amount_minor = 0, currency = '' } = await this.body<{ route?: string; amount_minor?: number; currency?: string }>(req)
-      if (route !== 'card' || currency !== 'GBP' || !(amount_minor > 0)) return this.json(res, 400, { error: 'economy: wallet top-up or cash-out: the stub quotes a card top-up in GBP' }), true
-      const mv = { id: `wmv_${randomUUID()}`, agent: agentID, sell_minor: amount_minor, buy_minor: Math.floor(amount_minor * GBP_USDC * 10_000), status: 'quoted' }
-      this.moves.set(mv.id, mv)
-      return this.json(res, 200, this.move(mv)), true
+      const q = this.quote(agentID, await this.body<{ route?: string; amount_minor?: number; currency?: string }>(req))
+      return (typeof q === 'string' ? this.json(res, 400, { error: q }) : this.json(res, 200, this.move(q))), true
     }
-    if (what.startsWith('wallet-moves/') && method === 'POST') {
+    if (what.startsWith('wallet-moves/') && (method === 'POST') === what.endsWith('/confirm')) {
       const mv = this.moves.get(what.split('/')[1])
       if (mv === undefined || mv.agent !== agentID) return this.json(res, 404, { error: 'economy: no such top-up or cash-out' }), true
-      if (mv.status === 'quoted') {
+      if (method === 'GET') return this.json(res, 200, this.move(mv)), true
+      if (mv.status === 'quoted' || this.broken('topup-confirm-twice')) {
         mv.status = 'posted'
         mv.entry_id = this.post(acct, 'wallet_top_up', mv.buy_minor)
       }
@@ -289,9 +295,40 @@ export class CryptoWalletDesk {
     return entry
   }
 
-  private move(mv: { id: string; agent: string; sell_minor: number; buy_minor: number; status: string; entry_id?: string }) {
+  private move(mv: Move) {
     return { id: mv.id, agent_id: mv.agent, route: 'card', sell_minor: mv.sell_minor, sell_currency: 'GBP', fee_minor: 0, buy_minor: mv.buy_minor, buy_currency: 'USDC',
-      rate: String(GBP_USDC), partner: 'test', funding: 'test', status: mv.status, entry_id: mv.entry_id }
+      rate: String(GBP_USDC), partner: 'test', funding: 'test', status: mv.status, entry_id: mv.entry_id, created_at: mv.created_at, expires_at: mv.expires_at }
+  }
+
+  /** A card top-up of `agentID`'s wallet quoted, as B48.8's QuoteWalletMove makes one; or why it is refused. */
+  private quote(agentID: string, b: { route?: string; amount_minor?: number; currency?: string }): Move | string {
+    const { route = '', amount_minor = 0, currency = '' } = b
+    if (route !== 'card' || currency !== 'GBP' || !(amount_minor > 0)) return 'economy: wallet top-up or cash-out: the stub quotes a card top-up in GBP'
+    const now = Date.now()
+    const mv: Move = { id: `wmv_${randomUUID()}`, agent: agentID, sell_minor: amount_minor, buy_minor: Math.floor(amount_minor * GBP_USDC * 10_000), status: 'quoted',
+      created_at: new Date(now).toISOString(), expires_at: new Date(now + QUOTE_MS).toISOString() }
+    this.moves.set(mv.id, mv)
+    return mv
+  }
+
+  /**
+   * B17.562 — Lens's wallet_topup_link (B48.39, internal/mcp/agent_wallet_tools.go) on the agent's own key, in workspace `ws`:
+   * the top-up quoted as the owner's quote route quotes it, its link and its confirm route; nothing moves. Or why it is refused.
+   */
+  topUpLink(ws: string, agentID: string, a: Record<string, unknown>): { ok: true; body: object } | { ok: false; error: string } {
+    const acct = this.wallet(agentID, true)
+    if (acct === undefined || acct.ws !== ws) return { ok: false, error: 'economy: the agent has no USDC wallet' }
+    const method = typeof a.method === 'string' && a.method !== '' ? a.method : 'card'
+    if (method !== 'card' && method !== 'bank_transfer') return { ok: false, error: 'method is card or bank_transfer' }
+    const q = this.quote(agentID, { route: method, amount_minor: Number(a.amount_minor ?? 0), currency: String(a.currency ?? '') })
+    if (typeof q === 'string') return { ok: false, error: q }
+    if (this.broken('topup-link-moves-early')) {
+      q.status = 'posted'
+      q.entry_id = this.post(acct, 'wallet_top_up', q.buy_minor)
+    }
+    return { ok: true, body: { move: this.move(q), link: `https://app.talyvor.com/agents/${agentID}?top_up=${q.id}`,
+      confirm: `/v1/workspaces/${ws}/agents/${agentID}/wallet-moves/${q.id}/confirm`,
+      message: 'Send your owner this link. They see what they pay, the fee and the USDC it buys, and confirm it before the quote expires. Nothing has moved.' } }
   }
 
   /** A request as Lens's CryptoRequest.fill answers it: where it stands, and its x402 requirement while something is due. */
