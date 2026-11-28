@@ -21,6 +21,10 @@
 #                                                         # $1 cap) must stop them at the cap: "0 of 2 explorers explored"
 #   STUB_IDENTITY_GATE=off pnpm --filter @talyvor/e2e selftest   # B17.554: a stub Lens that moves money for an account
 #                                                         # that has not confirmed who it is; identity-gate must FAIL
+#   STUB_BREAK=passcode-change-unsaved pnpm --filter @talyvor/e2e selftest   # B17.556: Lens answers a passcode change
+#                                                         # and keeps the old one; door-security must FAIL (and
+#                                                         # STUB_BREAK=number-change-keeps-old: the old number still
+#                                                         # signs the person in after Change number)
 #   E2E_FAULTS=1 pnpm --filter @talyvor/e2e selftest      # B26.18: the run's browser is killed mid-run, then
 #                                                         # Lens; the report and summary must still be written
 #                                                         # and name both

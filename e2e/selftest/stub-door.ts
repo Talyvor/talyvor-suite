@@ -7,6 +7,12 @@
 // Lens's rules, as the door scenarios meet them: one text to a number every 30 seconds; five wrong codes end a check;
 // a passcode is six digits, not one repeated, not a run, not the number's end; wrong passcodes count each way in (with
 // a ticket, at the lock) and from the fifth every try that way waits 15 minutes, the right one too.
+//
+// B17.556 — Settings, Security (Lens B61.103 and B61.104, as the BFF's B61.105 routes call them): the person's keys
+// listed; the passcode changed with the old one, a weak new one refused before the old is tried, and both counts
+// cleared; the number changed with the new number's ticket and the passcode, so the old number has no person and the
+// new one signs in. STUB_BREAK plants the defects door-security must FAIL on: passcode-change-unsaved answers the change
+// and keeps the old passcode; number-change-keeps-old moves the person and leaves the old number signing them in too.
 
 import { createHash, createPublicKey, randomBytes, randomInt, verify } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -19,6 +25,7 @@ const TICKET_LIFE_MS = 5 * 60_000
 const MAX_WRONG_CODES = 5
 const WAIT_AFTER = 5
 const WAIT_MS = 15 * 60_000
+const BREAKS = new Set((process.env.STUB_BREAK ?? '').split(',').map((b) => b.trim()))
 
 interface Count { wrong: number; lastWrong: number }
 interface Person {
@@ -49,7 +56,7 @@ export class StubDoor {
   private readonly tickets = new Map<string, { phone: string; expires: number }>()
   private readonly people = new Map<string, Person>()
   private readonly byPhone = new Map<string, string>()
-  private readonly keys = new Map<string, { personID: string; spki: Buffer }>()
+  private readonly keys = new Map<string, { personID: string; spki: Buffer; name: string; created: number }>()
   private readonly challenges = new Map<string, { personID: string; expires: number }>()
 
   private readonly secret: string
@@ -155,8 +162,37 @@ export class StubDoor {
         const asked = this.challenges.get(made.challenge ?? '')
         if (made.type !== 'webauthn.create' || asked === undefined || asked.personID !== person.id) return refuse(400, 'no_key', 'That passkey answers no challenge.')
         this.challenges.delete(made.challenge!)
-        this.keys.set(key.credential_id, { personID: person.id, spki: Buffer.from(key.public_key, 'base64url') })
+        this.keys.set(key.credential_id, { personID: person.id, spki: Buffer.from(key.public_key, 'base64url'), name: s('name'), created: now })
         return ok({ key: { id: key.credential_id, name: s('name') } })
+      }
+      case '/v1/auth/passkey/keys': {
+        const keys = [...this.keys].filter(([, k]) => k.personID === s('person_id'))
+          .map(([id, k]) => ({ id, kind: 'passkey', name: k.name, created_at: iso(k.created) }))
+        return ok({ keys })
+      }
+      case '/v1/auth/passcode/change': {
+        const person = this.people.get(s('person_id'))
+        if (person === undefined) return refuse(404, 'no_passcode', 'No passcode is set.')
+        const why = weak(s('passcode'), person.phone)
+        if (why !== undefined) return refuse(400, 'weak_passcode', why)
+        if (!this.tryPasscode(res, person, 'lock', s('old_passcode'), now)) return true
+        if (!BREAKS.has('passcode-change-unsaved')) person.passcode = s('passcode')
+        person.ways = { ticket: { wrong: 0, lastWrong: 0 }, lock: { wrong: 0, lastWrong: 0 } }
+        return ok({ ok: true })
+      }
+      case '/v1/auth/phone/change-number': {
+        const t = this.tickets.get(s('ticket'))
+        if (t === undefined || t.expires <= now) return refuse(400, 'ticket_ended', 'That confirmation has ended. Confirm the number again.')
+        const person = this.people.get(s('person_id'))
+        if (person === undefined) return refuse(404, 'no_person', 'no such person')
+        if (!this.tryPasscode(res, person, 'lock', s('passcode'), now)) return true
+        if (t.phone === person.phone) return refuse(400, 'same_number', 'That is your number already.')
+        if (this.byPhone.has(t.phone)) return refuse(409, 'held', 'That number or identity belongs to another person.')
+        this.tickets.delete(s('ticket'))
+        if (!BREAKS.has('number-change-keeps-old')) this.byPhone.delete(person.phone)
+        this.byPhone.set(t.phone, person.id)
+        person.phone = t.phone
+        return ok({ move_id: `pnm_${token().slice(0, 12)}`, person: { id: person.id, identity: person.identity, phone: person.phone } })
       }
       case '/v1/auth/passkey/challenge': {
         const challenge = token()

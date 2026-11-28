@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { DOOR_SCENARIOS, TEST_PHONES, doorPhones, doorScenarios, isTestPhone, nationalOf, passcodeFor, testPhone, wrongPasscode } from '../src/door.ts'
+import { DOOR_SCENARIOS, TEST_PHONES, doorPhones, doorScenarios, isTestPhone, nationalOf, newPhones, passcodeFor, testPhone, wrongPasscode } from '../src/door.ts'
 import { areaOf, inLaunch } from '../src/launch.ts'
 import { journeyFor } from '../src/scenarios.ts'
 
@@ -14,6 +14,10 @@ describe('the test numbers (B61.28)', () => {
   it('every number the door can type is inside the range kept for tests', () => {
     for (let salt = 1; salt <= 20_000; salt++) {
       for (const phone of doorPhones(salt)) expect(isTestPhone(phone), `${phone} (salt ${salt})`).toBe(true)
+      // B17.556 — the numbers door-security moves the person onto: test numbers, never one the door joined on.
+      const moved = newPhones(salt)
+      for (const phone of moved) expect(isTestPhone(phone), `${phone} (salt ${salt})`).toBe(true)
+      expect(moved.filter((phone) => doorPhones(salt).includes(phone)), `salt ${salt}`).toEqual([])
     }
     for (const n of [0, 999, 1000, -1, 123_456_789]) expect(isTestPhone(testPhone(n)), String(n)).toBe(true)
     expect(testPhone(0)).toBe('+447700900000')
@@ -50,7 +54,7 @@ describe('the passcodes the door chooses (B61.28)', () => {
 })
 
 describe('the door joins the launch list (B61.28, B61.1)', () => {
-  it('plays all six, once a run, in the order they build on each other', () => {
+  it('plays all seven, once a run, in the order they build on each other', () => {
     expect(doorScenarios().map((s) => s.id)).toEqual([...DOOR_SCENARIOS])
     const night = Array.from({ length: 100 }, (_, i) => journeyFor(i, 100, []))
     for (const id of DOOR_SCENARIOS) {
