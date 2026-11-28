@@ -55,7 +55,7 @@ describe('Wallet webhooks settings', () => {
     expect(screen.queryByText(/whsec_/)).toBeNull()
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Webhook URL' }), { target: { value: 'https://hooks.example.com/w' } })
-    fireEvent.click(screen.getByRole('button', { name: 'transfer.created', pressed: false }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'transfer.created', checked: false }))
     fireEvent.click(screen.getByRole('button', { name: 'Add webhook' }))
     expect(await screen.findByText('whsec_FIRST')).toBeInTheDocument()
     expect(writes[0]).toEqual({ url: '/api/money/event-webhooks', method: 'POST', body: { url: 'https://hooks.example.com/w', events: ['transfer.created'] } })
@@ -91,6 +91,24 @@ describe('Wallet webhooks settings', () => {
     const low = screen.getByText('A low balance').closest('li')!
     expect(within(low).getByText('Failed')).toBeInTheDocument()
     expect(within(low).getByText('Last answer: answered 500')).toBeInTheDocument()
+  })
+
+  // B57.230 — Pocket's w-docs-webhooks: each event is a pick that ticks, and Add webhook, waiting for a URL, says so beside it.
+  it('draws the events as picks that tick, and says why Add webhook waits', async () => {
+    mockBFF()
+    renderScreen()
+    await screen.findByText(/No webhooks yet/)
+    const events = screen.getByRole('group', { name: 'Events, none chosen sends every one' })
+    expect(within(events).getAllByRole('checkbox').map((c) => c.textContent)).toEqual(TYPES)
+    const add = screen.getByRole('button', { name: 'Add webhook' })
+    expect(add).toBeDisabled()
+    expect(add).toHaveAccessibleDescription('Type your server’s https URL to add it.')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Webhook URL' }), { target: { value: 'https://hooks.example.com/w' } })
+    expect(add).toBeEnabled()
+    expect(add).not.toHaveAccessibleDescription()
+    const pick = within(events).getByRole('checkbox', { name: 'balance.low' })
+    fireEvent.click(pick)
+    expect(pick).toHaveAttribute('aria-checked', 'true')
   })
 
   it('shows Lens’s refusal of an address it will not send to, and adds nothing', async () => {
