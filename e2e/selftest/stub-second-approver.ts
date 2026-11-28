@@ -21,6 +21,10 @@
 //
 // B17.553 — Lens B28.464: the roles list names the person who took each role up as user_id, "" until someone has. Its defect:
 //   roles-no-user-id — a Lens without B28.464: every role lists user_id "", so no second approver can be picked
+//
+// B17.557 — Lens B61.66: the owner, an admin or Finance moves money between the company's account and an agent's (POST
+// /v1/money/accounts/{id}/funding); any other role is 403. Its defect:
+//   funding-any-role — a Lens whose funding route lets any role session move the money, a Viewer's included
 
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -72,6 +76,11 @@ export class SecondApproverDesk {
     if (/^\/agents\/[^/]+\/summary$/.test(rest) && method === 'GET') return ROLES.includes(role)
     if (/^\/agents\/[^/]+\/(?:fund|withdraw)$/.test(rest) && method === 'POST') return this.broken('role-viewer-funds') || MONEY_ROLES.includes(role)
     return false
+  }
+
+  /** B17.557 — whether a session of role may move money between the company's account and an agent's (cmd/lens moneyRoles). */
+  mayFund(role: string): boolean {
+    return this.broken('funding-any-role') || MONEY_ROLES.includes(role)
   }
 
   /** POST /v1/provision/roles on the provisioning secret: a person takes up the role their email holds in an account. */
