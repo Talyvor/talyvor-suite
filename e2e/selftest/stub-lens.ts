@@ -76,6 +76,7 @@
 //   issue       — a request's X-Talyvor-Issue is not kept: its spend names no issue, so no Track issue's AI cost rises (B28.376)
 //   schedule-early — a scheduled prompt is asked as soon as it is scheduled, not at the time set (B28.377)
 //   schedule-free  — a scheduled prompt is answered with nothing on the paying agent's statement (B28.377)
+//   schedule-answer-kept — a scheduled prompt's answer is kept on its run though the workspace's logging is none (B28.265)
 //   openapi-wallets — /openapi.json, / and /status are as before B28.12: no Agent Wallets line, tag or operation, and /
 //                 links no API reference (stub-openapi.ts)
 //   rails-outage — /status.json's screening rail failed after its last success, so it reads outage (B30.124)
@@ -821,7 +822,9 @@ function runPromptSchedule(s: PromptSchedule, now: number): void {
       const fee = book(ws, -charge, 'spend', `${model.id} answer (scheduled prompt)`)
       ws.usage.total++
       const entry = broke('schedule-free') ? undefined : bank.spent(agent, charge, model.id, fee, 'hold')
-      s.runs.unshift({ ran_at, outcome: 'answered', answer, request_id: 'req_' + randomBytes(8).toString('hex'),
+      // B28.265 — a workspace whose logging policy is none keeps no answer on the run; STUB_BREAK=schedule-answer-kept keeps it.
+      const keep = ws.settings.logging_policy !== 'none' || broke('schedule-answer-kept')
+      s.runs.unshift({ ran_at, outcome: 'answered', ...(keep ? { answer } : {}), request_id: 'req_' + randomBytes(8).toString('hex'),
         charged_ulxc: broke('schedule-free') ? 0 : charge + fee, ...(entry === undefined ? {} : { entry_id: entry }) })
     }
   }
