@@ -192,6 +192,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/payout-details': 0,
   '/settings/terms': 0, // B57.42: drawn in Pocket
   '/settings/webhooks': 0,
+  '/settings/wallet-webhooks': 0,
   '/settings/email-branding': 0,
   '/settings/connect': 0, // B57.45: drawn in Pocket
   '/settings/company': 0, // B59.31: Pocket's own section title, no CardHeader

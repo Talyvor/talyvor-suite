@@ -99,6 +99,7 @@ const SETTINGS_ICON: Record<string, IconName> = {
   '/settings/payout-details': 'coin',
   '/settings/terms': 'check',
   '/settings/webhooks': 'send',
+  '/settings/wallet-webhooks': 'send',
   '/settings/email-branding': 'bell',
   '/settings/help': 'phone',
   '/settings/data': 'download',
@@ -142,6 +143,8 @@ export function useSettingsLinks(): SettingsLink[] {
     // B55.28 — where the workspace is paid its earnings.
     { to: '/settings/payout-details', title: 'Payout details', line: 'Where Talyvor pays you' },
     { to: '/settings/terms', title: 'Capability terms', line: 'The terms each money feature asks you to accept' },
+    // B28.74 — signed events from the wallets to the owner's server.
+    { to: '/settings/wallet-webhooks', title: 'Wallet webhooks', line: 'Transfers, approvals, alerts and low balances, sent to your server' },
     { to: '/settings/webhooks', title: 'Webhooks', line: 'Docs tells your server about approvals and comments' },
     { to: '/settings/email-branding', title: 'Email branding', line: 'How Docs email looks: its name, colour and logo' },
     { to: '/settings/help', title: 'Help and complaints', line: 'Ask us something, or make a complaint' },

@@ -684,6 +684,12 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/payees/{id}/details", a.requireTenant(a.handleMoneyPayeeDetails(false)))
 	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments(false)))
 	a.mux.HandleFunc("/api/money/payments/challenge", a.requireTenant(a.handleMoneyPayments(true))) // B54.35
+	// B28.74 — signed webhooks for wallet events (Lens B28.344). See money_webhooks.go.
+	a.mux.HandleFunc("/api/money/event-webhooks", a.requireTenant(a.handleMoneyEventWebhooks))
+	a.mux.HandleFunc("/api/money/event-webhooks/events", a.requireTenant(a.handleMoneyEventWebhookEvents))
+	a.mux.HandleFunc("/api/money/event-webhooks/{id}", a.requireTenant(a.handleMoneyEventWebhook))
+	a.mux.HandleFunc("/api/money/event-webhooks/{id}/rotate", a.requireTenant(a.handleMoneyEventWebhookRotate))
+
 	// B61.33 — Pay, to a person on Talyvor by their name, phone number or email (Lens B61.32). See money_people.go.
 	a.mux.HandleFunc("/api/money/people/find", a.requireTenant(a.handleMoneyPeopleFind))
 	a.mux.HandleFunc("/api/money/people/pay", a.requireTenant(a.handleMoneyPeoplePay(false)))

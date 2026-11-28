@@ -93,6 +93,7 @@ import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
 import { ConnectAI } from './areas/lens/ConnectAI'
 import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
+import { WalletWebhooks } from './areas/lens/WalletWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayBillsScreen, PayBulkPayoutsScreen, PayMandatesScreen, PayScreen, PayStandingOrdersScreen } from './areas/lens/Pay'
 import { PayInstantTransferScreen } from './areas/lens/InstantTransfer'
@@ -282,6 +283,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/terms', title: 'Capability terms', element: <CapabilityTermsScreen />, panel: '/settings' },
   // B39.25 — a Docs workspace's owner adds, rotates and deletes its signed webhooks.
   { path: '/settings/webhooks', title: 'Webhooks', element: <DocsWebhooks />, panel: '/settings' },
+  // B28.74 — the owner adds, rotates and deletes the signed webhooks for wallet events, and reads each event sent.
+  { path: '/settings/wallet-webhooks', title: 'Wallet webhooks', element: <WalletWebhooks />, panel: '/settings' },
   // B39.34 — a Docs workspace's owner sets the From name, header colour and logo of its Docs email.
   { path: '/settings/email-branding', title: 'Email branding', element: <DocsEmailBranding />, panel: '/settings' },
   // B40.8 — the MCP address, how to add it to each assistant, and the assistants connected, each revocable.
