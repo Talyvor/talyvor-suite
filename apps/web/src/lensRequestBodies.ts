@@ -1186,6 +1186,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/money/low-balance", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensBalanceThresholdBody",
   },
+  // B28.33 — an agent's monthly allowance, set on the agent's page (Lens B28.309, built by B30.27).
+  {
+    route: "PUT /v1/money/allowances",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAllowances(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_allowances_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/allowances", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMoneyAllowanceBody",
+  },
   // B52.28 — a Scan agent's watch, set on Scan agents (Lens B52.27).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/scan-watches",
