@@ -48,7 +48,7 @@ export type Area = (typeof LAUNCH_AREAS)[number] | (typeof LEFT_OUT_AREAS)[numbe
 export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   'sign-in': [
     'csrf-every-write', 'csrf-refused', 'device-key-approval', 'device-keys-bff', 'passkey-enrol-signed', 'passkey-recovery', 'phone-bearer',
-    'phone-key-web', 'session-sign-out', 'signin-board', 'verification-levels', 'verification-screen', 'wallet-onboarding',
+    'phone-key-web', 'session-sign-out', 'signin-board', 'verification-levels', 'verification-screen', 'wallet-onboarding', 'identity-gate',
     'pocket-01', 'pocket-11', 'pocket-22', 'door-join', 'door-passcode', 'door-passkey', 'door-wrong-passcode',
     'door-phone-lock', 'door-wait',
   ],
