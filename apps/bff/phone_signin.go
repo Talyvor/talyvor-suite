@@ -608,7 +608,8 @@ func (a *app) handleSignupAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	identity := a.identityOf(s.sub)
-	prov, err := a.provisionAs(r.Context(), identity, provisionAsk{}, nil, signup)
+	// The session signed in when it joined, not now: Lens mints the first account's token from that time (B50.63).
+	prov, err := a.provisionAs(r.Context(), identity, provisionAsk{signedInAt: s.signedInAt}, nil, signup)
 	if err != nil {
 		writeProvisionFailed(w, err)
 		return
