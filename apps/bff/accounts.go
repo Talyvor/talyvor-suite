@@ -148,7 +148,7 @@ func (a *app) handleAccountSwitch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"account_id": c.current})
 		return
 	}
-	prov, err := a.provisionAccount(r.Context(), c.identity, in.AccountID)
+	prov, err := a.provisionAccount(r.Context(), c.identity, in.AccountID, c.s.signedInAt)
 	// B28.70: an account that is not the person's own opens only by a role given to an email they proved.
 	if errors.Is(err, errNoSuchAccount) {
 		prov, err = a.roleSession(r.Context(), c.identity, c.s.sub, in.AccountID)
@@ -193,7 +193,7 @@ func (a *app) openAccount(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "a test session holds one account"})
 		return
 	}
-	prov, err := a.provisionAs(r.Context(), c.identity, provisionAsk{mode: "open"}, nil, signup)
+	prov, err := a.provisionAs(r.Context(), c.identity, provisionAsk{mode: "open", signedInAt: c.s.signedInAt}, nil, signup)
 	if err != nil {
 		writeProvisionFailed(w, err)
 		return

@@ -90,6 +90,10 @@ func provisionIdentity(issuer, subject string) string {
 type provisionAsk struct {
 	mode      string // "", "open" or "session"; "list" is listAccounts' (accounts.go)
 	accountID string
+	// signedInAt is when the session a token is re-minted for signed in (B50.62): Lens mints the token's auth_time from
+	// it (talyvor-lens B50.61), so key recovery's 10-minute rule reads the real sign-in, not the re-mint. Zero on a
+	// sign-in, which sends none and Lens stamps now.
+	signedInAt time.Time
 }
 
 // errNoSuchAccount is Lens's 404 to a session for an account the identity does not hold (B61.7).
@@ -118,9 +122,10 @@ func (a *app) provision(ctx context.Context, identity string, cachePoolable *boo
 }
 
 // provisionAccount mints a token for accountID, one of identity's accounts, and refuses one Lens answered for any
-// other workspace: a Lens from before B61.7 reads no mode and would answer the first account.
-func (a *app) provisionAccount(ctx context.Context, identity, accountID string) (provisionResult, error) {
-	prov, err := a.provisionAs(ctx, identity, provisionAsk{mode: "session", accountID: accountID}, nil, signupAccount{})
+// other workspace: a Lens from before B61.7 reads no mode and would answer the first account. signedInAt is the
+// session's sign-in time on a re-mint (B50.62), zero on a sign-in.
+func (a *app) provisionAccount(ctx context.Context, identity, accountID string, signedInAt time.Time) (provisionResult, error) {
+	prov, err := a.provisionAs(ctx, identity, provisionAsk{mode: "session", accountID: accountID, signedInAt: signedInAt}, nil, signupAccount{})
 	if err == nil && prov.WorkspaceID != accountID {
 		return provisionResult{}, fmt.Errorf("provision: asked for account %s, lens answered %s", accountID, prov.WorkspaceID)
 	}
@@ -163,6 +168,12 @@ func (a *app) provisionPost(ctx context.Context, identity string, ask provisionA
 	// cache_poolable is silent in the other direction — a renamed key reaches lens as SILENCE, so
 	// no RegisterOption is passed and the new-workspace default replaces the choice the person made.
 	// mode and account_id are B61.7's, LOUD upstream: an unknown mode is 400, and a session without account_id is 400.
+	// signed_in_at is B50.62's, SILENT upstream: a renamed key reaches Lens as none and the re-minted token says the
+	// person signed in just now. Seconds, so it can only be earlier than the session's own time, never later.
+	var signedInAt string
+	if !ask.signedInAt.IsZero() {
+		signedInAt = ask.signedInAt.UTC().Truncate(time.Second).Format(time.RFC3339)
+	}
 	body, err := json.Marshal(struct {
 		Identity      string `json:"identity"`
 		Mode          string `json:"mode,omitempty"`
@@ -174,9 +185,10 @@ func (a *app) provisionPost(ctx context.Context, identity string, ask provisionA
 		MoneyKind     string `json:"money_kind,omitempty"`
 		Country       string `json:"country,omitempty"`
 		Registration  string `json:"registration_number,omitempty"`
+		SignedInAt    string `json:"signed_in_at,omitempty"`
 	}{Identity: identity, Mode: ask.mode, AccountID: ask.accountID, DisplayName: signup.name, CachePoolable: cachePoolable, TTLHours: sessionTokenTTLHours,
 		AccountType: signup.accountType, MoneyKind: signup.moneyKind, Country: signup.country,
-		Registration: signup.registrationNumber})
+		Registration: signup.registrationNumber, SignedInAt: signedInAt})
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +325,7 @@ func (a *app) refreshWorkspaceToken(ctx context.Context, sid string, s session) 
 	if s.role != "" {
 		prov, err = a.roleSessionBy(ctx, a.identityOf(s.sub), s.roleEmail, s.workspaceID)
 	} else {
-		prov, err = a.provisionAccount(ctx, a.identityOf(s.sub), s.workspaceID)
+		prov, err = a.provisionAccount(ctx, a.identityOf(s.sub), s.workspaceID, s.signedInAt)
 	}
 	if err != nil {
 		log.Printf("bff: workspace token re-mint FAILED for sub=%s (request continues with the "+

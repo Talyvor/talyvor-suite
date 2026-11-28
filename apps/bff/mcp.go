@@ -838,7 +838,11 @@ func (a *app) mcpTenant(ctx context.Context, g oauthGrant) (tenant, bool) {
 	// No token at all is a grant read back from the table after a restart (oauth_store.go stores none).
 	if !who.synthetic && (who.lensToken == "" || !who.lensTokenExp.IsZero() && !time.Now().Before(who.lensTokenExp.Add(-workspaceTokenSkew))) {
 		// For the account the person consented in (B61.8): one they switched away from since, or opened after their first.
-		prov, err := a.provisionAccount(ctx, a.identityOf(who.sub), who.workspaceID)
+		signedInAt := who.signedInAt
+		if signedInAt.IsZero() {
+			signedInAt = g.Created
+		}
+		prov, err := a.provisionAccount(ctx, a.identityOf(who.sub), who.workspaceID, signedInAt)
 		if err != nil {
 			log.Printf("bff: mcp workspace token re-mint for sub=%s failed (workspace %q): %v", who.sub, prov.WorkspaceID, err)
 			return tenant{}, false

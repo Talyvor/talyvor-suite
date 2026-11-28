@@ -537,7 +537,7 @@ func (a *app) landPerson(w http.ResponseWriter, r *http.Request, p lensPerson, a
 				break
 			}
 		}
-		prov, err := a.provisionAccount(r.Context(), p.Identity, pick)
+		prov, err := a.provisionAccount(r.Context(), p.Identity, pick, time.Time{}) // a sign-in: Lens stamps now
 		if err != nil {
 			writeProvisionFailed(w, err)
 			return
