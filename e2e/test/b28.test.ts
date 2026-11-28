@@ -88,6 +88,13 @@ describe('B28.293 — every DONE B28 feature, with the scenarios that test it', 
     expect(b28ItemsFor(q, r, 'docs/e2e/report.md').filed).toEqual([])
   })
 
+  it('B28.254 (image vulnerability scanning on every build) reads as no scenario can reach it, and files nothing', () => {
+    const q = '## B28.254 — image vulnerability scanning on every build\nrepo: talyvor-lens · deps: none · status: DONE a1ef198\n'
+    const r = b28Report(q, new Map(), [])
+    expect(r.features).toMatchObject([{ id: 'B28.254', state: 'cannot' }])
+    expect(b28ItemsFor(q, r, 'docs/e2e/report.md').filed).toEqual([])
+  })
+
   it('B28.264 (step-up on the most dangerous admin actions) reads as no scenario can reach it, and files nothing', () => {
     const q = '## B28.264 — step-up auth on the most dangerous admin actions\nrepo: talyvor-lens · deps: none · status: DONE 7cb9c5b\n'
     const r = b28Report(q, new Map(), [])
