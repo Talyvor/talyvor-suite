@@ -66,7 +66,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   ],
   cards: ['agent-card-replace', 'agent-cards', 'card-dispute-screen', 'physical-card', 'single-use-card-screen', 'wallet-card', 'wallet-card-freeze', 'wallet-card-purchase'],
   payments: [
-    'agent-approval', 'agent-approval-denied', 'agent-approval-push', 'approval-own-request', 'approval-reused', 'approvals-badge',
+    'agent-approval', 'agent-approval-denied', 'agent-approval-push', 'approval-own-request', 'approval-reused', 'approval-stopped-payee', 'approvals-badge',
     'approvals-inbox', 'approve-always-allow', 'batch-approval-pays-once', 'bills-duplicate-changed-details', 'bills-inbox',
     'bills-pay-all-due', 'compliance', 'invoice-pay-link', 'invoices-screen', 'mcp-pay-retried-once', 'mcp-sdk-agent-pay',
     'monitoring', 'money-tampered', 'outside-payees', 'pay-screen', 'pay-payee-by-name', 'pay-saved-payee-by-name', 'payee-cooling-off', 'payee-details-lock', 'payment-request-batch', 'payments-out', 'bulk-payouts', 'money-mandates', 'standing-orders', 'agent-allowances', 'agent-card-account',

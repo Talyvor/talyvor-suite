@@ -41,6 +41,7 @@ import { passkeyRecovery } from './passkeyRecovery.ts'
 import { workspaceRoles } from './workspaceRoles.ts'
 import { workspaceRolesLens } from './workspaceRolesLens.ts'
 import { agentFunding } from './agentFunding.ts'
+import { approvalStoppedPayee } from './approvalStopped.ts'
 import { phoneTeamRoles } from './phoneTeamRoles.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
 import { moneyMandates } from './moneyMandates.ts'
@@ -5574,6 +5575,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B17.557 — Add money and Take back on the agent's page (B61.84, Lens B61.66), once a run, on a workspace of its own: $10.00 in and
   // $4.00 back each post once on the company's and the agent's statements, and a Viewer's move is refused 403 with nothing posted.
   if (i === 7) list.push(agentFunding())
+  // B17.558 — a payment whose payee changed after the owner approved it (Lens B62.1 and B62.9), once a run, on a workspace of its own:
+  // stopped 403 with nothing on the agent's account, its statement or its payments out, and its approval reads back stopped because the
+  // payee changed, on Lens and on Approvals' Decided row. A SKIP until Lens lets the testers change the payee (talyvor-lens B62.12).
+  if (i === 9) list.push(approvalStoppedPayee())
   // B30.136 — bulk payouts, once a run, on a workspace of its own: a CSV of 50 payouts from the company's GBP account reads 48
   // valid and two invalid with their reasons and moves nothing; approved once, 48 payments out leave the account, its balance
   // down by exactly the total; approved again, nothing is paid twice.
