@@ -41,7 +41,7 @@ async function teamRow(page: Page, email: string): Promise<string | undefined> {
 }
 
 /** Give a role on Team and roles: the BFF's answer to the dialog's PUT /api/workspace/roles. */
-async function giveOnScreen(page: Page, email: string, role: Given): Promise<{ status: number; text: string }> {
+export async function giveOnScreen(page: Page, email: string, role: Given | 'approver'): Promise<{ status: number; text: string }> {
   await page.getByRole('button', { name: 'Give a role', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
   // Team and roles is itself a panel drawn as a dialog: the one wanted is named.
   const dialog = page.getByRole('dialog', { name: 'Give a role', exact: true })
