@@ -82,7 +82,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'statement-line-kinds', 'statement-paging', 'statement-pdf', 'statement-pdf-lens', 'statement-reconciles', 'statement-search', 'wallet-statements', 'pocket-21',
     'pocket-23', 'pocket-24', 'pocket-25',
   ],
-  connector: ['connect-approve', 'connect-contact', 'connect-mcp', 'connect-oauth', 'connect-pay', 'connect-recurring'],
+  connector: ['connect-approve', 'connect-chat', 'connect-contact', 'connect-mcp', 'connect-oauth', 'connect-pay', 'connect-recurring'],
   settings: [
     'api-key-revoke', 'console-screens-draw', 'keys-unlisted', 'operator-compliance-boundary', 'seats-company', 'seats-studio', 'workspace-roles', 'workspace-roles-lens',
     'phone-team-roles', 'second-approver-picker',

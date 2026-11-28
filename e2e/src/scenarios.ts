@@ -107,6 +107,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { agentCryptoSpendPermission } from './spendPermission.ts'
 import { agentCryptoWallet } from './agentCryptoWallet.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
+import { connectChat } from './connectChat.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
 import { phoneJourneys } from './phoneJourneys.ts'
@@ -5679,6 +5680,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B52.34 — an assistant's Connect token, once a run, on a workspace of its own: a payment inside its agent's rules lands once on
   // both statements; one above the approval amount answers 202 pending with nothing moved; approve, rules, keys and card refuse it.
   if (i === 6) list.push(connectPay())
+  // B17.560 — an assistant on the MCP SDK through the BFF's /mcp, once a run, on a workspace of its own: $2.00 inside the payer's
+  // limits is one agent_payment on both statements; $5.00 waits for the owner with nothing moved; create_agent under the limit set on
+  // Settings, a raise from the chat saving nothing, and the top-up link.
+  if (i === 6) list.push(connectChat())
   // B48.27 — an agent's USDC payments, once a run, on a workspace of its own: a flagged address refused with nothing held; a regulated
   // provider's address with its Travel Rule record; more than 1,000 USDC to a self-hosted address held only once the owner proves its key.
   if (i === 6) list.push(screeningTravelRule())

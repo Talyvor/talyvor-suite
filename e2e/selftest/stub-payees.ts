@@ -287,6 +287,8 @@ export class PayeeDesk {
   private readonly challenges = new Map<string, string>()
   private readonly accounts = new Map<string, Account[]>()
   private readonly testMoneyKeys = new Set<string>()
+  /** B17.560 — agents' payments to agents in a currency (Lens B61.18), by workspace, payer and idempotency key. */
+  private readonly agentPayments = new Map<string, object>()
   private readonly payments = new Map<string, Payment[]>()
   private readonly quotes = new Map<string, IntlQuote>()
   /** B30.148 — each completed payment's entry, by the payment's id. */
@@ -433,6 +435,9 @@ export class PayeeDesk {
   async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
     const list = this.payees.get(ws) ?? []
     if (path === '/v1/money/accounts' || path === '/v1/money/payments') return this.money(req, res, ws, path, list), true
+    // B17.560 — Lens B41.115's connected access, which the BFF reads to know the owner may set the limit for new agents (apps/bff
+    // mcp_agents.go); the stub's workspaces have no mandates, device keys or passkeys to list.
+    if (path === '/v1/money/access' && req.method === 'GET') return this.json(res, 200, { items: [] }), true
     if (path === '/v1/money/payments/challenge' && req.method === 'POST') return this.paymentChallenge(req, res, ws), true
     if (path === '/v1/money/payments/quote' && req.method === 'POST') return this.intlQuote(req, res, ws, list), true
     const funded = /^\/v1\/money\/accounts\/([^/]+)\/test-money$/.exec(path)
@@ -1214,6 +1219,34 @@ export class PayeeDesk {
   /** B30.139 — the agent's open account in `currency`, which its card may draw on (Lens B30.30). */
   agentAccount(ws: string, agentID: string, currency: string): Account | undefined {
     return (this.accounts.get(ws) ?? []).find((x) => x.purpose === 'agent' && x.agent_id === agentID && x.currency === currency.toUpperCase() && x.status === 'open')
+  }
+
+  /** B17.560 — the payment agent `agentID` made under idempotency key `key` (Lens B61.18), if it made one. */
+  agentPaymentUnder(ws: string, agentID: string, key: string): object | undefined {
+    return key === '' ? undefined : this.agentPayments.get(`${ws}\n${agentID}\n${key}`)
+  }
+
+  /**
+   * B17.560 — Lens B61.18's PayAgentMoney once the rules allowed it: one agent_payment money entry from agent `fromAgent`'s open
+   * account in `currency`, −amount, into agent `toAgent`'s, +amount, a line on each statement. A payee with no account in the
+   * currency is refused 409, as is more than the payer's account holds.
+   */
+  agentPayment(ws: string, fromAgent: string, toWs: string, toAgent: string, amount: number, currency: string, memo: string, key: string): [number, object] {
+    const from = this.agentAccount(ws, fromAgent, currency)
+    const to = this.agentAccount(toWs, toAgent, currency)
+    if (from === undefined) return [404, { error: 'economy: no such money account' }]
+    if (to === undefined) return [409, { error: 'economy: the agent paid has no account in this currency' }]
+    if (from.test_minor < amount) return [409, { error: `economy: the agent's account holds ${money(from.test_minor, currency)}` }]
+    const entry = `me_${randomUUID()}`
+    for (const [account, by, at] of [[from, -amount, ws], [to, amount, toWs]] as const) {
+      account.test_minor += by
+      account.balance_minor += by
+      this.line(at, account, 'agent_payment', by, entry)
+    }
+    const out = { id: entry, workspace_id: ws, from_agent_id: fromAgent, from_account_id: from.id, to_workspace_id: toWs, to_agent_id: toAgent,
+      to_account_id: to.id, amount_minor: amount, currency, funding: 'test', memo, idempotency_key: key, created_at: new Date().toISOString() }
+    if (key !== '') this.agentPayments.set(`${ws}\n${fromAgent}\n${key}`, out)
+    return [200, out]
   }
 
   /** B30.139 — `amount` onto agent account `account` as a card's money entry of `kind` (card_hold, card_charge), its line on the statement. */
