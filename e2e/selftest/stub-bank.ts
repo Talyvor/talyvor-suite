@@ -1207,8 +1207,8 @@ export class Bank {
   /**
    * B28.98 — a period statement as Lens writes it (cmd/lens writeStatement): JSON, or with ?format=csv a header, each
    * account's opening balance, every line, then each account's closing balance; times as Go's RFC 3339 with
-   * nanoseconds, a memo a spreadsheet would run as a formula kept as text. B28.55 — with ?format=pdf the same rows as
-   * Lens B28.328 draws them, each non-empty cell one string the page shows, amounts in LXC. B28.56 — with
+   * nanoseconds, a memo a spreadsheet would run as a formula kept as text. B28.55 — with ?format=pdf the statement as
+   * Lens B61.131 draws it, each non-empty cell one string the page shows, amounts in dollars. B28.56 — with
    * ?format=journal the journal Lens B28.329 writes: one per entry, a posting in a debit and one out a credit, closed on
    * the counterparty where the statement holds only part of the entry, the entry's agent its cost centre.
    */
@@ -1223,11 +1223,21 @@ export class Bank {
       lines: { posting_id: number; entry_id: string; at: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string; balance_after_ulxc: number }[] }
     if (format === 'journal') return this.answerJournal(res, s)
     if (format === 'pdf') {
-      const rows = [
-        ...s.accounts.map((x) => [s.from, x.account, 'opening', '', '', dollarsCell(x.opening_ulxc)]),
-        ...s.lines.map((l) => [l.at, l.account, l.kind, l.counterparty, dollarsCell(l.amount_ulxc), dollarsCell(l.balance_after_ulxc)]),
-        ...s.accounts.map((x) => [s.to, x.account, 'closing', '', '', dollarsCell(x.closing_ulxc)]),
-      ]
+      // B61.131: one section per account, each its band, its table from the opening to the closing row, then how it adds up.
+      const rows = s.accounts.flatMap((x) => {
+        const mine = s.lines.filter((l) => l.account === x.account)
+        const moneyIn = mine.reduce((t, l) => t + Math.max(l.amount_ulxc, 0), 0)
+        const out = mine.reduce((t, l) => t - Math.min(l.amount_ulxc, 0), 0)
+        const [o, i, m, c] = [x.opening_ulxc, moneyIn, out, x.closing_ulxc].map(dollarsCell)
+        return [
+          ['AGENT STATEMENT', x.account],
+          ['OPENING BALANCE', o, 'MONEY IN', i, 'MONEY OUT', m, 'CLOSING BALANCE', c],
+          ['Opening balance', o.slice(1)],
+          ...mine.map((l) => [l.at, l.kind, l.counterparty, dollarsCell(l.amount_ulxc).slice(1), dollarsCell(l.balance_after_ulxc).slice(1)]),
+          ['Closing balance', m.slice(1), i.slice(1), c.slice(1)],
+          [o, 'opening', '+', i, 'in', '\u2013', m, 'out', '=', c, 'closing', 'Page 1 of 1'],
+        ]
+      })
       const shown = (v: string) => `(${v.replace(/[()\\]/g, '\\$&')}) Tj`
       res.writeHead(200, {
         'Content-Type': 'application/pdf',
