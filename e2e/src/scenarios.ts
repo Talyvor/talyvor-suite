@@ -106,6 +106,7 @@ import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { agentCryptoSpendPermission } from './spendPermission.ts'
 import { agentCryptoWallet } from './agentCryptoWallet.ts'
+import { agentCryptoSend } from './agentCryptoSend.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectChat } from './connectChat.ts'
 import { connectPay } from './connectPay.ts'
@@ -5769,6 +5770,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B48.21 — an agent's crypto wallet end to end, once a run, on a workspace of its own and a second user's: topped up by card, 10 USDC
   // to the other user's agent, 4 asked back with its x402 requirement and paid, a frozen agent's send moves nothing, the sweep pays all.
   if (i === 4) list.push(agentCryptoWallet())
+  // B17.561 — Send USDC from an agent's crypto wallet on the app's routes (B48.36), once a run, on a workspace of its own: sent and
+  // sent again under one key it lands once on the history and the ledger; the agent's send to a new address waits, a test amount
+  // lands then the send, and a declined one moves nothing.
+  if (i === 5) list.push(agentCryptoSend())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.
