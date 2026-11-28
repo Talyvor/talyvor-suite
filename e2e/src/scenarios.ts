@@ -35,6 +35,7 @@ import { paymentsOut } from './paymentsOut.ts'
 import { payeeByName } from './payeeByName.ts'
 import { savedPayeeByName } from './savedPayeeByName.ts'
 import { secondApprover } from './secondApprover.ts'
+import { secondApproverPicker } from './secondApproverPicker.ts'
 import { agentCardReplace } from './agentCardReplace.ts'
 import { passkeyRecovery } from './passkeyRecovery.ts'
 import { workspaceRoles } from './workspaceRoles.ts'
@@ -5545,6 +5546,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B17.537 — two-person approval above a second amount (B28.40), once a run, on a workspace of its own: above the second-approver
   // line the owner's approval leaves the agent's payment pending with zero postings, and the Approver-role person's posts exactly one.
   if (i === 3) list.push(secondApprover())
+  // B17.553 — and the second approver picked on Team and roles (B28.464), once a run, on a workspace of its own: Who lists the
+  // Approver who signed in, by the user id Lens's roles list names, and not one nobody has taken up; their approval posts once.
+  if (i === 3) list.push(secondApproverPicker())
   // B17.543 — an agent's card replaced and cancelled (B28.321), once a run, on a workspace of its own: a purchase on the new card
   // posts once on the agent's account, and after the cancel the agent holds no card and a purchase writes no posting.
   if (i === 3) list.push(agentCardReplace())

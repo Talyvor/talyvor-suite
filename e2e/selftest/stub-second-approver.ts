@@ -18,6 +18,9 @@
 // Its defect:
 //   role-viewer-funds — a Lens without B28.70's roles on the money routes: a Viewer's fund moves the money
 //   role-finance-approves — B17.545: a Lens whose Finance role also decides approvals (B28.342 keeps them the Approver's)
+//
+// B17.553 — Lens B28.464: the roles list names the person who took each role up as user_id, "" until someone has. Its defect:
+//   roles-no-user-id — a Lens without B28.464: every role lists user_id "", so no second approver can be picked
 
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -94,7 +97,11 @@ export class SecondApproverDesk {
   /** The owner's routes: the roles and the second-approver line. */
   async route(req: IncomingMessage, res: ServerResponse, ws: string, rest: string): Promise<boolean> {
     const method = req.method ?? 'GET'
-    if (rest === '/roles' && method === 'GET') return this.json(res, 200, { items: this.roles.get(ws) ?? [], roles: ROLES }), true
+    if (rest === '/roles' && method === 'GET') {
+      // STUB_BREAK=roles-no-user-id: the list as it was before Lens B28.464, naming nobody who took a role up.
+      const items = (this.roles.get(ws) ?? []).map((r) => (this.broken('roles-no-user-id') ? { ...r, user_id: '' } : r))
+      return this.json(res, 200, { items, roles: ROLES }), true
+    }
     if (rest === '/roles' && method === 'PUT') {
       const { email = '', role = '' } = await this.body<{ email?: string; role?: string }>(req)
       if (!ROLES.includes(role)) return this.json(res, 400, { error: 'workspace: unknown role' }), true
