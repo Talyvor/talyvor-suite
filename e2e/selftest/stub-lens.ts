@@ -1643,6 +1643,7 @@ createServer(async (req, res) => {
     if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
     if (p.startsWith('/v1/money/cards') && await bank.agentCards(req, res, p, bearer)) return
     if (await bank.agentPayments(req, res, p, bearer)) return // B48.27: an agent's USDC payment to an address
+    if (await bank.agentMandates(req, res, p, bearer)) return // B17.559: an agent asks for a mandate
     if (await bank.agentCryptoSends(req, res, p, bearer)) return // B48.38: an agent's crypto send under its spend permission
     // The BFF runs a marketplace use on the session key the chat streams on (B20.3).
     // B47.3 — speech (talyvor-lens internal/proxy/speech.go). As a Lens without LENS_DEEPGRAM_API_KEY, both routes say speech

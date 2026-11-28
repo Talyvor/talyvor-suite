@@ -44,6 +44,7 @@ import { agentFunding } from './agentFunding.ts'
 import { approvalStoppedPayee } from './approvalStopped.ts'
 import { phoneTeamRoles } from './phoneTeamRoles.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
+import { mandateAsked } from './mandateAsked.ts'
 import { moneyMandates } from './moneyMandates.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
 import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, agentRunsOutDate, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
@@ -5617,6 +5618,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // card-funded GBP account and posted, a weekly standing order and a mandate recorded, a payouts CSV validated row by row with
   // the unknown payee's row invalid and nothing moved from the company's empty account.
   if (i === 3) list.push(payScreen())
+  // B17.559 — a mandate an agent asked for (B55.56, B55.40), once a run, on a workspace of its own: requested, the payee's pull is
+  // refused with nothing moved, the owner's unsigned approval refused 403, Approve on Approvals goes up signed with the passkey, and
+  // the payee's £5.00 pull is one ledger entry, the agent's account −500 and the payee's +500.
+  if (i === 3) list.push(mandateAsked())
   // B41.1 — the Pay screen's bills inbox, once a run, in the browser on a workspace of its own: an uploaded PDF invoice read into
   // one bill with its supplier, invoice number, £123.45 and due date, flagged New payee; added again, still one bill there and in Lens.
   if (i === 3) list.push(billsInbox())

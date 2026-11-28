@@ -814,6 +814,12 @@ export class Bank {
     return await this.payees.agentPay(req, res, who.ws.id, who.agent.id), true
   }
 
+  /** B17.559 — an agent's own key asks for a mandate on its own account (stub-payees.ts). */
+  async agentMandates(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
+    const who = this.agentOfKey(key)
+    return who !== undefined && this.payees.agentMandate(req, res, who.ws.id, who.agent.id, path)
+  }
+
   /** B48.38 — an agent's crypto sends on its own key, under the owner's spend permission (stub-spend-permissions.ts). */
   async agentCryptoSends(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
     const m = /^\/v1\/workspaces\/([^/]+)(\/agents\/[^/]+\/crypto-sends.*)$/.exec(path)
