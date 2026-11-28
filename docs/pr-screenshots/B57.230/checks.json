@@ -1,0 +1,4 @@
+[
+  { "route": "/settings/wallet-webhooks", "screen": "w-docs-webhooks", "steps": ["balance.low"] },
+  { "route": "/settings", "screen": "w-settings" }
+]

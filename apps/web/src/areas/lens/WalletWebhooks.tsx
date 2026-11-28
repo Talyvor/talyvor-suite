@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn, formatDay } from '@talyvor/ui'
-import { Button, Card, Chip, CodeBox, Crumb, Field, Input, pocketFocusRing, type ChipTone } from '@talyvor/ui/pocket'
-import { useState } from 'react'
+import { formatDay } from '@talyvor/ui'
+import { Button, Card, Chip, CodeBox, Crumb, Field, Input, Pick, type ChipTone } from '@talyvor/ui/pocket'
+import { useId, useState } from 'react'
 
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
@@ -55,6 +55,7 @@ function AddWebhook({ types, onSecret }: { types: string[]; onSecret: (s: string
   const qc = useQueryClient()
   const [url, setUrl] = useState('')
   const [events, setEvents] = useState<string[]>([])
+  const waitId = useId()
   const add = useMutation({
     mutationFn: () => agentBankApi.addWalletWebhook(url.trim(), events),
     onSuccess: async (hook) => {
@@ -84,34 +85,32 @@ function AddWebhook({ types, onSecret }: { types: string[]; onSecret: (s: string
           onChange={(e) => setUrl(e.target.value)}
         />
       </Field>
-      <fieldset className="grid gap-1.5">
+      {/* B57.230 — Pocket's w-docs-webhooks: one pick that ticks per event, under the field's label. */}
+      <fieldset className="grid gap-2">
         <legend className="mb-1.5 text-body font-semibold text-ink-2">Events, none chosen sends every one</legend>
-        <div className="flex flex-wrap gap-1.5">
-          {types.map((ev) => {
-            const on = events.includes(ev)
-            return (
-              <button
-                key={ev}
-                type="button"
-                aria-pressed={on}
-                title={EVENT_WORDS[ev]}
-                onClick={() => setEvents(on ? events.filter((x) => x !== ev) : [...events, ev])}
-                className={cn(
-                  'inline-flex h-8.5 items-center rounded-pill px-3.5 font-mono text-body transition-colors duration-200',
-                  on ? 'bg-ink text-on-primary' : 'bg-cloud-2 text-ink-2',
-                  pocketFocusRing,
-                )}
-              >
-                {ev}
-              </button>
-            )
-          })}
-        </div>
+        {types.map((ev) => {
+          const on = events.includes(ev)
+          return (
+            <Pick
+              key={ev}
+              checked={on}
+              title={EVENT_WORDS[ev]}
+              onCheckedChange={(next) => setEvents(next ? [...events, ev] : events.filter((x) => x !== ev))}
+            >
+              {ev}
+            </Pick>
+          )
+        })}
       </fieldset>
-      <div>
-        <Button type="submit" disabled={!url.trim() || add.isPending}>
+      <div className="grid gap-1.5">
+        <Button type="submit" className="w-full" disabled={!url.trim() || add.isPending} aria-describedby={url.trim() ? undefined : waitId}>
           {add.isPending ? 'Adding…' : 'Add webhook'}
         </Button>
+        {url.trim() ? null : (
+          <p id={waitId} className="text-body text-ink-3">
+            Type your server’s https URL to add it.
+          </p>
+        )}
       </div>
       {add.isError ? (
         <p className="text-body text-ink" role="alert">
