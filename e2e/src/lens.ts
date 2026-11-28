@@ -755,6 +755,8 @@ export interface MarketJournal {
 export interface WorkspacePlan {
   plan: string
   gated_as: string
+  /** B17.555 — the account's type, personal or business (talyvor-lens B61.57), whose ladder its plans come from. */
+  account_type?: string
   byok_add_on: boolean
   own_provider_keys_allowed: boolean
   agents_used: number
@@ -797,6 +799,8 @@ export interface Fees {
   /** B61.58 — the international payments a plan makes free each month (-1 is no limit), and its discount on the fee above them. */
   intl_free_per_month?: Record<string, number>
   intl_discount_bps?: Record<string, number>
+  /** B61.58 — what a plan converts free each calendar month, in minor units of the currency sold (-1 is no limit). */
+  fx_free_minor?: Record<string, number>
 }
 
 /** B32.15 — Lens's refusal of what a plan does not unlock (402): a plain sentence naming both plans (B55.29), and its setting beside. */
@@ -1176,7 +1180,8 @@ export class LensClient {
    */
   async createUsers(count: number, plan?: Plan, { confirm = true }: { confirm?: boolean } = {}): Promise<SyntheticUser[]> {
     const body = (await this.call('POST', '/v1/synthetic/workspaces', { [SYNTHETIC_KEY_HEADER]: this.key },
-      plan === undefined ? { count } : { count, plan })) as {
+      // B17.555 — a plan of the person's ladder makes a Personal account (Lens B61.92); Lens refuses it for a Business.
+      plan === undefined ? { count } : plan.startsWith('personal_') ? { count, account_type: 'personal', plan } : { count, plan })) as {
       plan?: string
       workspaces?: { workspace_id: string; token: string; expires_at: string }[]
     }

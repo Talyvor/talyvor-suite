@@ -66,7 +66,9 @@ export const seatKey = (user: number, scenario: string): string => `${user}:${sc
 export async function seat(lens: LensClient, c: Cast): Promise<Seated> {
   const users: SyntheticUser[] = new Array(c.plans.length)
   const own = new Map<string, SyntheticUser>()
-  for (const plan of PLANS) {
+  // B17.555 — and a gate scenario's own workspace on a plan no user is cast on, a person's (personal_solo) among them.
+  const ownOnly = [...new Set(c.own.map((o) => o.plan))].filter((p) => !PLANS.includes(p))
+  for (const plan of [...PLANS, ...ownOnly]) {
     const here = c.plans.flatMap((p, i) => (p === plan ? [i] : []))
     const seats = c.own.filter((o) => o.plan === plan)
     if (here.length + seats.length === 0) continue

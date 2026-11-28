@@ -98,7 +98,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'brand-icons', 'brand-logo', 'brand-visual', 'company-line', 'hero-fade', 'honest-pages', 'marketing-board', 'pricing-approved',
     'pricing-board', 'pricing-truth', 'reading-pages', 'site-truth', 'social-preview', 'waitlist-join', 'wallet-docs', 'wallet-hero',
   ],
-  plans: ['billing-return-pages', 'plan-agents-company', 'plan-agents-group', 'plan-change', 'pricing-studio-agents'],
+  plans: ['billing-return-pages', 'plan-agents-company', 'plan-agents-group', 'plan-change', 'plan-personal', 'plan-solo-free-exchange', 'pricing-studio-agents'],
 
   marketplace: [
     'buyer-protection', 'buyer-tax-profile', 'company-payment', 'lineage', 'market-abuse', 'market-agent-commitment',
