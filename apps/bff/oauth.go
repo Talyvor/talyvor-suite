@@ -104,6 +104,9 @@ type oauthWho struct {
 	lensToken               string
 	lensTokenExp            time.Time
 	synthetic               bool
+	// signedInAt is the consenting session's sign-in time, which the grant's re-mints keep (B50.62). A grant read back
+	// from the table has none (oauth_store.go stores none) and re-mints with its Created instead, never later than consent.
+	signedInAt time.Time
 }
 
 type oauthConsent struct {
@@ -631,7 +634,7 @@ func (a *app) oauthAuthorizeAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 	oc := oauthCode{clientID: c.client.id, clientName: c.client.name, redirectURI: c.redirectURI,
 		challenge: c.challenge, scope: c.sc, resource: a.mcpResource(), who: oauthWho{sub: s.sub, email: s.email, workspaceID: s.workspaceID,
-			lensToken: s.lensToken, lensTokenExp: s.lensTokenExp, synthetic: s.synthetic},
+			lensToken: s.lensToken, lensTokenExp: s.lensTokenExp, synthetic: s.synthetic, signedInAt: s.signedInAt},
 		expires: time.Now().Add(oauthCodeTTL)}
 	// B54.14: the session is asked for again under the person's lock, so a sign out everywhere since the check above
 	// leaves no code.
