@@ -43,6 +43,7 @@ import { workspaceRolesLens } from './workspaceRolesLens.ts'
 import { agentFunding } from './agentFunding.ts'
 import { approvalStoppedPayee } from './approvalStopped.ts'
 import { phoneTeamRoles } from './phoneTeamRoles.ts'
+import { phoneCardReplace } from './phoneCardReplace.ts'
 import { bulkPayouts } from './bulkPayouts.ts'
 import { mandateAsked } from './mandateAsked.ts'
 import { moneyMandates } from './moneyMandates.ts'
@@ -5741,6 +5742,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // owner gives a Viewer and a Finance role in Your team, the Viewer's fund writes no posting, Finance's posts one, and a Viewer
   // removed on the phone reads nothing.
   if (i === 7) list.push(phoneTeamRoles())
+  // B17.576 — Replace card and Cancel card on the phone (B28.465), once a run, on a workspace of its own, in the phone app's web
+  // export: replaced on the Cards tab, the phone says the new card's last four and a purchase posts once; cancelled, the phone says
+  // there is no card and a purchase writes no posting.
+  if (i === 7) list.push(phoneCardReplace())
   // B52.28 — Scan in the app, once a run, on a workspace of its own: a watch keeps the owner's measure of unusual and stops when
   // told, the public track record scores a hit only inside its range, and Scan agents and Track record show both.
   if (i === 7) list.push(scanAgents())
